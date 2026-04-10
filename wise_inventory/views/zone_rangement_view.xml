@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="wise_view_stock_location" model="ir.ui.view">
+        <field name="name">wise_view_stock_location.form</field>
+        <field name="model">stock.location</field>
+        <field name="inherit_id" ref="stock.view_location_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='localization']" position="replace">
+                <group name="zone_list" string="Liste des zones de rangement">
+                    <field name="zone_ids" widget="many2many_tags" />
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="zone_rangement_view_tree" model="ir.ui.view">
+        <field name="name">zone.rangement.tree</field>
+        <field name="model">zone.rangement</field>
+        <field name="arch" type="xml">
+            <tree string="Zones de rangement">
+                <field name="name" />
+                <field name="location_id" />
+            </tree>
+        </field>
+    </record>
+
+    <record model="ir.ui.view" id="zone_rangement_view_form">
+        <field name="name">zone.rangement.form</field>
+        <field name="model">zone.rangement</field>
+        <field name="arch" type="xml">
+            <form string="Zones de Rangement">
+                <sheet name="zone_form">
+                    <div class="oe_title">
+                        <label for="name" string="Nom" />
+                        <h2>
+                            <div class="d-flex">
+                                <field name="name" />
+                            </div>
+                        </h2>
+                    </div>
+                    <group string="Informations Complémentaires">
+                        <group>
+                            <field name="location_id" />
+                            <field name="warehouse_id" readonly="1" />
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="zone_action" model="ir.actions.act_window">
+        <field name="name">Zone de Rangement</field>
+        <field name="res_model">zone.rangement</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="menu_zone_rangement"
+        name="Zone de rangement"
+        parent="stock.menu_warehouse_config"
+        sequence="3"
+        action="zone_action" />
+
+</odoo>

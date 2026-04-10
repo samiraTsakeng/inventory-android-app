@@ -1,0 +1,34 @@
+name: inventory_app
+description: A new Flutter project.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.11.1 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Design
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.10+1
+
+  # State Management & Storage
+  provider: ^6.1.2
+  flutter_secure_storage: ^9.2.2
+
+  # Validation
+  validators: ^3.0.0  # Correct name (was validators)
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/2037740.png
+    - assets/images/image266622.png

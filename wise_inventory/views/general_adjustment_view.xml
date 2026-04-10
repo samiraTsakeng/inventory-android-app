@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="general_adjustment_view" model="ir.ui.view">
+        <field name="name">Démarrer un comptage général</field>
+        <field name="model">general.adjustment</field>
+        <field name="arch" type="xml">
+            <form string="Démarrer un ajustement général">
+                <group>
+                    <field name="date" required="1" />
+                    <field name="location_id" required="1" />
+                    <field name="zone_ids" widget="many2many_tags" />
+                    <field name="reference" />
+                    <field name="manager_id" required="1" />
+                    <field name="user_ids" required="1" widget="many2many_tags" />
+                </group>
+                <footer>
+                    <button string="Confirmer" class="btn btn-success" type="object"
+                        name="confirm_btn" />
+                    <button string="Annuler" class="btn btn-danger" special="cancel" />
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_general_adjustment" model="ir.actions.act_window">
+        <field name="name">Démarrer un ajustement général</field>
+        <field name="res_model">general.adjustment</field>
+        <field name="view_type">form</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+
+    <menuitem id="general_adjustment"
+        name="Démarrer un ajustement général"
+        parent="wise_inventory.menu_general_adjustment"
+        action="action_general_adjustment"
+        groups="wise_inventory.resp_inventory"
+        sequence="1" />
+</odoo>

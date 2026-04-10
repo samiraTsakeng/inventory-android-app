@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="adjustment_consolidation_view" model="ir.ui.view">
+        <field name="name">Contradiction</field>
+        <field name="model">adjustment.consolidation</field>
+        <field name="arch" type="xml">
+        <form string="Effectuer une Consolidationl">
+            <group col="2">
+                <field name="stock_inventory_id" required="1"/>
+                <field name="location_id" />
+                <field name="zone_v_ids" invisible="1" />
+                <field name="zone_id" required="1" attrs="{'invisible': [('stock_inventory_id', '=', False)]}"/>
+            </group>           
+            <footer>
+                <button string="Confirmer" class="btn btn-success" type="object"  name="confirm_btn"/>
+                <button string="Annuler" class="btn btn-danger" special="cancel" />
+            </footer>
+        </form>
+        </field>
+    </record>
+
+    <record id="action_adjustment_consolidation" model="ir.actions.act_window">
+        <field name="name">Effectuer une Contradiction</field>
+        <field name="res_model">adjustment.consolidation</field>
+        <field name="view_type">form</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    
+    <menuitem id="adjustment_consolidation"
+            name="Effectuer une contradiction"
+            parent="wise_inventory.menu_general_adjustment"
+            action="action_adjustment_consolidation"
+            groups="wise_inventory.resp_inventory"
+            sequence="2"/>
+</odoo>

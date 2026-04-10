@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+
+    <record id="counting_sheet_view_form" model="ir.ui.view">
+        <field name="name">counting.sheet.form</field>
+        <field name="model">counting.sheet</field>
+        <field name="arch" type="xml">
+            <form create="0" string="Feuille de comptage">
+                <header>
+                    <button class="oe_highlight" type="object"
+                        attrs="{'invisible': [('state', '!=', 'new')]}"
+                        name="action_begin" string="Commencer le Comptage" />
+
+                    <field name="state" widget="statusbar" statusbar_visible="new,progress,confirm" />
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button" name="action_validate"
+                            string="Valider le comptage" type="object" icon="fa-check"
+                            attrs="{'invisible': [('state', '!=', 'progress')]}" />
+                    </div>
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only" />
+                        <h1>
+                            <field name="name" readonly="1" placeholder="Feuille de comptage" />
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="stock_inventory_id" readonly="1" />
+                            <field name="zone_id" readonly="1" />
+                        </group>
+                        <group>
+                            <field name="user_id"
+                                attrs="{'readonly': [('state', '!=', 'new')]}" />
+                            <field name="consolidated" invisible="1" />
+                        </group>
+                    </group>
+                    <notebook attrs="{'invisible':[('state','=', 'cancel')]}">
+                        <page string="Lignes de comptage">
+                            <field name="counting_line_ids"
+                                attrs="{'readonly':[('state','!=', 'progress')]}">
+                                <tree editable="bottom">
+                                    <field name="lot_id" invisible="1" />
+                                    <field name="number" required="1" />
+                                    <field name="product_id" readonly="1" force_save="1" />
+                                    <field name="counted_qty" />
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="counting_sheet_view_tree" model="ir.ui.view">
+        <field name="name">counting.sheet.tree</field>
+        <field name="model">counting.sheet</field>
+        <field name="arch" type="xml">
+            <tree create="0" string="Feuille de comptage">
+                <field name="name" />
+                <field name="stock_inventory_id" />
+                <field name="zone_id" />
+                <field name="user_id" />
+                <field name="state" />
+            </tree>
+        </field>
+    </record>
+
+    <record id="counting_sheet_view_search" model="ir.ui.view">
+        <field name="name">counting.sheet.search</field>
+        <field name="model">counting.sheet</field>
+        <field name="arch" type="xml">
+            <search   string="Feuille de comptage">
+                <field name="name" />
+                <field name="number" />
+            </search>
+        </field>
+    </record>
+
+    <record id="counting_sheet_action" model="ir.actions.act_window">
+        <field name="name">Feuilles de comptage</field>
+        <field name="res_model">counting.sheet</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="oe_view_nocontent_create">
+                Créer vos feuilles de comptage ici.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_counting_sheet"
+        name="Feuilles de comptage"
+        parent="wise_inventory.menu_general_adjustment"
+        sequence="3"
+        action="counting_sheet_action" />
+
+</odoo>

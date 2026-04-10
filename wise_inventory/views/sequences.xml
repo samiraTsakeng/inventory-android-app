@@ -1,0 +1,16 @@
+<odoo>
+    <data noupdate="1">
+
+        <!-- équipe comptage code sequence -->
+        <record id="equipe_comptage_code" model="ir.sequence">
+           <field name="name">Code équipe comptage</field>
+           <field name="code">equipe.comptage.code</field>
+           <field name="prefix">EC%(y)s%(month)s%(day)s</field>
+           <field name="active">TRUE</field>
+           <field name="padding">5</field>
+           <field name="number_next">1</field>
+           <field name="number_increment">1</field>
+        </record>
+
+    </data>
+</odoo>

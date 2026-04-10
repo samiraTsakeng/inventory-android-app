@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+
+    <record id="consolidation_sheet_view_form" model="ir.ui.view">
+        <field name="name">consolidation.sheet.form</field>
+        <field name="model">consolidation.sheet</field>
+        <field name="arch" type="xml">
+            <form create="0" string="Feuille de Consolidation">
+                <header>
+                    <field name="lines_to_consolidate" invisible="1" />
+                    <button string="Rapport Excel" name="generate_excel_report" class="oe_highlight"
+                        attrs="{'invisible': [('state', '!=', 'confirm')]}" type="object" />
+                    <field name="state" widget="statusbar" statusbar_visible="new,confirm" />
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button"
+                            attrs="{'invisible': [('state', '!=', 'new')]}"
+                            name="action_validate_contradictory" string="Valider la contradiction"
+                            type="object" icon="fa-check" />
+                    </div>
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only" />
+                        <h1>
+                            <field name="name" readonly="1" placeholder="Feuille de comptage" />
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="stock_inventory_id" readonly="1" />
+                            <field name="zone_id" readonly="1" />
+                        </group>
+                        <group>
+                            <field name="user_id" readonly="1" />
+                        </group>
+                    </group>
+                    <notebook attrs="{'invisible':[('state','=', 'cancel')]}">
+                        <page string="Lignes de Comptage"
+                            attrs="{'invisible':[('state','=', 'new')]}">
+                            <field name="counting_line_ids" readonly="1">
+                                <tree editable="bottom">
+                                    <field name="lot_id" />
+                                    <field name="product_id" />
+                                    <field name="counted_qty" />
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Lignes Contradictoires"
+                            attrs="{'invisible':[('lines_to_consolidate','=', False)]}">
+                            <field name="counting_contradictory_line_ids"
+                                attrs="{'readonly':[('state','!=', 'new')]}">
+                                <tree create='0' editable="bottom">
+                                    <field name="lot_id" readonly="1" />
+                                    <field name="product_id" readonly="1" />
+                                    <field name="verified_qty" />
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="consolidation_sheet_view_tree" model="ir.ui.view">
+        <field name="name">consolidation.sheet.tree</field>
+        <field name="model">consolidation.sheet</field>
+        <field name="arch" type="xml">
+            <tree create="0" string="Feuille de Consolidation">
+                <field name="name" />
+                <field name="stock_inventory_id" />
+                <field name="zone_id" />
+                <field name="user_id" />
+                <field name="state" />
+            </tree>
+        </field>
+    </record>
+
+    <record id="consolidation_sheet_view_search" model="ir.ui.view">
+        <field name="name">consolidation.sheet.search</field>
+        <field name="model">consolidation.sheet</field>
+        <field name="arch" type="xml">
+            <search   string="Feuille de comptage">
+                <field name="name" />
+                <field name="number" />
+            </search>
+        </field>
+    </record>
+
+    <record id="consolidation_sheet_action" model="ir.actions.act_window">
+        <field name="name">Feuilles de Consolidation</field>
+        <field name="res_model">consolidation.sheet</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="menu_consolidation_sheet"
+        name="Feuilles de Consolidation"
+        parent="wise_inventory.menu_general_adjustment"
+        sequence="4"
+        groups="wise_inventory.resp_inventory"
+        action="consolidation_sheet_action" />
+
+</odoo>
