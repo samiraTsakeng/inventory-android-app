@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/adjustment_service.dart';
-
+import 'feuille_list_page.dart';
 class AdjustmentsListPage extends StatefulWidget {
   @override
   _AdjustmentsListPageState createState() =>
@@ -43,6 +43,18 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
     return field.toString();
   }
 
+  String formatDate(String? date) {
+    if (date == null) return "";
+
+    try {
+      final parsedDate = DateTime.parse(date);
+      return "${parsedDate.day}/${parsedDate.month}/${parsedDate.year} "
+          "${parsedDate.hour}:${parsedDate.minute}";
+    } catch (e) {
+      return date;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,30 +81,41 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
         scrollDirection: Axis.horizontal,
         child: DataTable(
           columns: const [
-            DataColumn(label: Text("Date")),
-            DataColumn(label: Text("Emplacement")),
-            DataColumn(label: Text("Zone")),
-            DataColumn(label: Text("Responsable")),
-            DataColumn(label: Text("Equipe")),
+            DataColumn(label: Text("nom")),
+            DataColumn(label: Text("Date & Heure")),
+            //DataColumn(label: Text("Emplacement")),
+           // DataColumn(label: Text("Zone")),
+            //DataColumn(label: Text("Responsable")),
+            //DataColumn(label: Text("Equipe")),
             DataColumn(label: Text("Statut")),
           ],
           rows: adjustments.map<DataRow>((adj) {
             return DataRow(
               cells: [
-                DataCell(Text(adj["date_comptage"] ?? "")),
-                DataCell(Text(getName(adj["emplacement_id"]))),
-                DataCell(Text(getName(adj["zone_id"]))),
-                DataCell(Text(getName(adj["responsable_id"]))),
-                DataCell(Text(getName(adj["equipe_id"]))),
+                DataCell(Text(adj["name"] ?? "")),
+                DataCell(Text(formatDate(adj["date"]))),
+
+                //DataCell(Text(getName(adj["location_id"]))),
+                //DataCell(Text(getName(adj[""]))),
+                //DataCell(Text(getName(adj["manager_id"]))),
+               // DataCell(Text(getName(adj[""]))),
                 DataCell(Text(adj["state"] ?? "")),
               ],
 
-              // ✅ MAKE ROW CLICKABLE
+              // TODO: Navigate to adjustment details page
+              // Currently FeuilleListPage doesn't exist
               onSelectChanged: (selected) {
-                if (selected == true) {
-                  print("Clicked adjustment: ${adj["id"]}");
+               if (selected == true) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                   builder: (context) => FeuilleListPage(
+                        adjustmentId: adj["id"],
+                      )
+                    )
+                   );
                 }
-              },
+               },
             );
           }).toList(),
         ),

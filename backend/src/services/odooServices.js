@@ -52,8 +52,17 @@ class OdooService {
           method: "search_read",
           args: [],
           kwargs: {
-            fields: ["id", "name", "state"],
-          },
+            fields: [
+           // "id",
+            "name",
+            "state",
+            "date"
+            //"emplacement_id",
+            //"zone_id",
+            //"responsable_id",
+            //"equipe_id"
+            ]
+          }
         },
       };
 
@@ -79,6 +88,53 @@ class OdooService {
 
     } catch (error) {
       console.error("fetchAdjustments ERROR:", error);
+      throw error;
+    }
+  }
+
+  static async fetchFeuilles(host, adjustmentId) {
+    try {
+      const url = `${host}/web/dataset/call_kw`; // ✅ FIXED
+
+      const payload = {
+        jsonrpc: "2.0",
+        method: "call",
+        params: {
+          model: "general.adjustment", // we will confirm later
+          method: "search_read",
+          args: [[["inventory_id", "=", adjustmentId]]],
+          kwargs: {
+            fields: [
+              "id",
+              "name",
+              "state",
+              "inventory_id"
+            ],
+          },
+        },
+      };
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: this.sessionCookie,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      console.log("Feuilles response:", JSON.stringify(data, null, 2));
+
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+
+      return data.result || [];
+
+    } catch (error) {
+      console.error("fetchFeuilles ERROR:", error);
       throw error;
     }
   }

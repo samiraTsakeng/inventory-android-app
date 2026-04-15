@@ -8,7 +8,6 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-
     final response = await http.post(
       Uri.parse("http://localhost:3000/auth/login"),
       headers: {"Content-Type": "application/json"},
@@ -16,11 +15,20 @@ class AuthService {
         "host": host,
         "db": db,
         "email": email,
-        "password": password
+        "password": password,
       }),
     );
 
+    print("STATUS: ${response.statusCode}");
+    print("BODY: ${response.body}");
+
+    // ❌ If backend returns HTML → catch it here
+    if (response.statusCode != 200) {
+      throw Exception("Server error: ${response.body}");
+    }
+
     final data = jsonDecode(response.body);
-    return data["success"];
+
+    return data["success"] == true;
   }
 }
