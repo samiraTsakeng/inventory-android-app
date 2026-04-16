@@ -71,7 +71,7 @@ class OdooService {
         params: {
           model: "counting.sheet",
           method: "search_read",
-          args: [[[" stock_inventory_id", "=", parseInt(adjustmentId)]]],
+          args: [[]],
           kwargs: {
             fields: ["id", "name", "state", "stock_inventory_id", "zone_id", "user_id"]
           }
