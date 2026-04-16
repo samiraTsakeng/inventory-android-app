@@ -1,24 +1,28 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Storage {
-  static final _storage = FlutterSecureStorage();
-
-  static Future saveUserData(String host, String db, String email) async {
-    await _storage.write(key: "host", value: host);
-    await _storage.write(key: "db", value: db);
-    await _storage.write(key: "email", value: email);
+  static Future<void> saveUserData(
+      String host, String db, String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('host', host);
+    await prefs.setString('db', db);
+    await prefs.setString('email', email);
   }
 
   static Future<Map<String, String>?> getUserData() async {
-    String? host = await _storage.read(key: "host");
-    String? email = await _storage.read(key: "email");
+    final prefs = await SharedPreferences.getInstance();
+    final host = prefs.getString('host');
+    final email = prefs.getString('email');
+    if (host == null || email == null) return null;
+    return {
+      'host': host,
+      'db': prefs.getString('db') ?? '',
+      'email': email,
+    };
+  }
 
-    if (host != null && email != null) {
-      return {
-        "host": host,
-        "email": email
-      };
-    }
-    return null;
+  static Future<void> clearUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
   }
 }

@@ -65,7 +65,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             title: Text(f["name"] ?? ""),
 
             subtitle: Text(
-                "Etat: ${f["state"] ?? ""}"),
+                "Etat: ${f["state"]} | zone: ${getName(f["zone_id"])}"),
 
             onTap: () {
               print("Clicked feuille: ${f["id"]}");

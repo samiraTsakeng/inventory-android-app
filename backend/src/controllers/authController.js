@@ -1,39 +1,41 @@
 const OdooService = require("../services/odooServices");
 
+// Session stored as module-level variable (simple, works on all Node versions)
+let sessionData = null;
+
 class AuthController {
-  static sessionData = {};
+  static getSession() {
+    return sessionData;
+  }
 
-  // 🔐 LOGIN
   static async login(req, res) {
-    const { host, db, email, password } = req.body;
-
     try {
+      const { host, db, email, password } = req.body;
+
+      if (!host || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "host, email and password are required"
+        });
+      }
+
       const result = await OdooService.authenticate(host, db, email, password);
 
-      // ✅ SAVE SESSION
-      AuthController.sessionData = { host, db, email };
+      sessionData = { host, db, email };
 
       return res.json({
         success: true,
-        uid: result.uid
+        uid: result.uid,
+        name: result.name
       });
 
     } catch (error) {
-      console.log("LOGIN ERROR:", error.message);
-
+      console.error("LOGIN ERROR:", error.message);
       return res.status(401).json({
         success: false,
         message: error.message
       });
     }
-  }
-
-  // (optional test endpoint)
-  static async createUser(req, res) {
-    return res.status(501).json({
-      success: false,
-      message: "Not implemented"
-    });
   }
 }
 

@@ -4,27 +4,27 @@ const AuthController = require("./authController");
 class FeuilleController {
   static async getFeuilles(req, res) {
     try {
-      const { id } = req.params;
+      const session = AuthController.getSession();
 
-      if (!AuthController.sessionData) {
+      if (!session || !session.host) {
         return res.status(401).json({
           success: false,
-          message: "Not authenticated",
+          message: "Not authenticated"
         });
       }
 
-      const { host } = AuthController.sessionData;
-
-      const feuilles = await OdooService.fetchFeuilles(host, id);
+      const feuilles = await OdooService.fetchFeuilles(
+        session.host,
+        req.params.id
+      );
 
       return res.json(feuilles);
 
     } catch (error) {
-      console.error("FEUILLES ERROR:", error);
-
+      console.error("FEUILLES ERROR:", error.message);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: error.message
       });
     }
   }

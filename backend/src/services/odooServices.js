@@ -1,50 +1,43 @@
-//const fetch = require("node-fetch");
+const fetch = require("node-fetch");
 
 class OdooService {
-  static sessionCookie = "";
+  constructor() {
+    this.sessionCookie = "";
+  }
 
-  static async authenticate(host, db, email, password) {
+  async authenticate(host, db, email, password) {
     const response = await fetch(`${host}/web/session/authenticate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0",
         method: "call",
-        params: {
-          db: db,
-          login: email,
-          password: password
-        }
+        params: { db, login: email, password }
       })
     });
 
     const data = await response.json();
+    console.log("Odoo login response:", JSON.stringify(data, null, 2));
 
-    console.log("Odoo login response:", data);
-
-    if (!data.result) {
-      throw new Error("Authentication failed");
+    if (!data.result || !data.result.uid) {
+      throw new Error("Authentication failed: wrong credentials");
     }
 
-    //  FIXED COOKIE HANDLING
-    const cookies = response.headers.get('set-cookie');
+    const cookies = response.headers.get("set-cookie");
+    if (!cookies) throw new Error("No session cookie received from Odoo");
 
-    if (cookies) {
-      this.sessionCookie = cookies;
-    } else {
-      throw new Error("No session cookie received");
-    }
-
+    this.sessionCookie = cookies;
     return data.result;
   }
-// fetch adjustments
-  static async fetchAdjustments(host) {
-    try {
-      const url = `${host}/web/dataset/call_kw`;
 
-      const payload = {
+  async fetchAdjustments(host) {
+    const response = await fetch(`${host}/web/dataset/call_kw`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: this.sessionCookie
+      },
+      body: JSON.stringify({
         jsonrpc: "2.0",
         method: "call",
         params: {
@@ -52,92 +45,47 @@ class OdooService {
           method: "search_read",
           args: [],
           kwargs: {
-            fields: [
-           // "id",
-            "name",
-            "state",
-            "date"
-            //"emplacement_id",
-            //"zone_id",
-            //"responsable_id",
-            //"equipe_id"
-            ]
+            fields: ["id", "name", "state", "date"]
           }
-        },
-      };
+        }
+      })
+    });
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: this.sessionCookie,
-        },
-        body: JSON.stringify(payload),
-      });
+    const data = await response.json();
+    console.log("Adjustments response:", JSON.stringify(data, null, 2));
 
-      const data = await response.json();
-
-      // DEBUG LOG
-      console.log("Odoo response:", JSON.stringify(data, null, 2));
-
-      if (data.error) {
-        throw new Error(data.error.message || "Odoo error");
-      }
-
-      return data.result || [];
-
-    } catch (error) {
-      console.error("fetchAdjustments ERROR:", error);
-      throw error;
-    }
+    if (data.error) throw new Error(data.error.data?.message || data.error.message);
+    return data.result || [];
   }
 
-  static async fetchFeuilles(host, adjustmentId) {
-    try {
-      const url = `${host}/web/dataset/call_kw`; // ✅ FIXED
-
-      const payload = {
+  async fetchFeuilles(host, adjustmentId) {
+    const response = await fetch(`${host}/web/dataset/call_kw`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: this.sessionCookie
+      },
+      body: JSON.stringify({
         jsonrpc: "2.0",
         method: "call",
         params: {
-          model: "general.adjustment", // we will confirm later
+          model: "counting.sheet",
           method: "search_read",
-          args: [[["inventory_id", "=", adjustmentId]]],
+          args: [[[" stock_inventory_id", "=", parseInt(adjustmentId)]]],
           kwargs: {
-            fields: [
-              "id",
-              "name",
-              "state",
-              "inventory_id"
-            ],
-          },
-        },
-      };
+            fields: ["id", "name", "state", "stock_inventory_id", "zone_id", "user_id"]
+          }
+        }
+      })
+    });
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: this.sessionCookie,
-        },
-        body: JSON.stringify(payload),
-      });
+    const data = await response.json();
+    console.log("Feuilles response:", JSON.stringify(data, null, 2));
 
-      const data = await response.json();
-
-      console.log("Feuilles response:", JSON.stringify(data, null, 2));
-
-      if (data.error) {
-        throw new Error(data.error.message);
-      }
-
-      return data.result || [];
-
-    } catch (error) {
-      console.error("fetchFeuilles ERROR:", error);
-      throw error;
-    }
+    if (data.error) throw new Error(data.error.data?.message || data.error.message);
+    return data.result || [];
   }
 }
 
-module.exports = OdooService;
+// Export a single shared instance
+module.exports = new OdooService();

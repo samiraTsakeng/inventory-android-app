@@ -2,11 +2,15 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class FeuilleService {
+  static const String _base = "http://127.0.0.1:3000";
   static Future<List<dynamic>> getFeuilles(int adjustmentId) async {
     final response = await http.get(
       Uri.parse(
-          "http://localhost:3000/feuilles/$adjustmentId"),
+          "$_base/feuilles/$adjustmentId"),
     );
+
+    print("feuilles status: ${response.statusCode}");
+    print("Feuilles body: ${response.body}");
 
     final data = jsonDecode(response.body);
 

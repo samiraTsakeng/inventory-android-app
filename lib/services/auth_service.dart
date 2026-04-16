@@ -2,33 +2,40 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class AuthService {
+  // Use 127.0.0.1 — in Chrome, "localhost" doesn't reach your backend
+  static const String _base = "http://127.0.0.1:3000";
+
   static Future<bool> login({
     required String host,
     required String db,
     required String email,
     required String password,
   }) async {
-    final response = await http.post(
-      Uri.parse("http://localhost:3000/auth/login"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "host": host,
-        "db": db,
-        "email": email,
-        "password": password,
-      }),
-    );
+    try {
+      final response = await http.post(
+        Uri.parse("$_base/auth/login"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "host": host,
+          "db": db,
+          "email": email,
+          "password": password,
+        }),
+      );
 
-    print("STATUS: ${response.statusCode}");
-    print("BODY: ${response.body}");
+      print("STATUS: ${response.statusCode}");
+      print("BODY: ${response.body}");
 
-    // ❌ If backend returns HTML → catch it here
-    if (response.statusCode != 200) {
-      throw Exception("Server error: ${response.body}");
+      if (response.statusCode != 200) {
+        throw Exception(jsonDecode(response.body)["message"] ?? "Server error");
+      }
+
+      final data = jsonDecode(response.body);
+      return data["success"] == true;
+
+    } catch (e) {
+      print("AUTH ERROR: $e");
+      rethrow;
     }
-
-    final data = jsonDecode(response.body);
-
-    return data["success"] == true;
   }
 }

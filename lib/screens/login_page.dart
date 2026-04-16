@@ -36,24 +36,28 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void login() async {
-    final success = await AuthService.login(
-      host: hostController.text,
-      db: dbController.text,
-      email: emailController.text,
-      password: passwordController.text,
-    );
-
-    if (success) {
-      await Storage.saveUserData(
-        hostController.text,
-        dbController.text,
-        emailController.text,
+    try {
+      final success = await AuthService.login(
+        host: hostController.text.trim(),
+        db: dbController.text.trim(),
+        email: emailController.text.trim(),
+        password: passwordController.text,
       );
 
-      Navigator.pushReplacementNamed(context, '/adjustment-entry');
-    } else {
+      if (success) {
+        await Storage.saveUserData(
+          hostController.text.trim(),
+          dbController.text.trim(),
+          emailController.text.trim(),
+        );
+        Navigator.pushReplacementNamed(context, '/adjustment-entry');
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Login failed")),
+        SnackBar(
+          content: Text("Login failed: ${e.toString()}"),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }

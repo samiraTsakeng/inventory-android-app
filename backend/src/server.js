@@ -22,7 +22,7 @@ app.get('/', (req, res) => {
 console.log('Loading routes...');
 
 try {
-  app.use('/auth',        require('./routes/authRoutes'));
+  app.use('/auth', require('./routes/authRoutes'));
   console.log('✅ authRoutes loaded');
 } catch(e) {
   console.error('❌ authRoutes failed:', e.message);
