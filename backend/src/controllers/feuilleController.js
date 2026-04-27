@@ -13,9 +13,10 @@ class FeuilleController {
         });
       }
 
+      // req.params.id contains the adjustment ID from the URL
       const feuilles = await OdooService.fetchFeuilles(
         session.host,
-        req.params.id
+        req.params.id  // ← This is the adjustmentId
       );
 
       return res.json(feuilles);
