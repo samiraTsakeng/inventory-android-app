@@ -1,7 +1,8 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const adjustmentController = require("../controllers/adjustment.controller");
+const AdjustmentController = require('../controllers/adjustment.controller');
 
-router.get("/", adjustmentController.getAdjustments);
+// GET /adjustments
+router.get('/', AdjustmentController.getAdjustments);
 
 module.exports = router;

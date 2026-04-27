@@ -12,6 +12,7 @@ class AuthController {
     try {
       const { host, db, email, password } = req.body;
 
+        console.log("login attempt for:", {host, db, email});
       if (!host || !email || !password) {
         return res.status(400).json({
           success: false,

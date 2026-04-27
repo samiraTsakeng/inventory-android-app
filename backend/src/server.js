@@ -42,7 +42,7 @@ try {
   console.error('❌ feuille.routes failed:', e.message);
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log('Server is ALIVE and waiting for requests...');
@@ -59,5 +59,5 @@ server.on('close', () => {
 
 // Keep process alive and log every 30 seconds
 setInterval(() => {
-  console.log('💓 Server still running...');
+  console.log(' ');
 }, 30000);

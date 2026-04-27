@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'api_config.dart';
 
 class AdjustmentService {
   //static const String _base = "http://127.0.0.1:3000";
 
   static Future<List<dynamic>> getAdjustments() async {
     final response = await http.get(
-      Uri.parse("http://127.0.0.1:3000/adjustments"),
+      Uri.parse(ApiConfig.adjustments),
     );
 
     print("status: ${response.statusCode}");
