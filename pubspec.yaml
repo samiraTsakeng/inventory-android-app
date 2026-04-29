@@ -23,6 +23,10 @@ dependencies:
   # Validation
   validators: ^3.0.0  # Correct name (was validators)
 
+  # Barcode Scanning for Web & Mobile
+  mobile_scanner: ^4.0.1
+  qr_code_scanner: ^1.0.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
+import 'scanning_page.dart';
 
 class FeuilleListPage extends StatefulWidget {
   final int adjustmentId;
@@ -23,8 +24,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
   void fetchFeuilles() async {
     try {
-      final data =
-      await FeuilleService.getFeuilles(widget.adjustmentId);
+      final data = await FeuilleService.getFeuilles(widget.adjustmentId);
 
       setState(() {
         feuilles = data;
@@ -61,15 +61,59 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         itemBuilder: (context, index) {
           final f = feuilles[index];
 
-          return ListTile(
-            title: Text(f["name"] ?? ""),
-
-            subtitle: Text(
-                "Etat: ${f["state"]} | zone: ${getName(f["zone_id"])}"),
-
-            onTap: () {
-              print("Clicked feuille: ${f["id"]}");
-            },
+          return Card(
+            margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: f["state"] == 'progress' ? Colors.green : Colors.blue,
+                child: Icon(Icons.inventory, color: Colors.white),
+              ),
+              title: Text(
+                f["name"] ?? "",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                "État: ${f["state"] ?? 'Nouveau'} | Zone: ${getName(f["zone_id"])}",
+              ),
+              trailing: f["state"] == 'progress'
+                  ? ElevatedButton.icon(
+                icon: Icon(Icons.qr_code_scanner),
+                label: Text("Scanner"),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ScanningPage(
+                        countingSheetId: f["id"],
+                        adjustmentId: widget.adjustmentId,
+                        zoneName: getName(f["zone_id"]),
+                        sheetName: f["name"] ?? "Feuille ${f["id"]}",
+                      ),
+                    ),
+                  );
+                },
+              )
+                  : Chip(
+                label: Text(f["state"] ?? "Nouveau"),
+                backgroundColor: f["state"] == 'confirm' ? Colors.green[100] : Colors.grey[200],
+              ),
+              onTap: () {
+                // Only allow scanning if in progress
+                if (f["state"] == 'progress') {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ScanningPage(
+                        countingSheetId: f["id"],
+                        adjustmentId: widget.adjustmentId,
+                        zoneName: getName(f["zone_id"]),
+                        sheetName: f["name"] ?? "Feuille ${f["id"]}",
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
           );
         },
       ),

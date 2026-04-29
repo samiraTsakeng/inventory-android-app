@@ -42,6 +42,13 @@ try {
   console.error('❌ feuille.routes failed:', e.message);
 }
 
+try {
+  app.use('/counting', require('./routes/counting.routes'));
+  console.log('✅ counting.routes loaded');
+} catch(e) {
+  console.error('❌ counting.routes failed:', e.message);
+}
+
 const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
