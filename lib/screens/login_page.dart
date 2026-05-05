@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';  
+import '../services/auth_service.dart';
 import '../utils/storage.dart';
 
 class LoginPage extends StatefulWidget {
@@ -16,26 +16,29 @@ class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
 
   bool onlyPassword = false;
+  bool isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    loadSavedData();
+    _checkSession();
   }
 
-  void loadSavedData() async {
-    final data = await Storage.getUserData();
-
-    if (data != null) {
+  Future<void> _checkSession() async {
+    final session = await AuthService.getSession();
+    if (session != null && session['host'] != null && session['email'] != null) {
       setState(() {
-        hostController.text = data['host'] ?? '';
-        emailController.text = data['email'] ?? '';
+        hostController.text = session['host'] ?? '';
+        emailController.text = session['email'] ?? '';
+        dbController.text = session['db'] ?? '';
         onlyPassword = true;
       });
     }
   }
 
   void login() async {
+    setState(() => isLoading = true);
+
     try {
       final success = await AuthService.login(
         host: hostController.text.trim(),
@@ -44,76 +47,163 @@ class _LoginPageState extends State<LoginPage> {
         password: passwordController.text,
       );
 
-      if (success) {
-        await Storage.saveUserData(
-          hostController.text.trim(),
-          dbController.text.trim(),
-          emailController.text.trim(),
-        );
-        Navigator.pushReplacementNamed(context, '/adjustment-entry');
+      if (success && mounted) {
+        if (onlyPassword) {
+          // Already have session, just proceed
+          Navigator.pushReplacementNamed(context, '/adjustment-entry');
+        } else {
+          // First login, save data and proceed
+          await Storage.saveUserData(
+            hostController.text.trim(),
+            dbController.text.trim(),
+            emailController.text.trim(),
+          );
+          Navigator.pushReplacementNamed(context, '/adjustment-entry');
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Login failed: ${e.toString()}"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Login failed: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  void secondAuthentication() async {
+    setState(() => isLoading = true);
+
+    try {
+      final success = await AuthService.secondAuthentication(passwordController.text);
+
+      if (success && mounted) {
+        Navigator.pushReplacementNamed(context, '/adjustment-entry');
+      } else {
+        throw Exception("Invalid password");
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Authentication failed: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[200],
-      body: Center(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                "assets/images/image266622.png", // replace with your real path
-                height: 120,
-              ),
-              Text("Login here", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              SizedBox(height: 5),
-              Text("welcome back"),
-
-              SizedBox(height: 20),
-
-              if (!onlyPassword)
-                TextField(
-                  controller: hostController,
-                  decoration: InputDecoration(labelText: "Enter url"),
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 60),
+                Image.asset(
+                  "assets/images/image266622.png",
+                  height: 100,
                 ),
-
-              if (!onlyPassword)
-                TextField(
-                  controller: dbController,
-                  decoration: InputDecoration(labelText: "Enter db name"),
+                const SizedBox(height: 20),
+                const Text(
+                  "Login here",
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-
-              if (!onlyPassword)
-                TextField(
-                  controller: emailController,
-                  decoration: InputDecoration(labelText: "Enter email"),
+                const SizedBox(height: 5),
+                const Text(
+                  "welcome back",
+                  style: TextStyle(color: Colors.grey),
                 ),
+                const SizedBox(height: 40),
 
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: InputDecoration(labelText: "Enter Password"),
-              ),
+                if (!onlyPassword) ...[
+                  _buildTextField(hostController, "Enter URL", "http://your-odoo-server:8069"),
+                  const SizedBox(height: 16),
+                  _buildTextField(dbController, "Enter DB name (optional)", "Database name"),
+                  const SizedBox(height: 16),
+                  _buildTextField(emailController, "Enter email", "admin@example.com", isEmail: true),
+                  const SizedBox(height: 16),
+                ],
 
-              SizedBox(height: 20),
+                _buildTextField(passwordController, "Enter Password", "", isPassword: true),
 
-              ElevatedButton(
-                onPressed: login,
-                child: Text("login"),
-              )
-            ],
+                const SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : (onlyPassword ? secondAuthentication : login),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: isLoading
+                        ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                        : Text(
+                      onlyPassword ? "Login" : "Login",
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+      TextEditingController controller,
+      String label,
+      String hint, {
+        bool isPassword = false,
+        bool isEmail = false,
+      }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: isPassword,
+        keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );

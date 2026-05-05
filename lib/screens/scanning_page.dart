@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:badges/badges.dart' as badges;
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import 'scanned_items_list_page.dart';
@@ -47,106 +48,93 @@ class _ScanningPageState extends State<ScanningPage> {
       lastScannedBarcode = barcode;
     });
 
-    // Check if already scanned
-    final existingItem = scannedItems.firstWhere(
-          (item) => item.barcode == barcode,
-      orElse: () => ScannedItem(barcode: barcode),
-    );
+    final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
 
-    if (existingItem.productId != 0) {
-      // Item already scanned, increment quantity
+    if (existingIndex != -1) {
       setState(() {
-        existingItem.quantity++;
+        scannedItems[existingIndex].quantity++;
         isScanning = true;
         isLookingUp = false;
       });
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${existingItem.productName}: Quantité ${existingItem.quantity}'),
-            duration: Duration(seconds: 1),
+            content: Text('${scannedItems[existingIndex].productName}: ${scannedItems[existingIndex].quantity}'),
+            duration: const Duration(milliseconds: 800),
           ),
         );
       }
       return;
     }
 
-    // Look up product in Odoo
     final product = await CountingService.lookupProduct(barcode);
 
-    setState(() {
-      if (product != null) {
-        scannedItems.add(ScannedItem(
-          barcode: barcode,
-          productName: product['name'] ?? 'Unknown',
-          productId: product['id'] ?? 0,
-          quantity: 1,
-        ));
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Ajouté: ${product['name']}'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 1),
-            ),
-          );
-        }
-      } else {
-        // Product not found, add as unknown
-        scannedItems.add(ScannedItem(
-          barcode: barcode,
-          productName: '❓ Produit inconnu',
-          productId: 0,
-          quantity: 1,
-        ));
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('⚠️ Produit non trouvé: $barcode'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-
-      isScanning = true;
-      isLookingUp = false;
-    });
-
-    // Disable scanning after 50 items
-    if (scannedItems.length >= 50) {
+    if (mounted) {
       setState(() {
-        isScanning = false;
+        if (product != null) {
+          scannedItems.add(ScannedItem(
+            barcode: barcode,
+            productName: product['name'] ?? 'Unknown',
+            productId: product['id'] ?? 0,
+            quantity: 1,
+          ));
+        } else {
+          scannedItems.add(ScannedItem(
+            barcode: barcode,
+            productName: '❓ Produit inconnu',
+            productId: 0,
+            quantity: 1,
+          ));
+        }
+        isScanning = true;
+        isLookingUp = false;
       });
+    }
 
+    if (scannedItems.length >= 50) {
+      setState(() => isScanning = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Limite de 50 articles atteinte!'),
-            backgroundColor: Colors.orange,
-          ),
+          const SnackBar(content: Text('Limite de 50 articles atteinte!'), backgroundColor: Colors.orange),
         );
       }
     }
   }
 
+  void _showSaveConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Enregistrer", style: TextStyle(fontSize: 18)),
+        content: const Text("Voulez-vous vraiment enregistrer les articles scannés ?", style: TextStyle(fontSize: 14)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Non")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Articles enregistrés"), backgroundColor: Colors.green),
+              );
+            },
+            child: const Text("Oui"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> submitScans() async {
     if (scannedItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Aucun article à envoyer')),
+        const SnackBar(content: Text('Aucun article à envoyer')),
       );
       return;
     }
 
-    // Show loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Center(child: CircularProgressIndicator()),
+      builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
     final success = await CountingService.submitScannedItems(
@@ -155,26 +143,26 @@ class _ScanningPageState extends State<ScanningPage> {
       items: scannedItems,
     );
 
-    Navigator.pop(context); // Close loading dialog
-
-    if (success) {
-      // Navigate to summary page
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ScannedItemsListPage(
-            items: scannedItems,
-            sheetName: widget.sheetName,
+    if (mounted) {
+      Navigator.pop(context);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Envoyé avec succès !"), backgroundColor: Colors.green),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ScannedItemsListPage(
+              items: scannedItems,
+              sheetName: widget.sheetName,
+            ),
           ),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors de l\'envoi. Réessayez.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -195,21 +183,39 @@ class _ScanningPageState extends State<ScanningPage> {
     final isLimitReached = scannedItems.length >= 50;
 
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('Scan - ${widget.zoneName}'),
-        backgroundColor: Colors.blue,
+        title: Text(widget.zoneName, style: const TextStyle(fontSize: 16)),
+        backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, size: 22),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
-          IconButton(
-            icon: Badge(
-              label: Text('${scannedItems.length}'),
-              child: Icon(Icons.list),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'save') _showSaveConfirmation();
+              else if (value == 'finish') Navigator.pop(context);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'save', child: Text('Enregistrer')),
+              PopupMenuItem(value: 'finish', child: Text('Terminer')),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.more_vert, size: 22),
             ),
-            onPressed: navigateToSummary,
           ),
-          IconButton(
-            icon: Icon(Icons.send),
-            onPressed: scannedItems.isEmpty ? null : submitScans,
+          badges.Badge(
+            showBadge: scannedItems.isNotEmpty,
+            badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10)),
+            child: IconButton(
+              icon: const Icon(Icons.list, size: 22),
+              onPressed: navigateToSummary,
+            ),
           ),
         ],
       ),
@@ -217,7 +223,7 @@ class _ScanningPageState extends State<ScanningPage> {
         children: [
           // Camera preview
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Stack(
               children: [
                 MobileScanner(
@@ -225,41 +231,24 @@ class _ScanningPageState extends State<ScanningPage> {
                   onDetect: onBarcodeDetected,
                 ),
                 if (!isScanning)
-                  Container(
-                    color: Colors.black54,
-                    child: Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
+                  Container(color: Colors.black54, child: const Center(child: CircularProgressIndicator())),
                 if (isLookingUp)
                   Positioned(
                     bottom: 20,
-                    left: 0,
-                    right: 0,
+                    left: 20,
+                    right: 20,
                     child: Container(
-                      padding: EdgeInsets.all(12),
-                      margin: EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.black87,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          ),
+                          SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                           SizedBox(width: 10),
-                          Text(
-                            'Recherche du produit...',
-                            style: TextStyle(color: Colors.white),
-                          ),
+                          Text('Recherche...', style: TextStyle(color: Colors.white, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -267,87 +256,60 @@ class _ScanningPageState extends State<ScanningPage> {
               ],
             ),
           ),
-
-          // Info panel
+          // Progress panel
           Container(
-            padding: EdgeInsets.all(16),
-            color: Colors.grey[100],
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
             child: Column(
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Feuille: ${widget.sheetName}',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Zone: ${widget.zoneName}',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
+                    Text(widget.sheetName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                    Text('${scannedItems.length}/50', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ],
                 ),
-                SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: scannedItems.length / 50,
-                  backgroundColor: Colors.grey[300],
-                  color: isLimitReached ? Colors.red : Colors.green,
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: scannedItems.length / 50,
+                    minHeight: 4,
+                    backgroundColor: Colors.grey[200],
+                    color: isLimitReached ? Colors.red : Colors.green,
+                  ),
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Articles scannés: ${scannedItems.length}'),
-                    Text('Limite: 50'),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.list, size: 18),
+                        label: Text('Liste (${scannedItems.length})', style: const TextStyle(fontSize: 12)),
+                        onPressed: navigateToSummary,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[200],
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.send, size: 18),
+                        label: const Text('Envoyer', style: TextStyle(fontSize: 12)),
+                        onPressed: scannedItems.isEmpty ? null : submitScans,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
                   ],
-                ),
-                if (isLimitReached)
-                  Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      '⚠️ Limatte atteinte! Envoyez les données.',
-                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                if (lastScannedBarcode != null && isScanning)
-                  Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Dernier scan: $lastScannedBarcode',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          // Action buttons
-          Container(
-            padding: EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: Icon(Icons.visibility),
-                    label: Text('Voir la liste (${scannedItems.length})'),
-                    onPressed: navigateToSummary,
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: Icon(Icons.send),
-                    label: Text('Envoyer'),
-                    onPressed: scannedItems.isEmpty ? null : submitScans,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -355,10 +317,11 @@ class _ScanningPageState extends State<ScanningPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.flash_on),
-        onPressed: () {
-          scannerController.toggleTorch();
-        },
+        mini: true,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        onPressed: () => scannerController.toggleTorch(),
+        child: const Icon(Icons.flash_on, size: 20),
       ),
     );
   }

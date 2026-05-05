@@ -11,26 +11,34 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[200],
-
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           children: [
-
-            // 🔙 Back button
-            Align(
-              alignment: Alignment.topLeft,
-              child: IconButton(
-                icon: Icon(Icons.arrow_back),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
+            // Top bar with back button and logo
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, size: 28),
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                  // Blue logo placeholder
+                  Image.asset(
+                    "assets/images/image266622.png",
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.inventory, size: 40, color: Colors.blue),
+                  ),
+                ],
               ),
             ),
-
-            Spacer(),
-
-            // 🔵 YOUR ICON HERE
+            const Spacer(),
+            // Center icon
             MouseRegion(
               onEnter: (_) => setState(() => _isHovered = true),
               onExit: (_) => setState(() => _isHovered = false),
@@ -39,36 +47,43 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
                   Navigator.pushNamed(context, '/adjustments-list');
                 },
                 child: Transform.scale(
-                  scale: _isHovered ? 1.2 : 1.0,
+                  scale: _isHovered ? 1.1 : 1.0,
                   child: Image.asset(
-                    "assets/images/2037740.png", // replace with your real path
-                    height: 120,
+                    "assets/images/2037740.png",
+                    height: 140,
+                    errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.inventory, size: 140, color: Colors.blue),
                   ),
                 ),
               ),
             ),
-
-            SizedBox(height: 20),
-
-            Text(
+            const SizedBox(height: 20),
+            const Text(
               "Ajustement de stock",
-              style: TextStyle(fontSize: 16),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
             ),
-
-            Spacer(),
-
+            const Spacer(),
+            // Continue button
             Padding(
-              padding: EdgeInsets.all(20),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: Size(double.infinity, 50),
+              padding: const EdgeInsets.all(20),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/adjustments-list');
+                  },
+                  child: const Text("Continuer", style: TextStyle(fontSize: 16)),
                 ),
-                onPressed: () {
-                  // next page (we will build next)
-                },
-                child: Text("Continuer"),
               ),
-            )
+            ),
           ],
         ),
       ),
