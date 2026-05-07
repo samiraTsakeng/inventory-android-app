@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import '../models/scanned_item.dart';
+import '../services/counting_service.dart';
 
 class ScannedItemsListPage extends StatefulWidget {
   final List<ScannedItem> items;
   final String sheetName;
+  final int countingSheetId;  // Add this
+  final int adjustmentId;      // Add this
 
   const ScannedItemsListPage({
     Key? key,
     required this.items,
     required this.sheetName,
+    required this.countingSheetId,
+    required this.adjustmentId,
   }) : super(key: key);
 
   @override
@@ -17,6 +22,7 @@ class ScannedItemsListPage extends StatefulWidget {
 
 class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   late List<ScannedItem> _items;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -32,6 +38,51 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         _items.removeAt(index);
       }
     });
+  }
+
+  Future<void> _sendToERP() async {
+    if (_items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun article à envoyer')),
+      );
+      return;
+    }
+
+    setState(() => _isSending = true);
+
+    try {
+      final success = await CountingService.submitScannedItems(
+        countingSheetId: widget.countingSheetId,
+        adjustmentId: widget.adjustmentId,
+        items: _items,
+      );
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Envoyé avec succès !'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true); // Return success
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Erreur lors de l\'envoi'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() => _isSending = false);
+    }
   }
 
   @override
@@ -200,9 +251,15 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
               width: double.infinity,
               height: 45,
               child: ElevatedButton.icon(
-                icon: const Icon(Icons.send, size: 18),
-                label: const Text('Envoyer à l\'ERP', style: TextStyle(fontSize: 14)),
-                onPressed: () => Navigator.pop(context, _items),
+                icon: _isSending
+                    ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+                    : const Icon(Icons.send, size: 18),
+                label: Text(_isSending ? 'Envoi en cours...' : 'Envoyer à l\'ERP', style: const TextStyle(fontSize: 14)),
+                onPressed: _isSending ? null : _sendToERP,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,

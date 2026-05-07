@@ -24,7 +24,10 @@ class ScanningPage extends StatefulWidget {
 }
 
 class _ScanningPageState extends State<ScanningPage> {
-  final MobileScannerController scannerController = MobileScannerController();
+  final MobileScannerController scannerController = MobileScannerController(
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
   final List<ScannedItem> scannedItems = [];
   bool isScanning = true;
   String? lastScannedBarcode;
@@ -93,11 +96,11 @@ class _ScanningPageState extends State<ScanningPage> {
 
     if (scannedItems.length >= 50) {
       setState(() => isScanning = false);
-      if (mounted) {
+     // if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Limite de 50 articles atteinte!'), backgroundColor: Colors.orange),
         );
-      }
+     // }
     }
   }
 
@@ -146,18 +149,19 @@ class _ScanningPageState extends State<ScanningPage> {
     if (mounted) {
       Navigator.pop(context);
       if (success) {
+        // Clear the list AFTER successful send
+        setState(() {
+          scannedItems.clear();
+          lastScannedBarcode = null;
+          isScanning = true;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("✅ Envoyé avec succès !"), backgroundColor: Colors.green),
         );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ScannedItemsListPage(
-              items: scannedItems,
-              sheetName: widget.sheetName,
-            ),
-          ),
-        );
+
+        // Stay on scanning page but with empty list
+        // Do NOT navigate away - just clear the list
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
@@ -173,6 +177,8 @@ class _ScanningPageState extends State<ScanningPage> {
         builder: (context) => ScannedItemsListPage(
           items: scannedItems,
           sheetName: widget.sheetName,
+          countingSheetId: widget.countingSheetId,
+          adjustmentId: widget.adjustmentId,
         ),
       ),
     );
@@ -280,6 +286,13 @@ class _ScanningPageState extends State<ScanningPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
+                Text(
+                  scannedItems.isEmpty
+                      ? "Scan des articles (1 à 50)"
+                      : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' :''}",
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
@@ -299,7 +312,10 @@ class _ScanningPageState extends State<ScanningPage> {
                     Expanded(
                       child: ElevatedButton.icon(
                         icon: const Icon(Icons.send, size: 18),
-                        label: const Text('Envoyer', style: TextStyle(fontSize: 12)),
+                        label: Text(
+                            scannedItems.isEmpty ? 'Aucun article' : 'Envoyer (${scannedItems.length})',
+                            style: const TextStyle(fontSize: 12),
+                        ),
                         onPressed: scannedItems.isEmpty ? null : submitScans,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
