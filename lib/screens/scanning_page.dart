@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:badges/badges.dart' as badges;
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
+import '../services/local_storage_service.dart';
 import 'scanned_items_list_page.dart';
 
 class ScanningPage extends StatefulWidget {
@@ -28,10 +29,29 @@ class _ScanningPageState extends State<ScanningPage> {
     facing: CameraFacing.back,
     torchEnabled: false,
   );
-  final List<ScannedItem> scannedItems = [];
+  List<ScannedItem> scannedItems = [];
   bool isScanning = true;
   String? lastScannedBarcode;
   bool isLookingUp = false;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedItems();
+  }
+
+  Future<void> _loadSavedItems() async {
+    final savedItems = await LocalStorageService.loadScannedItems(widget.countingSheetId);
+    setState(() {
+      scannedItems = savedItems;
+      isLoading = false;
+    });
+  }
+
+  Future<void> _saveItems() async {
+    await LocalStorageService.saveScannedItems(widget.countingSheetId, scannedItems);
+  }
 
   @override
   void dispose() {
@@ -51,43 +71,58 @@ class _ScanningPageState extends State<ScanningPage> {
       lastScannedBarcode = barcode;
     });
 
+    // Check if already scanned - prevent duplicate
     final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
 
     if (existingIndex != -1) {
       setState(() {
-        scannedItems[existingIndex].quantity++;
         isScanning = true;
         isLookingUp = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${scannedItems[existingIndex].productName}: ${scannedItems[existingIndex].quantity}'),
-            duration: const Duration(milliseconds: 800),
+          const SnackBar(
+            content: Text('⚠️ Cet article a déjà été scanné! Modifiez la quantité manuellement.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
           ),
         );
       }
       return;
     }
 
+    // Look up product - only registered products
     final product = await CountingService.lookupProduct(barcode);
 
     if (mounted) {
       setState(() {
-        if (product != null) {
+        if (product != null && product['id'] != 0) {
+          // Only add registered products
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: product['name'] ?? 'Unknown',
             productId: product['id'] ?? 0,
             quantity: 1,
+            lotNumber: '',
           ));
+          _saveItems();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Ajouté: ${product['name']}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(milliseconds: 800),
+            ),
+          );
         } else {
-          scannedItems.add(ScannedItem(
-            barcode: barcode,
-            productName: '❓ Produit inconnu',
-            productId: 0,
-            quantity: 1,
-          ));
+          // Ignore non-registered products
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ Produit non trouvé: $barcode (ignoré)'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
         }
         isScanning = true;
         isLookingUp = false;
@@ -96,30 +131,29 @@ class _ScanningPageState extends State<ScanningPage> {
 
     if (scannedItems.length >= 50) {
       setState(() => isScanning = false);
-     // if (mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Limite de 50 articles atteinte!'), backgroundColor: Colors.orange),
         );
-     // }
+      }
     }
   }
 
-  void _showSaveConfirmation() {
+  void _logout() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Enregistrer", style: TextStyle(fontSize: 18)),
-        content: const Text("Voulez-vous vraiment enregistrer les articles scannés ?", style: TextStyle(fontSize: 14)),
+        title: const Text("Déconnexion"),
+        content: const Text("Voulez-vous vraiment vous déconnecter ?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Non")),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Articles enregistrés"), backgroundColor: Colors.green),
-              );
+              Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
             },
-            child: const Text("Oui"),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Oui", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -134,6 +168,16 @@ class _ScanningPageState extends State<ScanningPage> {
       return;
     }
 
+    // Filter only registered products (productId != 0)
+    final validItems = scannedItems.where((item) => item.productId != 0).toList();
+
+    if (validItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun produit valide à envoyer')),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -143,13 +187,14 @@ class _ScanningPageState extends State<ScanningPage> {
     final success = await CountingService.submitScannedItems(
       countingSheetId: widget.countingSheetId,
       adjustmentId: widget.adjustmentId,
-      items: scannedItems,
+      items: validItems,
     );
 
     if (mounted) {
       Navigator.pop(context);
       if (success) {
-        // Clear the list AFTER successful send
+        // Clear local storage and list
+        await LocalStorageService.clearScannedItems(widget.countingSheetId);
         setState(() {
           scannedItems.clear();
           lastScannedBarcode = null;
@@ -159,9 +204,6 @@ class _ScanningPageState extends State<ScanningPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("✅ Envoyé avec succès !"), backgroundColor: Colors.green),
         );
-
-        // Stay on scanning page but with empty list
-        // Do NOT navigate away - just clear the list
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
@@ -179,6 +221,12 @@ class _ScanningPageState extends State<ScanningPage> {
           sheetName: widget.sheetName,
           countingSheetId: widget.countingSheetId,
           adjustmentId: widget.adjustmentId,
+          onItemsUpdated: (updatedItems) {
+            setState(() {
+              scannedItems = updatedItems;
+              _saveItems();
+            });
+          },
         ),
       ),
     );
@@ -188,6 +236,13 @@ class _ScanningPageState extends State<ScanningPage> {
   Widget build(BuildContext context) {
     final isLimitReached = scannedItems.length >= 50;
 
+    if (isLoading) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -196,25 +251,15 @@ class _ScanningPageState extends State<ScanningPage> {
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, size: 22),
-          onPressed: () => Navigator.pop(context),
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, size: 22),
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+          ),
         ),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'save') _showSaveConfirmation();
-              else if (value == 'finish') Navigator.pop(context);
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'save', child: Text('Enregistrer')),
-              PopupMenuItem(value: 'finish', child: Text('Terminer')),
-            ],
-            child: const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.more_vert, size: 22),
-            ),
-          ),
           badges.Badge(
             showBadge: scannedItems.isNotEmpty,
             badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10)),
@@ -224,6 +269,52 @@ class _ScanningPageState extends State<ScanningPage> {
             ),
           ),
         ],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(color: Colors.blue),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Text(
+                    'Inventory App',
+                    style: TextStyle(color: Colors.white, fontSize: 24),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.sheetName,
+                    style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text('Scanner'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Articles scannés'),
+              onTap: () {
+                Navigator.pop(context);
+                navigateToSummary();
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Déconnexion', style: TextStyle(color: Colors.red)),
+              onTap: _logout,
+            ),
+          ],
+        ),
       ),
       body: Column(
         children: [
@@ -262,7 +353,7 @@ class _ScanningPageState extends State<ScanningPage> {
               ],
             ),
           ),
-          // Progress panel
+          // Progress panel (NO SEND BUTTON HERE)
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
@@ -289,43 +380,20 @@ class _ScanningPageState extends State<ScanningPage> {
                 Text(
                   scannedItems.isEmpty
                       ? "Scan des articles (1 à 50)"
-                      : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' :''}",
+                      : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
                   style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.list, size: 18),
-                        label: Text('Liste (${scannedItems.length})', style: const TextStyle(fontSize: 12)),
-                        onPressed: navigateToSummary,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[200],
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.send, size: 18),
-                        label: Text(
-                            scannedItems.isEmpty ? 'Aucun article' : 'Envoyer (${scannedItems.length})',
-                            style: const TextStyle(fontSize: 12),
-                        ),
-                        onPressed: scannedItems.isEmpty ? null : submitScans,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                  ],
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.list, size: 18),
+                  label: Text('Voir la liste (${scannedItems.length})', style: const TextStyle(fontSize: 12)),
+                  onPressed: navigateToSummary,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ],
             ),

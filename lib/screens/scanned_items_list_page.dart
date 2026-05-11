@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
+import '../services/local_storage_service.dart';
 
 class ScannedItemsListPage extends StatefulWidget {
   final List<ScannedItem> items;
   final String sheetName;
-  final int countingSheetId;  // Add this
-  final int adjustmentId;      // Add this
+  final int countingSheetId;
+  final int adjustmentId;
+  final Function(List<ScannedItem>) onItemsUpdated;
 
   const ScannedItemsListPage({
     Key? key,
@@ -14,6 +16,7 @@ class ScannedItemsListPage extends StatefulWidget {
     required this.sheetName,
     required this.countingSheetId,
     required this.adjustmentId,
+    required this.onItemsUpdated,
   }) : super(key: key);
 
   @override
@@ -23,6 +26,9 @@ class ScannedItemsListPage extends StatefulWidget {
 class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   late List<ScannedItem> _items;
   bool _isSending = false;
+  final TextEditingController _quantityController = TextEditingController();
+  final TextEditingController _lotNumberController = TextEditingController();
+  int _editingIndex = -1;
 
   @override
   void initState() {
@@ -30,13 +36,35 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     _items = List.from(widget.items);
   }
 
-  void _updateQuantity(int index, int newQuantity) {
-    setState(() {
-      if (newQuantity > 0) {
+  void _saveItemQuantity(int index) {
+    final newQuantity = int.tryParse(_quantityController.text);
+    if (newQuantity != null && newQuantity > 0) {
+      setState(() {
         _items[index].quantity = newQuantity;
-      } else {
-        _items.removeAt(index);
-      }
+        if (_lotNumberController.text.isNotEmpty) {
+          _items[index].lotNumber = _lotNumberController.text;
+        }
+        _editingIndex = -1;
+        _quantityController.clear();
+        _lotNumberController.clear();
+      });
+      widget.onItemsUpdated(_items);
+      _saveToLocalStorage();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Quantité mise à jour'), duration: Duration(seconds: 1)),
+      );
+    }
+  }
+
+  Future<void> _saveToLocalStorage() async {
+    await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
+  }
+
+  void _startEditing(int index) {
+    setState(() {
+      _editingIndex = index;
+      _quantityController.text = _items[index].quantity.toString();
+      _lotNumberController.text = _items[index].lotNumber ?? '';
     });
   }
 
@@ -48,40 +76,52 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       return;
     }
 
+    // Filter only registered products
+    final validItems = _items.where((item) => item.productId != 0).toList();
+
+    if (validItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun produit valide à envoyer')),
+      );
+      return;
+    }
+
     setState(() => _isSending = true);
 
     try {
       final success = await CountingService.submitScannedItems(
         countingSheetId: widget.countingSheetId,
         adjustmentId: widget.adjustmentId,
-        items: _items,
+        items: validItems,
       );
 
-      if (success) {
+      if (success && mounted) {
+        // Clear local storage and list
+        await LocalStorageService.clearScannedItems(widget.countingSheetId);
+        setState(() {
+          _items.clear();
+        });
+        widget.onItemsUpdated([]);
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Envoyé avec succès !'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('✅ Envoyé avec succès !'), backgroundColor: Colors.green),
         );
-        Navigator.pop(context, true); // Return success
-      } else {
+        Navigator.pop(context, true);
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Erreur lors de l\'envoi'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      setState(() => _isSending = false);
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
     }
   }
 
@@ -100,12 +140,14 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.check, size: 18),
-            label: const Text('Retour', style: TextStyle(fontSize: 12)),
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-          ),
+          if (_items.isNotEmpty)
+            TextButton.icon(
+              icon: _isSending
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send, size: 18),
+              label: Text(_isSending ? 'Envoi...' : 'Envoyer', style: const TextStyle(fontSize: 12)),
+              onPressed: _isSending ? null : _sendToERP,
+            ),
         ],
       ),
       body: _items.isEmpty
@@ -126,7 +168,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       )
           : Column(
         children: [
-          // Summary
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -154,118 +195,126 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
               ],
             ),
           ),
-          // List
           Expanded(
             child: ListView.builder(
               itemCount: _items.length,
               itemBuilder: (context, index) {
                 final item = _items[index];
+                final isEditing = _editingIndex == index;
+
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   child: Padding(
                     padding: const EdgeInsets.all(10),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: item.productId == 0 ? Colors.orange[100] : Colors.green[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${index + 1}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: item.productId == 0 ? Colors.orange : Colors.green,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.productName,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: item.productId == 0 ? Colors.orange : Colors.black87,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                item.barcode,
-                                style: const TextStyle(fontSize: 10, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                        ),
                         Row(
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.remove, size: 18),
-                              onPressed: () => _updateQuantity(index, item.quantity - 1),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            SizedBox(
-                              width: 30,
-                              child: Text(
-                                '${item.quantity}',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.blue[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.add, size: 18),
-                              onPressed: () => _updateQuantity(index, item.quantity + 1),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.productName,
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.barcode,
+                                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                          onPressed: () => setState(() => _items.removeAt(index)),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                        const SizedBox(height: 8),
+                        // Lot number field (editable)
+                        if (isEditing)
+                          TextField(
+                            controller: _lotNumberController,
+                            decoration: const InputDecoration(
+                              labelText: 'Numéro de Lot/Série',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        const SizedBox(height: 8),
+                        // Quantity with manual edit
+                        Row(
+                          children: [
+                            const Text('Quantité: ', style: TextStyle(fontSize: 12)),
+                            if (isEditing)
+                              Expanded(
+                                child: TextField(
+                                  controller: _quantityController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  ),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: Text(
+                                  '${item.quantity}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            const SizedBox(width: 8),
+                            if (isEditing)
+                              IconButton(
+                                icon: const Icon(Icons.save, size: 20, color: Colors.green),
+                                onPressed: () => _saveItemQuantity(index),
+                              )
+                            else
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
+                                onPressed: () => _startEditing(index),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                              onPressed: () {
+                                setState(() {
+                                  _items.removeAt(index);
+                                  if (_editingIndex == index) {
+                                    _editingIndex = -1;
+                                    _quantityController.clear();
+                                    _lotNumberController.clear();
+                                  }
+                                });
+                                widget.onItemsUpdated(_items);
+                                _saveToLocalStorage();
+                              },
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 );
               },
-            ),
-          ),
-          // Bottom button
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: SizedBox(
-              width: double.infinity,
-              height: 45,
-              child: ElevatedButton.icon(
-                icon: _isSending
-                    ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-                    : const Icon(Icons.send, size: 18),
-                label: Text(_isSending ? 'Envoi en cours...' : 'Envoyer à l\'ERP', style: const TextStyle(fontSize: 14)),
-                onPressed: _isSending ? null : _sendToERP,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
             ),
           ),
         ],

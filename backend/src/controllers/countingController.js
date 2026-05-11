@@ -16,7 +16,6 @@ class CountingController {
       const { barcode } = req.body;
       console.log("Looking up product with barcode:", barcode);
 
-      // Search for product by barcode
       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
         headers: {
@@ -46,7 +45,6 @@ class CountingController {
           product: data.result[0]
         });
       } else {
-        // Try searching by default_code if not found by barcode
         const response2 = await fetch(`${session.host}/web/dataset/call_kw`, {
           method: "POST",
           headers: {
@@ -157,7 +155,6 @@ class CountingController {
       const { sheet_id } = req.body;
       console.log("Starting sheet ID:", sheet_id);
 
-      // Call the action_begin method on the counting sheet
       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
         headers: {
@@ -221,7 +218,7 @@ class CountingController {
         });
       }
 
-      // FIRST: Check the current state of the counting sheet
+      // Check the current state of the counting sheet
       let sheetState = null;
       try {
         const stateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
@@ -250,8 +247,7 @@ class CountingController {
         console.warn("Could not fetch sheet state:", err.message);
       }
 
-      // SECOND: If sheet is in 'new' state, start it
-      let sheetStarted = false;
+      // If sheet is in 'new' state, start it
       if (sheetState === 'new') {
         console.log("Sheet is in 'new' state, attempting to start it...");
         try {
@@ -274,28 +270,26 @@ class CountingController {
           });
           const startData = await startResponse.json();
           if (!startData.error) {
-            sheetStarted = true;
             console.log("Sheet started successfully!");
-          } else {
-            console.error("Failed to start sheet:", startData.error);
-            // Check if it's because another sheet is in progress
-            if (startData.error.data?.message && startData.error.data.message.includes("terminer le comptage précédent")) {
-              return res.status(400).json({
-                success: false,
-                message: startData.error.data.message,
-                requires_attention: true
-              });
-            }
+          } else if (startData.error.data?.message && startData.error.data.message.includes("terminer le comptage précédent")) {
+            return res.status(400).json({
+              success: false,
+              message: startData.error.data.message,
+              requires_attention: true
+            });
           }
         } catch (err) {
           console.error("Error starting sheet:", err.message);
         }
       }
 
-      // THIRD: Get a valid product ID from Odoo
-      let defaultProductId = null;
-      try {
-        const productResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+      // Find matching products for each barcode
+      const itemsToCreate = [];
+      for (const item of items) {
+        let matchedProductId = null;
+
+        // Try to find product by barcode
+        const matchResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -307,46 +301,45 @@ class CountingController {
             params: {
               model: "product.product",
               method: "search_read",
-              args: [[]],
+              args: [[["barcode", "=", item.barcode]]],
               kwargs: {
-                fields: ["id"],
-                limit: 1
+                fields: ["id", "name"]
               }
             }
           })
         });
-        const productData = await productResponse.json();
-        if (productData.result && productData.result.length > 0) {
-          defaultProductId = productData.result[0].id;
-          console.log("Found default product ID:", defaultProductId);
+        const matchData = await matchResponse.json();
+
+        if (matchData.result && matchData.result.length > 0) {
+          matchedProductId = matchData.result[0].id;
+          console.log(`Found product for barcode ${item.barcode}: ${matchData.result[0].name} (ID: ${matchedProductId})`);
+
+          itemsToCreate.push({
+            number: item.barcode,
+            product_id: matchedProductId,
+            counted_qty: item.quantity,
+            sheet_id: counting_sheet_id
+          });
+        } else {
+          console.log(`No product found for barcode ${item.barcode} - skipping`);
         }
-      } catch (err) {
-        console.warn("Could not fetch default product:", err.message);
       }
 
-      if (!defaultProductId) {
+      if (itemsToCreate.length === 0) {
         return res.status(400).json({
           success: false,
-          message: "No products found in Odoo. Please add products first."
+          message: "No valid products found. Please ensure barcodes match existing products."
         });
       }
 
-      // FOURTH: Create counting sheet lines ONE BY ONE
+      console.log(`Creating ${itemsToCreate.length} counting sheet lines...`);
+
+      // Create counting sheet lines ONE BY ONE
       const createdLineIds = [];
       const failedItems = [];
 
-      for (const item of items) {
-        console.log("Processing item:", item.barcode, "Product ID:", item.product_id);
-
-        const lineData = {
-          number: item.barcode,
-          product_id: item.product_id && item.product_id !== 0 ? item.product_id : defaultProductId,
-          counted_qty: item.quantity,
-          sheet_id: counting_sheet_id
-        };
-
-        console.log("Creating line with sheet_id:", counting_sheet_id);
-        console.log("Line data:", JSON.stringify(lineData, null, 2));
+      for (const lineData of itemsToCreate) {
+        console.log("Creating line:", JSON.stringify(lineData, null, 2));
 
         const createResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
           method: "POST",
@@ -373,13 +366,13 @@ class CountingController {
           lineResult = JSON.parse(responseText);
         } catch (e) {
           console.error("Failed to parse response:", responseText);
-          failedItems.push(item.barcode);
+          failedItems.push(lineData.number);
           continue;
         }
 
         if (lineResult.error) {
           console.error("Error creating line:", lineResult.error);
-          failedItems.push(item.barcode);
+          failedItems.push(lineData.number);
         } else {
           createdLineIds.push(lineResult.result);
           console.log(`Created line with ID: ${lineResult.result}`);
@@ -396,8 +389,7 @@ class CountingController {
         });
       }
 
-      // FIFTH: Update counting sheet state to confirm if max items reached (50)
-      let sheetConfirmed = false;
+      // Update counting sheet state if max items reached (50)
       if (items.length >= 50) {
         console.log("Reached 50 items limit, updating counting sheet state to confirm");
         const updateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
@@ -420,7 +412,6 @@ class CountingController {
 
         const updateData = await updateResponse.json();
         if (!updateData.error) {
-          sheetConfirmed = true;
           console.log("Sheet confirmed successfully!");
         } else {
           console.warn("Failed to update sheet state:", updateData.error);
@@ -431,9 +422,7 @@ class CountingController {
         success: true,
         message: `${createdLineIds.length} items submitted successfully`,
         submitted_count: createdLineIds.length,
-        failed_items: failedItems,
-        sheet_started: sheetStarted,
-        sheet_confirmed: sheetConfirmed
+        failed_items: failedItems
       });
 
     } catch (error) {
