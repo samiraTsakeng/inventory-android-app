@@ -27,7 +27,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   late List<ScannedItem> _items;
   bool _isSending = false;
   final TextEditingController _quantityController = TextEditingController();
-  final TextEditingController _lotNumberController = TextEditingController();
   int _editingIndex = -1;
 
   @override
@@ -41,12 +40,8 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     if (newQuantity != null && newQuantity > 0) {
       setState(() {
         _items[index].quantity = newQuantity;
-        if (_lotNumberController.text.isNotEmpty) {
-          _items[index].lotNumber = _lotNumberController.text;
-        }
         _editingIndex = -1;
         _quantityController.clear();
-        _lotNumberController.clear();
       });
       widget.onItemsUpdated(_items);
       _saveToLocalStorage();
@@ -64,7 +59,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     setState(() {
       _editingIndex = index;
       _quantityController.text = _items[index].quantity.toString();
-      _lotNumberController.text = _items[index].lotNumber ?? '';
     });
   }
 
@@ -96,7 +90,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       );
 
       if (success && mounted) {
-        // Clear local storage and list
         await LocalStorageService.clearScannedItems(widget.countingSheetId);
         setState(() {
           _items.clear();
@@ -247,19 +240,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        // Lot number field (editable)
-                        if (isEditing)
-                          TextField(
-                            controller: _lotNumberController,
-                            decoration: const InputDecoration(
-                              labelText: 'Numéro de Lot/Série',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                            ),
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        const SizedBox(height: 8),
-                        // Quantity with manual edit
+                        // Quantity with manual edit (NO LOT NUMBER FIELD)
                         Row(
                           children: [
                             const Text('Quantité: ', style: TextStyle(fontSize: 12)),
@@ -301,7 +282,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                                   if (_editingIndex == index) {
                                     _editingIndex = -1;
                                     _quantityController.clear();
-                                    _lotNumberController.clear();
                                   }
                                 });
                                 widget.onItemsUpdated(_items);
