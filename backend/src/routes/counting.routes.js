@@ -20,4 +20,5 @@ router.get('/check-sheet/:sheet_id', CountingController.checkSheetLines);
 // GET /counting/check-sheet-state/:sheet_id
 router.get('/check-sheet-state/:sheet_id', CountingController.checkSheetState);
 
+router.post('/validate-sheet', CountingController.validateSheet);
 module.exports = router;

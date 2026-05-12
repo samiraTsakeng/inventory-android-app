@@ -111,7 +111,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             ),
             const SizedBox(height: 20),
             const Text(
-              "Ajustement de stock",
+              "Inventaire",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
             ),
             const Spacer(),

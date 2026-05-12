@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
+import '../services/counting_service.dart';
 import 'scanning_page.dart';
 
 class FeuilleListPage extends StatefulWidget {
@@ -15,6 +16,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   List feuilles = [];
   bool isLoading = true;
   String? errorMessage;
+  int? _startingSheetId;
+  int? _validatingSheetId;
 
   @override
   void initState() {
@@ -25,6 +28,11 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   void fetchFeuilles() async {
     try {
       final data = await FeuilleService.getFeuilles(widget.adjustmentId);
+      // Sort: progress first, then new, then confirm, then cancel
+      data.sort((a, b) {
+        const order = {'progress': 0, 'new': 1, 'confirm': 2, 'cancel': 3};
+        return (order[a['state']] ?? 4) - (order[b['state']] ?? 4);
+      });
       setState(() {
         feuilles = data;
         isLoading = false;
@@ -63,18 +71,64 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     }
   }
 
+  Future<void> _startSheet(int sheetId) async {
+    setState(() => _startingSheetId = sheetId);
+    try {
+      final success = await CountingService.startSheet(sheetId);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Comptage commencé'), backgroundColor: Colors.green),
+        );
+        fetchFeuilles();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ Erreur lors du démarrage'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+      );
+    } finally {
+      setState(() => _startingSheetId = null);
+    }
+  }
+
+  Future<void> _validateSheet(int sheetId) async {
+    setState(() => _validatingSheetId = sheetId);
+    try {
+      final success = await CountingService.validateSheet(sheetId);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Comptage validé'), backgroundColor: Colors.green),
+        );
+        fetchFeuilles();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ Erreur lors de la validation'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+      );
+    } finally {
+      setState(() => _validatingSheetId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text("Feuilles", style: TextStyle(fontSize: 16)),
+        title: const Text("Feuilles", style: TextStyle(fontSize: 15)),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, size: 22),
+          icon: const Icon(Icons.arrow_back, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -82,9 +136,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             padding: const EdgeInsets.only(right: 12),
             child: Image.asset(
               "assets/images/image266622.png",
-              height: 28,
+              height: 25,
               errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.inventory, color: Colors.white, size: 22),
+              const Icon(Icons.inventory, color: Colors.white, size: 20),
             ),
           ),
         ],
@@ -98,7 +152,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           children: [
             const Icon(Icons.error_outline, size: 40, color: Colors.red),
             const SizedBox(height: 8),
-            Text("Error: $errorMessage", style: const TextStyle(fontSize: 12)),
+            Text("Error: $errorMessage", style: const TextStyle(fontSize: 11)),
             const SizedBox(height: 8),
             ElevatedButton(
               onPressed: () {
@@ -108,7 +162,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                   fetchFeuilles();
                 });
               },
-              child: const Text("Réessayer", style: TextStyle(fontSize: 12)),
+              child: const Text("Réessayer", style: TextStyle(fontSize: 11)),
             ),
           ],
         ),
@@ -124,42 +178,34 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           ],
         ),
       )
-          : Padding(
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(6.0),
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 6,
-            mainAxisSpacing: 6,
-            childAspectRatio: 0.75,
-          ),
-          itemCount: feuilles.length,
-          itemBuilder: (context, index) {
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: List.generate(feuilles.length, (index) {
             final f = feuilles[index];
             final zoneName = getName(f["zone_id"]);
-            final isProgress = f["state"] == 'progress' || f["state"] == 'new';
             final sheetName = f["name"] ?? "Feuille ${f["id"]}";
             final countingSheetId = f["id"];
+            final sheetState = f["state"];
+            final isProgress = sheetState == 'progress';
+            final isNew = sheetState == 'new';
+            final isConfirm = sheetState == 'confirm';
 
-            return GestureDetector(
-              onTap: () {
-                // ENTIRE CARD navigates to scanning page
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ScanningPage(
-                      countingSheetId: countingSheetId,
-                      adjustmentId: widget.adjustmentId,
-                      zoneName: zoneName,
-                      sheetName: sheetName,
-                    ),
-                  ),
-                );
-              },
+            bool previousSheetActive = false;
+            if (index > 0 && feuilles[index - 1]["state"] != 'confirm') {
+              previousSheetActive = true;
+            }
+
+            final cardWidth = (MediaQuery.of(context).size.width - 18) / 2;
+
+            return SizedBox(
+              width: cardWidth,
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.grey.withOpacity(0.1),
@@ -170,107 +216,161 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, // ← shrink to content
                   children: [
-                    // Status bar (no scan icon here anymore)
+                    // Status bar
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                       decoration: BoxDecoration(
-                        color: getStatusColor(f["state"]).withOpacity(0.15),
+                        color: getStatusColor(sheetState).withOpacity(0.15),
                         borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(10),
-                          topRight: Radius.circular(10),
+                          topLeft: Radius.circular(8),
+                          topRight: Radius.circular(8),
                         ),
                       ),
                       child: Text(
-                        getStatusText(f["state"]),
+                        getStatusText(sheetState),
                         style: TextStyle(
-                          fontSize: 9,
+                          fontSize: 8,
                           fontWeight: FontWeight.w500,
-                          color: getStatusColor(f["state"]),
+                          color: getStatusColor(sheetState),
                         ),
                       ),
                     ),
                     // Content
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  sheetName,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 2,
+                    Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            sheetName,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Icon(Icons.location_on, size: 9, color: Colors.grey[500]),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                child: Text(
+                                  zoneName,
+                                  style: TextStyle(fontSize: 8, color: Colors.grey[600]),
+                                  maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Icon(Icons.location_on, size: 10, color: Colors.grey[500]),
-                                    const SizedBox(width: 2),
-                                    Expanded(
-                                      child: Text(
-                                        zoneName,
-                                        style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(Icons.person, size: 9, color: Colors.grey[500]),
+                              const SizedBox(width: 2),
+                              Expanded(
+                                child: Text(
+                                  getName(f["user_id"]),
+                                  style: TextStyle(fontSize: 8, color: Colors.grey[600]),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    Icon(Icons.person, size: 10, color: Colors.grey[500]),
-                                    const SizedBox(width: 2),
-                                    Expanded(
-                                      child: Text(
-                                        getName(f["user_id"]),
-                                        style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                              ),
+                            ],
+                          ),
+                          // Action buttons
+                          if (isNew && !previousSheetActive) ...[
+                            const SizedBox(height: 6),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: _startingSheetId == countingSheetId ? null : () => _startSheet(countingSheetId),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  textStyle: const TextStyle(fontSize: 9),
+                                ),
+                                child: _startingSheetId == countingSheetId
+                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Text('Commencer'),
+                              ),
+                            ),
+                          ],
+                          if (isProgress) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ScanningPage(
+                                            countingSheetId: countingSheetId,
+                                            adjustmentId: widget.adjustmentId,
+                                            zoneName: zoneName,
+                                            sheetName: sheetName,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 4),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                      textStyle: const TextStyle(fontSize: 9),
                                     ),
-                                  ],
+                                    child: const Text('Scanner'),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: _validatingSheetId == countingSheetId ? null : () => _validateSheet(countingSheetId),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.orange,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 4),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                      textStyle: const TextStyle(fontSize: 9),
+                                    ),
+                                    child: _validatingSheetId == countingSheetId
+                                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                        : const Text('Valider'),
+                                  ),
                                 ),
                               ],
                             ),
-                            if (isProgress)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.qr_code_scanner, size: 8, color: Colors.green),
-                                    SizedBox(width: 2),
-                                    Text(
-                                      "Scanner",
-                                      style: TextStyle(fontSize: 8, color: Colors.green),
-                                    ),
-                                  ],
-                                ),
-                              ),
                           ],
-                        ),
+                          if (isConfirm) ...[
+                            const SizedBox(height: 6),
+                            const SizedBox(
+                              width: double.infinity,
+                              child: Text(
+                                '✓ Terminé',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 9, color: Colors.green, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
             );
-          },
+          }),
         ),
       ),
     );

@@ -62,6 +62,22 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     });
   }
 
+  String _getTrackingText(String tracking) {
+    switch (tracking) {
+      case 'serial': return 'N° Série';
+      case 'lot': return 'Lot';
+      default: return 'Standard';
+    }
+  }
+
+  Color _getTrackingColor(String tracking) {
+    switch (tracking) {
+      case 'serial': return Colors.purple;
+      case 'lot': return Colors.orange;
+      default: return Colors.grey;
+    }
+  }
+
   Future<void> _sendToERP() async {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -70,7 +86,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       return;
     }
 
-    // Filter only registered products
     final validItems = _items.where((item) => item.productId != 0).toList();
 
     if (validItems.isEmpty) {
@@ -123,22 +138,22 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text(widget.sheetName, style: const TextStyle(fontSize: 16)),
+        title: Text(widget.sheetName, style: const TextStyle(fontSize: 15)),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, size: 22),
+          icon: const Icon(Icons.arrow_back, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           if (_items.isNotEmpty)
             TextButton.icon(
               icon: _isSending
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.send, size: 18),
-              label: Text(_isSending ? 'Envoi...' : 'Envoyer', style: const TextStyle(fontSize: 12)),
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send, size: 16),
+              label: Text(_isSending ? 'Envoi...' : 'Envoyer', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
               onPressed: _isSending ? null : _sendToERP,
             ),
         ],
@@ -150,11 +165,11 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
           children: [
             const Icon(Icons.inventory, size: 48, color: Colors.grey),
             const SizedBox(height: 12),
-            const Text('Aucun article scanné', style: TextStyle(fontSize: 14, color: Colors.grey)),
+            const Text('Aucun article scanné', style: TextStyle(fontSize: 13, color: Colors.grey)),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Retour au scan'),
+              child: const Text('Retour au scan', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
@@ -163,7 +178,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         children: [
           Container(
             margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.blue[50],
               borderRadius: BorderRadius.circular(8),
@@ -173,16 +188,16 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.qr_code, size: 16, color: Colors.blue),
+                    const Icon(Icons.qr_code, size: 14, color: Colors.blue),
                     const SizedBox(width: 4),
-                    Text('${_items.length} articles', style: const TextStyle(fontSize: 13)),
+                    Text('${_items.length} articles', style: const TextStyle(fontSize: 12)),
                   ],
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.inventory, size: 16, color: Colors.blue),
+                    const Icon(Icons.inventory, size: 14, color: Colors.blue),
                     const SizedBox(width: 4),
-                    Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces', style: const TextStyle(fontSize: 13)),
+                    Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces', style: const TextStyle(fontSize: 12)),
                   ],
                 ),
               ],
@@ -194,6 +209,9 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
               itemBuilder: (context, index) {
                 final item = _items[index];
                 final isEditing = _editingIndex == index;
+                final isSerial = item.tracking == 'serial';
+                final trackingText = _getTrackingText(item.tracking);
+                final trackingColor = _getTrackingColor(item.tracking);
 
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -205,77 +223,106 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                         Row(
                           children: [
                             Container(
-                              width: 40,
-                              height: 40,
+                              width: 32,
+                              height: 32,
                               decoration: BoxDecoration(
                                 color: Colors.blue[100],
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(6),
                               ),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     item.productName,
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    item.barcode,
-                                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        item.barcode,
+                                        style: const TextStyle(fontSize: 9, color: Colors.grey),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: trackingColor.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          trackingText,
+                                          style: TextStyle(fontSize: 8, color: trackingColor, fontWeight: FontWeight.w500),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        // Quantity with manual edit (NO LOT NUMBER FIELD)
+                        const SizedBox(height: 6),
                         Row(
                           children: [
-                            const Text('Quantité: ', style: TextStyle(fontSize: 12)),
-                            if (isEditing)
+                            Text(
+                              isSerial ? 'Quantité fixe: ' : 'Quantité: ',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            if (isSerial)
+                              Expanded(
+                                child: Text(
+                                  '1 (N° Série)',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.purple),
+                                ),
+                              )
+                            else if (isEditing)
                               Expanded(
                                 child: TextField(
                                   controller: _quantityController,
                                   keyboardType: TextInputType.number,
                                   decoration: const InputDecoration(
                                     border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   ),
-                                  style: const TextStyle(fontSize: 12),
+                                  style: const TextStyle(fontSize: 11),
                                 ),
                               )
                             else
                               Expanded(
                                 child: Text(
                                   '${item.quantity}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ),
-                            const SizedBox(width: 8),
-                            if (isEditing)
+                            const SizedBox(width: 6),
+                            if (!isSerial && !isEditing)
                               IconButton(
-                                icon: const Icon(Icons.save, size: 20, color: Colors.green),
-                                onPressed: () => _saveItemQuantity(index),
-                              )
-                            else
-                              IconButton(
-                                icon: const Icon(Icons.edit, size: 20, color: Colors.blue),
+                                icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
                                 onPressed: () => _startEditing(index),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            if (!isSerial && isEditing)
+                              IconButton(
+                                icon: const Icon(Icons.save, size: 16, color: Colors.green),
+                                onPressed: () => _saveItemQuantity(index),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
                               ),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
                               onPressed: () {
                                 setState(() {
                                   _items.removeAt(index);
@@ -287,6 +334,8 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                                 widget.onItemsUpdated(_items);
                                 _saveToLocalStorage();
                               },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
                           ],
                         ),

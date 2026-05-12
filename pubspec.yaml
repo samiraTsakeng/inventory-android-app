@@ -1,5 +1,5 @@
-name: inventory_app
-description: A new Flutter project.
+name: wise_inventory
+description: wise inventory app for stock counting.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -32,9 +32,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/2037740.png
     - assets/images/image266622.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/image266622.png"
+  adaptive_icon_background: "#1976D2"
+  adaptive_icon_foreground: "assets/images/image266622.png"

@@ -97,19 +97,22 @@ class _ScanningPageState extends State<ScanningPage> {
     if (mounted) {
       setState(() {
         if (product != null && product['id'] != 0) {
+          String tracking = product['tracking'] ?? 'none';
+
           // Only add registered products
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: product['name'] ?? 'Unknown',
             productId: product['id'] ?? 0,
-            quantity: 1,
+            quantity: tracking == 'serial' ? 1 : 1,
             lotNumber: '',
+            tracking: tracking,
           ));
           _saveItems();
-
+           String trackingText = tracking == 'serial' ? 'Numero de serie' : (tracking == 'lot' ? 'lot': "Standard");
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Ajouté: ${product['name']}'),
+              content: Text('✅ Ajouté: ${product['name']} ($trackingText)'),
               backgroundColor: Colors.green,
               duration: const Duration(milliseconds: 800),
             ),

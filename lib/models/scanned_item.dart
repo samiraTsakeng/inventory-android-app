@@ -5,6 +5,7 @@ class ScannedItem {
   int quantity;
   String? lotNumber;
   bool isSynced;
+  String tracking; // 'none', 'lot', or 'serial'
 
   ScannedItem({
     required this.barcode,
@@ -13,6 +14,7 @@ class ScannedItem {
     this.quantity = 1,
     this.lotNumber,
     this.isSynced = false,
+    this.tracking = 'none',
   });
 
   Map<String, dynamic> toJson() => {
@@ -21,6 +23,7 @@ class ScannedItem {
     'product_id': productId,
     'quantity': quantity,
     'lot_number': lotNumber,
+    'tracking': tracking,
   };
 
   factory ScannedItem.fromJson(Map<String, dynamic> json) => ScannedItem(
@@ -29,5 +32,6 @@ class ScannedItem {
     productId: json['product_id'] ?? 0,
     quantity: json['quantity'] ?? 1,
     lotNumber: json['lot_number'],
+    tracking: json['tracking'] ?? 'none',
   );
 }

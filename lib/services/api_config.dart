@@ -1,3 +1,6 @@
+import 'package:flutter/material.dart';
+import 'package:http/http.dart';
+
 class ApiConfig {
   static const String baseUrl = "http://192.168.1.109:3001";
 
@@ -5,3 +8,4 @@ class ApiConfig {
   static String get login => "$baseUrl/auth/login";
   static String feuilles(int adjustmentId) => "$baseUrl/feuilles/$adjustmentId";
 }
+

@@ -126,18 +126,15 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
           ],
         ),
       )
-          : Padding(
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(6.0),
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 6,
-            mainAxisSpacing: 6,
-            childAspectRatio: 0.8,
-          ),
-          itemCount: adjustments.length,
-          itemBuilder: (context, index) {
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: List.generate(adjustments.length, (index) {
             final adj = adjustments[index];
+            final cardWidth = (MediaQuery.of(context).size.width - 18) / 2;
+
             return GestureDetector(
               onTap: () {
                 Navigator.pushNamed(
@@ -146,78 +143,78 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                   arguments: adj["id"],
                 );
               },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      spreadRadius: 1,
-                      blurRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: getStatusColor(adj["state"]).withOpacity(0.15),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(10),
-                          topRight: Radius.circular(10),
+              child: SizedBox(
+                width: cardWidth,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min, // ← shrink to content
+                    children: [
+                      // Status bar
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: getStatusColor(adj["state"]).withOpacity(0.15),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(10),
+                            topRight: Radius.circular(10),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              getStatusText(adj["state"]),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w500,
+                                color: getStatusColor(adj["state"]),
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, size: 14, color: Colors.grey[400]),
+                          ],
                         ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            getStatusText(adj["state"]),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w500,
-                              color: getStatusColor(adj["state"]),
-                            ),
-                          ),
-                          Icon(Icons.chevron_right, size: 14, color: Colors.grey[400]),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
+                      // Content
+                      Padding(
                         padding: const EdgeInsets.all(8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Text(
+                              adj["name"] ?? "Sans nom",
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
                               children: [
+                                Icon(Icons.calendar_today, size: 10, color: Colors.grey[500]),
+                                const SizedBox(width: 2),
                                 Text(
-                                  adj["name"] ?? "Sans nom",
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Icon(Icons.calendar_today, size: 10, color: Colors.grey[500]),
-                                    const SizedBox(width: 2),
-                                    Text(
-                                      formatDate(adj["date"]),
-                                      style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-                                    ),
-                                  ],
+                                  formatDate(adj["date"]),
+                                  style: TextStyle(fontSize: 9, color: Colors.grey[600]),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                               decoration: BoxDecoration(
@@ -239,12 +236,12 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
-          },
+          }),
         ),
       ),
     );

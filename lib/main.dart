@@ -16,7 +16,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Inventory App',
+      title: 'Wise inventory',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         fontFamily: 'Roboto',

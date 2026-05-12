@@ -4,7 +4,7 @@ import 'api_config.dart';
 import '../models/scanned_item.dart';
 
 class CountingService {
-  // Look up product by barcode
+  // Look up product by barcode with tracking info
   static Future<Map<String, dynamic>?> lookupProduct(String barcode) async {
     try {
       final response = await http.post(
@@ -69,6 +69,29 @@ class CountingService {
       return false;
     } catch (e) {
       print("Start sheet error: $e");
+      return false;
+    }
+  }
+
+  // Validate a counting sheet (finish counting)
+  static Future<bool> validateSheet(int sheetId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/validate-sheet'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({'sheet_id': sheetId}),
+      );
+
+      print("Validate sheet status: ${response.statusCode}");
+      print("Validate sheet body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['success'] == true;
+      }
+      return false;
+    } catch (e) {
+      print("Validate sheet error: $e");
       return false;
     }
   }

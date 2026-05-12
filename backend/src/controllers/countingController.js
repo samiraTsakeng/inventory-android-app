@@ -30,7 +30,7 @@ class CountingController {
             method: "search_read",
             args: [[["barcode", "=", barcode]]],
             kwargs: {
-              fields: ["id", "name", "barcode", "default_code"]
+              fields: ["id", "name", "barcode", "default_code", "tracking"]
             }
           }
         })
@@ -59,7 +59,7 @@ class CountingController {
               method: "search_read",
               args: [[["default_code", "=", barcode]]],
               kwargs: {
-                fields: ["id", "name", "barcode", "default_code"]
+                fields: ["id", "name", "barcode", "default_code", "tracking"]
               }
             }
           })
@@ -186,6 +186,58 @@ class CountingController {
       });
     } catch (error) {
       console.error("Start sheet error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // Validate a counting sheet (finish counting)
+  static async validateSheet(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({
+          success: false,
+          message: "Not authenticated"
+        });
+      }
+
+      const { sheet_id } = req.body;
+      console.log("Validating sheet ID:", sheet_id);
+
+      const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "counting.sheet",
+            method: "action_validate",
+            args: [[parseInt(sheet_id)]],
+            kwargs: {}
+          }
+        })
+      });
+
+      const data = await response.json();
+      console.log("Validate sheet response:", JSON.stringify(data, null, 2));
+
+      if (data.error) {
+        throw new Error(data.error.data?.message || data.error.message || "Failed to validate sheet");
+      }
+
+      return res.json({
+        success: true,
+        message: "Counting sheet validated successfully"
+      });
+    } catch (error) {
+      console.error("Validate sheet error:", error);
       return res.status(500).json({
         success: false,
         message: error.message
