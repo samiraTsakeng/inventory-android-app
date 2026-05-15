@@ -14,11 +14,13 @@ router.get('/sheet-state/:sheet_id', CountingController.getSheetState);
 // POST /counting/start-sheet
 router.post('/start-sheet', CountingController.startSheet);
 
+// POST /counting/validate-sheet
+router.post('/validate-sheet', CountingController.validateSheet);
+
 // GET /counting/check-sheet/:sheet_id
 router.get('/check-sheet/:sheet_id', CountingController.checkSheetLines);
 
 // GET /counting/check-sheet-state/:sheet_id
 router.get('/check-sheet-state/:sheet_id', CountingController.checkSheetState);
 
-router.post('/validate-sheet', CountingController.validateSheet);
 module.exports = router;

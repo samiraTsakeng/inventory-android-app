@@ -5,7 +5,7 @@ class ScannedItem {
   int quantity;
   String? lotNumber;
   bool isSynced;
-  String tracking; // 'none', 'lot', or 'serial'
+  String tracking; // 'none', 'lot', or 'serial' (from Odoo)
 
   ScannedItem({
     required this.barcode,

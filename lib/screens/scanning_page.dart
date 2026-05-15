@@ -75,6 +75,10 @@ class _ScanningPageState extends State<ScanningPage> {
     final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
 
     if (existingIndex != -1) {
+      final existingItem = scannedItems[existingIndex];
+
+      // for serial tracking, prevent quantity increase
+      if (existingItem.tracking == 'serial') {
       setState(() {
         isScanning = true;
         isLookingUp = false;
@@ -89,7 +93,15 @@ class _ScanningPageState extends State<ScanningPage> {
         );
       }
       return;
-    }
+    } else {
+        //for lot or none, increment qty
+      setState(() {
+        scannedItems[existingIndex].quantity++;
+        isScanning = true;
+        isLookingUp = false;
+      });
+      }
+      }
 
     // Look up product - only registered products
     final product = await CountingService.lookupProduct(barcode);
@@ -97,19 +109,24 @@ class _ScanningPageState extends State<ScanningPage> {
     if (mounted) {
       setState(() {
         if (product != null && product['id'] != 0) {
+          //get tracking value from odoo (values: 'none', 'lot', 'serial')
           String tracking = product['tracking'] ?? 'none';
+
+          //for serial tracking, qty is always 1
+          int quantity = tracking == 'serial' ? 1 : 1;
 
           // Only add registered products
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: product['name'] ?? 'Unknown',
             productId: product['id'] ?? 0,
-            quantity: tracking == 'serial' ? 1 : 1,
+            quantity: quantity,
+            //quantity: tracking == 'serial' ? 1 : 1,
             lotNumber: '',
             tracking: tracking,
           ));
           _saveItems();
-           String trackingText = tracking == 'serial' ? 'Numero de serie' : (tracking == 'lot' ? 'lot': "Standard");
+           String trackingText = tracking == 'serial' ? 'Numero de serie' : (tracking == 'lot' ? 'lot': 'Sans traçabilité');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('✅ Ajouté: ${product['name']} ($trackingText)'),

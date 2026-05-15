@@ -16,6 +16,7 @@ class CountingController {
       const { barcode } = req.body;
       console.log("Looking up product with barcode:", barcode);
 
+      // First search for product by barcode (product.product)
       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
         headers: {
@@ -30,7 +31,7 @@ class CountingController {
             method: "search_read",
             args: [[["barcode", "=", barcode]]],
             kwargs: {
-              fields: ["id", "name", "barcode", "default_code", "tracking"]
+              fields: ["id", "name", "barcode", "default_code", "product_tmpl_id"]
             }
           }
         })
@@ -40,11 +41,61 @@ class CountingController {
       console.log("Product lookup response:", JSON.stringify(data, null, 2));
 
       if (data.result && data.result.length > 0) {
+        const product = data.result[0];
+        let productTmplId = null;
+
+        if (product.product_tmpl_id) {
+          if (Array.isArray(product.product_tmpl_id)) {
+            productTmplId = product.product_tmpl_id[0];
+          } else {
+            productTmplId = product.product_tmpl_id;
+          }
+        }
+
+        let tracking = 'none';
+
+        // Fetch tracking from product.template
+        if (productTmplId) {
+          const templateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Cookie": OdooService.sessionCookie
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "call",
+              params: {
+                model: "product.template",
+                method: "read",
+                args: [[productTmplId], ["tracking"]],
+                kwargs: {}
+              }
+            })
+          });
+
+          const templateData = await templateResponse.json();
+          console.log("Template tracking response:", JSON.stringify(templateData, null, 2));
+
+          if (templateData.result && templateData.result.length > 0) {
+            tracking = templateData.result[0].tracking || 'none';
+          }
+        }
+
+        console.log("Product " + product.name + " has tracking: " + tracking);
+
         return res.json({
           success: true,
-          product: data.result[0]
+          product: {
+            id: product.id,
+            name: product.name,
+            barcode: product.barcode,
+            default_code: product.default_code,
+            tracking: tracking
+          }
         });
       } else {
+        // Try searching by default_code
         const response2 = await fetch(`${session.host}/web/dataset/call_kw`, {
           method: "POST",
           headers: {
@@ -57,9 +108,9 @@ class CountingController {
             params: {
               model: "product.product",
               method: "search_read",
-              args: [[["default_code", "=", barcode]]],
+              args: [["default_code", "=", barcode]],
               kwargs: {
-                fields: ["id", "name", "barcode", "default_code", "tracking"]
+                fields: ["id", "name", "barcode", "default_code", "product_tmpl_id"]
               }
             }
           })
@@ -69,9 +120,53 @@ class CountingController {
         console.log("Product lookup by default_code:", JSON.stringify(data2, null, 2));
 
         if (data2.result && data2.result.length > 0) {
+          const product = data2.result[0];
+          let productTmplId = null;
+
+          if (product.product_tmpl_id) {
+            if (Array.isArray(product.product_tmpl_id)) {
+              productTmplId = product.product_tmpl_id[0];
+            } else {
+              productTmplId = product.product_tmpl_id;
+            }
+          }
+
+          let tracking = 'none';
+
+          if (productTmplId) {
+            const templateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Cookie": OdooService.sessionCookie
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                method: "call",
+                params: {
+                  model: "product.template",
+                  method: "read",
+                  args: [[productTmplId], ["tracking"]],
+                  kwargs: {}
+                }
+              })
+            });
+
+            const templateData = await templateResponse.json();
+            if (templateData.result && templateData.result.length > 0) {
+              tracking = templateData.result[0].tracking || 'none';
+            }
+          }
+
           return res.json({
             success: true,
-            product: data2.result[0]
+            product: {
+              id: product.id,
+              name: product.name,
+              barcode: product.barcode,
+              default_code: product.default_code,
+              tracking: tracking
+            }
           });
         }
 
@@ -323,7 +418,7 @@ class CountingController {
           const startData = await startResponse.json();
           if (!startData.error) {
             console.log("Sheet started successfully!");
-          } else if (startData.error.data?.message && startData.error.data.message.includes("terminer le comptage précédent")) {
+          } else if (startData.error.data?.message && startData.error.data.message.includes("terminer le comptage pr\u00e9c\u00e9dent")) {
             return res.status(400).json({
               success: false,
               message: startData.error.data.message,
@@ -364,7 +459,7 @@ class CountingController {
 
         if (matchData.result && matchData.result.length > 0) {
           matchedProductId = matchData.result[0].id;
-          console.log(`Found product for barcode ${item.barcode}: ${matchData.result[0].name} (ID: ${matchedProductId})`);
+          console.log("Found product for barcode " + item.barcode + ": " + matchData.result[0].name + " (ID: " + matchedProductId + ")");
 
           itemsToCreate.push({
             number: item.barcode,
@@ -373,7 +468,7 @@ class CountingController {
             sheet_id: counting_sheet_id
           });
         } else {
-          console.log(`No product found for barcode ${item.barcode} - skipping`);
+          console.log("No product found for barcode " + item.barcode + " - skipping");
         }
       }
 
@@ -384,7 +479,7 @@ class CountingController {
         });
       }
 
-      console.log(`Creating ${itemsToCreate.length} counting sheet lines...`);
+      console.log("Creating " + itemsToCreate.length + " counting sheet lines...");
 
       // Create counting sheet lines ONE BY ONE
       const createdLineIds = [];
@@ -427,11 +522,11 @@ class CountingController {
           failedItems.push(lineData.number);
         } else {
           createdLineIds.push(lineResult.result);
-          console.log(`Created line with ID: ${lineResult.result}`);
+          console.log("Created line with ID: " + lineResult.result);
         }
       }
 
-      console.log(`Successfully created ${createdLineIds.length} lines, failed: ${failedItems.length}`);
+      console.log("Successfully created " + createdLineIds.length + " lines, failed: " + failedItems.length);
 
       if (createdLineIds.length === 0) {
         return res.status(400).json({
@@ -472,7 +567,7 @@ class CountingController {
 
       return res.json({
         success: true,
-        message: `${createdLineIds.length} items submitted successfully`,
+        message: createdLineIds.length + " items submitted successfully",
         submitted_count: createdLineIds.length,
         failed_items: failedItems
       });

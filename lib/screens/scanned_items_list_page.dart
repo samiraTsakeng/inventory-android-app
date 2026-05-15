@@ -66,7 +66,8 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     switch (tracking) {
       case 'serial': return 'N° Série';
       case 'lot': return 'Lot';
-      default: return 'Standard';
+      case 'none': return 'Sans traçabilité';
+      default: return 'Aucune traçabilité';
     }
   }
 
