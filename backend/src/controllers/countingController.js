@@ -2,7 +2,7 @@ const OdooService = require("../services/odooServices");
 const AuthController = require("./authController");
 
 class CountingController {
-  // Look up product by barcode
+  // Look up product by lot/serial number barcode
   static async lookupProduct(req, res) {
     try {
       const session = AuthController.getSession();
@@ -14,9 +14,9 @@ class CountingController {
       }
 
       const { barcode } = req.body;
-      console.log("Looking up product with barcode:", barcode);
+      console.log("Looking up lot/serial with barcode:", barcode);
 
-      // First search for product by barcode (product.product)
+      // Search in stock.production.lot by name (lot/serial number)
       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
         headers: {
@@ -27,114 +27,37 @@ class CountingController {
           jsonrpc: "2.0",
           method: "call",
           params: {
-            model: "product.product",
+            model: "stock.production.lot",
             method: "search_read",
-            args: [[["barcode", "=", barcode]]],
+            args: [[["name", "=", barcode]]],
             kwargs: {
-              fields: ["id", "name", "barcode", "default_code", "product_tmpl_id"]
+              fields: ["id", "name", "product_id", "x_tracking"]
             }
           }
         })
       });
 
       const data = await response.json();
-      console.log("Product lookup response:", JSON.stringify(data, null, 2));
+      console.log("Lot/Serial lookup response:", JSON.stringify(data, null, 2));
 
       if (data.result && data.result.length > 0) {
-        const product = data.result[0];
-        let productTmplId = null;
+        const lot = data.result[0];
+        let productId = null;
+        let productName = null;
+        let productTracking = 'serial';
 
-        if (product.product_tmpl_id) {
-          if (Array.isArray(product.product_tmpl_id)) {
-            productTmplId = product.product_tmpl_id[0];
+        // Get product info from the lot
+        if (lot.product_id) {
+          if (Array.isArray(lot.product_id)) {
+            productId = lot.product_id[0];
+            productName = lot.product_id[1];
           } else {
-            productTmplId = product.product_tmpl_id;
-          }
-        }
-
-        let tracking = 'none';
-
-        // Fetch tracking from product.template
-        if (productTmplId) {
-          const templateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Cookie": OdooService.sessionCookie
-            },
-            body: JSON.stringify({
-              jsonrpc: "2.0",
-              method: "call",
-              params: {
-                model: "product.template",
-                method: "read",
-                args: [[productTmplId], ["tracking"]],
-                kwargs: {}
-              }
-            })
-          });
-
-          const templateData = await templateResponse.json();
-          console.log("Template tracking response:", JSON.stringify(templateData, null, 2));
-
-          if (templateData.result && templateData.result.length > 0) {
-            tracking = templateData.result[0].tracking || 'none';
-          }
-        }
-
-        console.log("Product " + product.name + " has tracking: " + tracking);
-
-        return res.json({
-          success: true,
-          product: {
-            id: product.id,
-            name: product.name,
-            barcode: product.barcode,
-            default_code: product.default_code,
-            tracking: tracking
-          }
-        });
-      } else {
-        // Try searching by default_code
-        const response2 = await fetch(`${session.host}/web/dataset/call_kw`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cookie": OdooService.sessionCookie
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "call",
-            params: {
-              model: "product.product",
-              method: "search_read",
-              args: [["default_code", "=", barcode]],
-              kwargs: {
-                fields: ["id", "name", "barcode", "default_code", "product_tmpl_id"]
-              }
-            }
-          })
-        });
-
-        const data2 = await response2.json();
-        console.log("Product lookup by default_code:", JSON.stringify(data2, null, 2));
-
-        if (data2.result && data2.result.length > 0) {
-          const product = data2.result[0];
-          let productTmplId = null;
-
-          if (product.product_tmpl_id) {
-            if (Array.isArray(product.product_tmpl_id)) {
-              productTmplId = product.product_tmpl_id[0];
-            } else {
-              productTmplId = product.product_tmpl_id;
-            }
+            productId = lot.product_id;
           }
 
-          let tracking = 'none';
-
-          if (productTmplId) {
-            const templateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+          // Fetch product details including tracking
+          if (productId) {
+            const productResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -144,35 +67,39 @@ class CountingController {
                 jsonrpc: "2.0",
                 method: "call",
                 params: {
-                  model: "product.template",
+                  model: "product.product",
                   method: "read",
-                  args: [[productTmplId], ["tracking"]],
+                  args: [[productId], ["name", "tracking"]],
                   kwargs: {}
                 }
               })
             });
 
-            const templateData = await templateResponse.json();
-            if (templateData.result && templateData.result.length > 0) {
-              tracking = templateData.result[0].tracking || 'none';
+            const productData = await productResponse.json();
+            if (productData.result && productData.result.length > 0) {
+              productName = productData.result[0].name;
+              productTracking = productData.result[0].tracking || 'serial';
             }
           }
-
-          return res.json({
-            success: true,
-            product: {
-              id: product.id,
-              name: product.name,
-              barcode: product.barcode,
-              default_code: product.default_code,
-              tracking: tracking
-            }
-          });
         }
 
+        console.log("Found lot/serial: " + lot.name + " for product: " + productName);
+
+        return res.json({
+          success: true,
+          product: {
+            id: productId,
+            name: productName || 'Unknown Product',
+            barcode: barcode,
+            lot_id: lot.id,
+            lot_name: lot.name,
+            tracking: productTracking
+          }
+        });
+      } else {
         return res.json({
           success: false,
-          message: "Product not found"
+          message: "Lot/Serial number not found"
         });
       }
     } catch (error) {
@@ -430,62 +357,20 @@ class CountingController {
         }
       }
 
-      // Find matching products for each barcode
-      const itemsToCreate = [];
-      for (const item of items) {
-        let matchedProductId = null;
-
-        // Try to find product by barcode
-        const matchResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cookie": OdooService.sessionCookie
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "call",
-            params: {
-              model: "product.product",
-              method: "search_read",
-              args: [[["barcode", "=", item.barcode]]],
-              kwargs: {
-                fields: ["id", "name"]
-              }
-            }
-          })
-        });
-        const matchData = await matchResponse.json();
-
-        if (matchData.result && matchData.result.length > 0) {
-          matchedProductId = matchData.result[0].id;
-          console.log("Found product for barcode " + item.barcode + ": " + matchData.result[0].name + " (ID: " + matchedProductId + ")");
-
-          itemsToCreate.push({
-            number: item.barcode,
-            product_id: matchedProductId,
-            counted_qty: item.quantity,
-            sheet_id: counting_sheet_id
-          });
-        } else {
-          console.log("No product found for barcode " + item.barcode + " - skipping");
-        }
-      }
-
-      if (itemsToCreate.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "No valid products found. Please ensure barcodes match existing products."
-        });
-      }
-
-      console.log("Creating " + itemsToCreate.length + " counting sheet lines...");
-
-      // Create counting sheet lines ONE BY ONE
+      // Create counting sheet lines
       const createdLineIds = [];
       const failedItems = [];
 
-      for (const lineData of itemsToCreate) {
+      for (const item of items) {
+        // Each item already has product_id from the scanned lot
+        const lineData = {
+          number: item.lot_number || item.barcode,
+          product_id: item.product_id,
+          counted_qty: item.quantity,
+          sheet_id: counting_sheet_id,
+          lot_id: item.lot_id
+        };
+
         console.log("Creating line:", JSON.stringify(lineData, null, 2));
 
         const createResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
@@ -513,13 +398,13 @@ class CountingController {
           lineResult = JSON.parse(responseText);
         } catch (e) {
           console.error("Failed to parse response:", responseText);
-          failedItems.push(lineData.number);
+          failedItems.push(item.barcode);
           continue;
         }
 
         if (lineResult.error) {
           console.error("Error creating line:", lineResult.error);
-          failedItems.push(lineData.number);
+          failedItems.push(item.barcode);
         } else {
           createdLineIds.push(lineResult.result);
           console.log("Created line with ID: " + lineResult.result);

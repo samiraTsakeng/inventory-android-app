@@ -5,6 +5,9 @@ import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
 import 'scanned_items_list_page.dart';
+import '../models/batch.dart';
+import '../services/batch_storage_service.dart';
+import 'batch_list_page.dart';
 
 class ScanningPage extends StatefulWidget {
   final int countingSheetId;
@@ -71,74 +74,82 @@ class _ScanningPageState extends State<ScanningPage> {
       lastScannedBarcode = barcode;
     });
 
-    // Check if already scanned - prevent duplicate
+    // Check if this lot/serial is already scanned
     final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
 
     if (existingIndex != -1) {
       final existingItem = scannedItems[existingIndex];
 
-      // for serial tracking, prevent quantity increase
+      // For serial tracking, prevent duplicate (each serial unique)
       if (existingItem.tracking == 'serial') {
-      setState(() {
-        isScanning = true;
-        isLookingUp = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ Cet article a déjà été scanné! Modifiez la quantité manuellement.'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
+        setState(() {
+          isScanning = true;
+          isLookingUp = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Ce numéro de série a déjà été scanné!'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      } else {
+        // For lot or none, increment quantity
+        setState(() {
+          scannedItems[existingIndex].quantity++;
+          isScanning = true;
+          isLookingUp = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${scannedItems[existingIndex].productName}: Quantité ${scannedItems[existingIndex].quantity}'),
+              duration: const Duration(milliseconds: 800),
+            ),
+          );
+        }
+        return;
       }
-      return;
-    } else {
-        //for lot or none, increment qty
-      setState(() {
-        scannedItems[existingIndex].quantity++;
-        isScanning = true;
-        isLookingUp = false;
-      });
-      }
-      }
+    }
 
-    // Look up product - only registered products
-    final product = await CountingService.lookupProduct(barcode);
+    // Look up product by lot/serial number
+    final result = await CountingService.lookupProduct(barcode);
 
     if (mounted) {
       setState(() {
-        if (product != null && product['id'] != 0) {
-          //get tracking value from odoo (values: 'none', 'lot', 'serial')
-          String tracking = product['tracking'] ?? 'none';
+        if (result != null && result['id'] != 0 && result['id'] != null) {
+          String tracking = result['tracking'] ?? 'serial';
+          String lotName = result['lot_name'] ?? barcode;
+          int lotIdValue = result['lot_id'] ?? 0;
+          int productIdValue = result['id'];
 
-          //for serial tracking, qty is always 1
-          int quantity = tracking == 'serial' ? 1 : 1;
-
-          // Only add registered products
           scannedItems.add(ScannedItem(
             barcode: barcode,
-            productName: product['name'] ?? 'Unknown',
-            productId: product['id'] ?? 0,
-            quantity: quantity,
-            //quantity: tracking == 'serial' ? 1 : 1,
-            lotNumber: '',
+            productName: result['name'] ?? 'Unknown',
+            productId: productIdValue,
+            quantity: 1,
+            lotNumber: lotName,
+            lotId: lotIdValue,
             tracking: tracking,
           ));
           _saveItems();
-           String trackingText = tracking == 'serial' ? 'Numero de serie' : (tracking == 'lot' ? 'lot': 'Sans traçabilité');
+
+          String trackingText = tracking == 'serial' ? 'N° Série' : (tracking == 'lot' ? 'Lot' : 'Sans traçabilité');
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Ajouté: ${product['name']} ($trackingText)'),
+              content: Text('✅ Ajouté: ${result['name']} ($lotName)'),
               backgroundColor: Colors.green,
               duration: const Duration(milliseconds: 800),
             ),
           );
         } else {
-          // Ignore non-registered products
+          // Lot/Serial not found
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('⚠️ Produit non trouvé: $barcode (ignoré)'),
+              content: Text('⚠️ Numéro non trouvé: $barcode'),
               backgroundColor: Colors.orange,
               duration: const Duration(seconds: 2),
             ),
@@ -213,7 +224,6 @@ class _ScanningPageState extends State<ScanningPage> {
     if (mounted) {
       Navigator.pop(context);
       if (success) {
-        // Clear local storage and list
         await LocalStorageService.clearScannedItems(widget.countingSheetId);
         setState(() {
           scannedItems.clear();
@@ -252,6 +262,92 @@ class _ScanningPageState extends State<ScanningPage> {
     );
   }
 
+  void _showSaveConfirmation() async {
+    if (scannedItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun article à sauvegarder')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Enregistrer le batch", style: TextStyle(fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Voulez-vous sauvegarder ce batch ?", style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 8),
+            Text(
+              "Articles: ${scannedItems.length}",
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Non")),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final batchNumber = await _getNextBatchNumber();
+              final batchName = "Batch $batchNumber";
+              final batch = Batch(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                name: batchName,
+                createdAt: DateTime.now(),
+                items: List.from(scannedItems),
+                isSynced: false,
+                countingSheetId: widget.countingSheetId,
+                adjustmentId: widget.adjustmentId,
+                zoneName: widget.zoneName,
+                sheetName: widget.sheetName,
+              );
+              await BatchStorageService.saveBatch(batch);
+              setState(() {
+                scannedItems.clear();
+                lastScannedBarcode = null;
+                isScanning = true;
+              });
+              await _saveItems();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('✅ $batchName sauvegardé (${batch.items.length} articles)'),
+                  backgroundColor: Colors.green,
+                  action: SnackBarAction(
+                    label: 'Voir',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => BatchesListPage(
+                            countingSheetId: widget.countingSheetId,
+                            adjustmentId: widget.adjustmentId,
+                            zoneName: widget.zoneName,
+                            sheetName: widget.sheetName,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+            child: const Text("Oui"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<int> _getNextBatchNumber() async {
+    final batches = await BatchStorageService.getBatches();
+    final sheetBatches = batches.where((b) => b.countingSheetId == widget.countingSheetId).toList();
+    return sheetBatches.length + 1;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLimitReached = scannedItems.length >= 50;
@@ -280,6 +376,63 @@ class _ScanningPageState extends State<ScanningPage> {
           ),
         ),
         actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'save') {
+                _showSaveConfirmation();
+              } else if (value == 'finish') {
+                Navigator.pop(context);
+              } else if (value == 'batches') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BatchesListPage(
+                      countingSheetId: widget.countingSheetId,
+                      adjustmentId: widget.adjustmentId,
+                      zoneName: widget.zoneName,
+                      sheetName: widget.sheetName,
+                    ),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'save',
+                child: Row(
+                  children: [
+                    Icon(Icons.save, size: 18),
+                    SizedBox(width: 8),
+                    Text('Enregistrer'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'batches',
+                child: Row(
+                  children: [
+                    Icon(Icons.folder, size: 18),
+                    SizedBox(width: 8),
+                    Text('Batches sauvegardés'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'finish',
+                child: Row(
+                  children: [
+                    Icon(Icons.exit_to_app, size: 18),
+                    SizedBox(width: 8),
+                    Text('Terminer'),
+                  ],
+                ),
+              ),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.more_vert, size: 22),
+            ),
+          ),
           badges.Badge(
             showBadge: scannedItems.isNotEmpty,
             badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10)),
@@ -327,6 +480,24 @@ class _ScanningPageState extends State<ScanningPage> {
                 navigateToSummary();
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.folder),
+              title: const Text('Batches sauvegardés'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BatchesListPage(
+                      countingSheetId: widget.countingSheetId,
+                      adjustmentId: widget.adjustmentId,
+                      zoneName: widget.zoneName,
+                      sheetName: widget.sheetName,
+                    ),
+                  ),
+                );
+              },
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
@@ -338,7 +509,6 @@ class _ScanningPageState extends State<ScanningPage> {
       ),
       body: Column(
         children: [
-          // Camera preview
           Expanded(
             flex: 3,
             child: Stack(
@@ -373,7 +543,6 @@ class _ScanningPageState extends State<ScanningPage> {
               ],
             ),
           ),
-          // Progress panel (NO SEND BUTTON HERE)
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,

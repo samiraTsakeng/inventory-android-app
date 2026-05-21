@@ -4,6 +4,7 @@ class ScannedItem {
   int productId;
   int quantity;
   String? lotNumber;
+  int? lotId;
   bool isSynced;
   String tracking; // 'none', 'lot', or 'serial' (from Odoo)
 
@@ -13,6 +14,7 @@ class ScannedItem {
     this.productId = 0,
     this.quantity = 1,
     this.lotNumber,
+    this.lotId,
     this.isSynced = false,
     this.tracking = 'none',
   });
@@ -23,6 +25,7 @@ class ScannedItem {
     'product_id': productId,
     'quantity': quantity,
     'lot_number': lotNumber,
+    'lot_id': lotId,
     'tracking': tracking,
   };
 
@@ -32,6 +35,7 @@ class ScannedItem {
     productId: json['product_id'] ?? 0,
     quantity: json['quantity'] ?? 1,
     lotNumber: json['lot_number'],
+    lotId: json['lot_id'],
     tracking: json['tracking'] ?? 'none',
   );
 }

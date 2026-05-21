@@ -15,6 +15,7 @@ class LocalStorageService {
       'productId': item.productId,
       'quantity': item.quantity,
       'lotNumber': item.lotNumber,
+      'tracking': item.tracking,
     })).toList();
     await prefs.setStringList('${_scannedItemsKey}$sheetId', itemsJson);
     await prefs.setInt(_sheetIdKey, sheetId);
@@ -33,6 +34,8 @@ class LocalStorageService {
         productId: data['productId'],
         quantity: data['quantity'],
         lotNumber: data['lotNumber'],
+        lotId: data['lotId'],
+        tracking: data['tracking'] ?? "none",
       );
     }).toList();
   }

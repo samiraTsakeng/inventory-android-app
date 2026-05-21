@@ -4,7 +4,7 @@ import 'api_config.dart';
 import '../models/scanned_item.dart';
 
 class CountingService {
-  // Look up product by barcode with tracking info
+  // Look up product by lot/serial number barcode
   static Future<Map<String, dynamic>?> lookupProduct(String barcode) async {
     try {
       final response = await http.post(
