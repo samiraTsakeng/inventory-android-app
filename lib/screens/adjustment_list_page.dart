@@ -178,7 +178,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                             Text(
                               getStatusText(adj["state"]),
                               style: TextStyle(
-                                fontSize: 9,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: getStatusColor(adj["state"]),
                               ),
@@ -197,7 +197,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                             Text(
                               adj["name"] ?? "Sans nom",
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
                               maxLines: 2,
@@ -210,7 +210,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                                 const SizedBox(width: 2),
                                 Text(
                                   formatDate(adj["date"]),
-                                  style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                                 ),
                               ],
                             ),
@@ -226,7 +226,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                                 children: [
                                   Text(
                                     "Voir",
-                                    style: TextStyle(fontSize: 9, color: Colors.blue),
+                                    style: TextStyle(fontSize: 12, color: Colors.blue),
                                   ),
                                   SizedBox(width: 2),
                                   Icon(Icons.arrow_forward, size: 8, color: Colors.blue),

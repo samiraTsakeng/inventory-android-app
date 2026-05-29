@@ -1,7 +1,66 @@
 const OdooService = require("../services/odooServices");
 const AuthController = require("./authController");
 
+// Helper function to process found lot (moved outside for global access)
+async function processLotFound(session, lot, barcode) {
+  let productId = null;
+  let productName = null;
+  let productTracking = 'serial';
+
+  // Get product info from the lot
+  if (lot.product_id) {
+    if (Array.isArray(lot.product_id)) {
+      productId = lot.product_id[0];
+      productName = lot.product_id[1];
+    } else {
+      productId = lot.product_id;
+    }
+
+    // Fetch product details including tracking
+    if (productId) {
+      const productResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "product.product",
+            method: "read",
+            args: [[productId], ["name", "tracking"]],
+            kwargs: {}
+          }
+        })
+      });
+
+      const productData = await productResponse.json();
+      if (productData.result && productData.result.length > 0) {
+        productName = productData.result[0].name;
+        productTracking = productData.result[0].tracking || 'serial';
+      }
+    }
+  }
+
+  console.log("Found lot/serial: " + lot.name + " for product: " + productName);
+
+  return {
+    success: true,
+    product: {
+      id: productId,
+      name: productName || 'Unknown Product',
+      barcode: barcode,
+      lot_id: lot.id,
+      lot_name: lot.name,
+      tracking: productTracking
+    }
+  };
+}
+
 class CountingController {
+  // Look up product by lot/serial number barcode
   // Look up product by lot/serial number barcode
   static async lookupProduct(req, res) {
     try {
@@ -14,10 +73,86 @@ class CountingController {
       }
 
       const { barcode } = req.body;
-      console.log("Looking up lot/serial with barcode:", barcode);
+      console.log("Looking up barcode:", barcode);
 
-      // Search in stock.production.lot by name (lot/serial number)
-      const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+      // Function to detect the type of barcode
+      function detectBarcodeType(code) {
+        const hasLetters = /[A-Za-z]/.test(code);
+        const length = code.length;
+        const isNumeric = /^\d+$/.test(code);
+
+        // IMEI: 15 digits (sometimes 14 + check digit)
+        const isIMEI = /^\d{14,15}$/.test(code) && (length === 14 || length === 15);
+
+        // MEID: 14-16 hex digits (0-9, A-F)
+        const isMEID = /^[0-9A-F]{14,16}$/i.test(code);
+
+        // ICCID: 19-20 digits (SIM card serial)
+        const isICCID = /^\d{19,20}$/.test(code);
+
+        // MSISDN: Phone number (10-15 digits)
+        const isMSISDN = /^\d{10,15}$/.test(code);
+
+        // Serial number patterns for electronic devices
+        // Often has letters + numbers, length 10-20
+        const isDeviceSerial = /^[A-Z0-9]{8,20}$/i.test(code) && !isIMEI && !isMEID && !isICCID;
+
+        // EAN-13: exactly 13 digits (product barcode)
+        const isEAN13 = /^\d{13}$/.test(code) && !isIMEI && !isICCID;
+
+        // EAN-8: exactly 8 digits
+        const isEAN8 = /^\d{8}$/.test(code);
+
+        // UPC-A: 12 digits
+        const isUPCA = /^\d{12}$/.test(code);
+
+        // Apple Serial Number (11-12 chars, mixed letters/numbers)
+        const isAppleSN = /^[A-Z0-9]{11,12}$/i.test(code) && !isIMEI;
+
+        // Samsung Serial Number (often starts with R, Z, etc.)
+        const isSamsungSN = /^[RZ][A-Z0-9]{10,14}$/i.test(code);
+
+        // MAC Address (6 pairs of hex digits)
+        const isMAC = /^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i.test(code);
+
+        // WiFi MAC (no separators)
+        const isMACSimple = /^[0-9A-F]{12}$/i.test(code);
+
+        console.log("Barcode detection results:", {
+          length: length,
+          isNumeric: isNumeric,
+          hasLetters: hasLetters,
+          isIMEI: isIMEI,
+          isMEID: isMEID,
+          isICCID: isICCID,
+          isMSISDN: isMSISDN,
+          isEAN13: isEAN13,
+          isEAN8: isEAN8,
+          isUPCA: isUPCA,
+          isAppleSN: isAppleSN,
+          isSamsungSN: isSamsungSN,
+          isMAC: isMAC || isMACSimple
+        });
+
+        // Return the detected type
+        if (isIMEI) return 'IMEI';
+        if (isMEID) return 'MEID';
+        if (isICCID) return 'ICCID';
+        if (isMSISDN) return 'MSISDN';
+        if (isAppleSN) return 'APPLE_SERIAL';
+        if (isSamsungSN) return 'SAMSUNG_SERIAL';
+        if (isMAC || isMACSimple) return 'MAC_ADDRESS';
+        if (isDeviceSerial) return 'DEVICE_SERIAL';
+        if (isEAN13 || isEAN8 || isUPCA) return 'PRODUCT_BARCODE';
+
+        // If it has letters or is longer than 13, treat as unknown serial
+        if (hasLetters || length > 13) return 'UNKNOWN_SERIAL';
+
+        return 'UNKNOWN';
+      }
+
+      // First, try to find as a lot/serial number in Odoo
+      const lotResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -31,77 +166,73 @@ class CountingController {
             method: "search_read",
             args: [[["name", "=", barcode]]],
             kwargs: {
-              fields: ["id", "name", "product_id", "x_tracking"]
+              fields: ["id", "name", "product_id"]
             }
           }
         })
       });
 
-      const data = await response.json();
-      console.log("Lot/Serial lookup response:", JSON.stringify(data, null, 2));
+      const lotData = await lotResponse.json();
+      console.log("Lot/Serial lookup response:", JSON.stringify(lotData, null, 2));
 
-      if (data.result && data.result.length > 0) {
-        const lot = data.result[0];
-        let productId = null;
-        let productName = null;
-        let productTracking = 'serial';
-
-        // Get product info from the lot
-        if (lot.product_id) {
-          if (Array.isArray(lot.product_id)) {
-            productId = lot.product_id[0];
-            productName = lot.product_id[1];
-          } else {
-            productId = lot.product_id;
-          }
-
-          // Fetch product details including tracking
-          if (productId) {
-            const productResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Cookie": OdooService.sessionCookie
-              },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                method: "call",
-                params: {
-                  model: "product.product",
-                  method: "read",
-                  args: [[productId], ["name", "tracking"]],
-                  kwargs: {}
-                }
-              })
-            });
-
-            const productData = await productResponse.json();
-            if (productData.result && productData.result.length > 0) {
-              productName = productData.result[0].name;
-              productTracking = productData.result[0].tracking || 'serial';
-            }
-          }
-        }
-
-        console.log("Found lot/serial: " + lot.name + " for product: " + productName);
-
-        return res.json({
-          success: true,
-          product: {
-            id: productId,
-            name: productName || 'Unknown Product',
-            barcode: barcode,
-            lot_id: lot.id,
-            lot_name: lot.name,
-            tracking: productTracking
-          }
-        });
-      } else {
-        return res.json({
-          success: false,
-          message: "Lot/Serial number not found"
-        });
+      // If found as lot/serial number in Odoo
+      if (lotData.result && lotData.result.length > 0) {
+        const lot = lotData.result[0];
+        console.log("Found as LOT/SERIAL in Odoo database");
+        const result = await processLotFound(session, lot, barcode);
+        return res.json(result);
       }
+
+      // Not found in Odoo, check barcode type and provide appropriate message
+      const barcodeType = detectBarcodeType(barcode);
+      console.log("Detected barcode type:", barcodeType);
+
+      // Get user-friendly message based on barcode type
+      let errorMessage = "";
+      let shouldReject = true;
+
+      switch (barcodeType) {
+        case 'IMEI':
+          errorMessage = "Numéro IMEI non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        case 'MEID':
+          errorMessage = "Numéro MEID non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        case 'ICCID':
+          errorMessage = "Numéro ICCID (carte SIM) non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        case 'MSISDN':
+          errorMessage = "Numéro de téléphone non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        case 'APPLE_SERIAL':
+          errorMessage = "Numéro de série Apple non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        case 'SAMSUNG_SERIAL':
+          errorMessage = "Numéro de série Samsung non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        case 'MAC_ADDRESS':
+          errorMessage = "Adresse MAC non trouvée dans le système. Veuillez vérifier l'adresse.";
+          break;
+        case 'DEVICE_SERIAL':
+          errorMessage = "Numéro de série non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        case 'PRODUCT_BARCODE':
+          errorMessage = "Veuillez scanner le numéro de série (SN, IMEI, MEID, ICCID), pas le code-barres produit.";
+          break;
+        case 'UNKNOWN_SERIAL':
+          errorMessage = "Numéro de série non trouvé dans le système. Veuillez vérifier le numéro.";
+          break;
+        default:
+          errorMessage = "Code-barres non reconnu. Veuillez scanner un numéro de série valide (SN, IMEI, MEID, ICCID).";
+          break;
+      }
+
+      return res.json({
+        success: false,
+        message: errorMessage,
+        barcode_type: barcodeType
+      });
+
     } catch (error) {
       console.error("Lookup error:", error);
       return res.status(500).json({

@@ -34,8 +34,9 @@ class OdooService {
     return data.result;
   }
 
-  async fetchAdjustments(host) {
-    console.log("Fetching adjustments with cookie:", this.sessionCookie ? "Yes" : "No");
+  async fetchAdjustments(host, userId) {
+    console.log("Fetching adjustments for user ID:", userId);
+    console.log("Has session cookie:", this.sessionCookie ? "Yes" : "No");
 
     const response = await fetch(`${host}/web/dataset/call_kw`, {
       method: "POST",
@@ -49,9 +50,9 @@ class OdooService {
         params: {
           model: "stock.inventory",
           method: "search_read",
-          args: [[]],
+          args: [[["manager_id", "=", userId]]],
           kwargs: {
-            fields: ["id", "name", "state", "date"]
+            fields: ["id", "name", "state", "date", "manager_id"]
           }
         }
       })
@@ -59,7 +60,7 @@ class OdooService {
 
     const data = await response.json();
     console.log("Adjustments response status:", response.status);
-    console.log("Adjustments found:", data.result?.length || 0);
+    console.log("Adjustments found for user:", data.result?.length || 0);
 
     if (data.error) throw new Error(data.error.data?.message || data.error.message);
     return data.result || [];

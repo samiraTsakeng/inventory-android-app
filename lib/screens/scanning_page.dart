@@ -74,45 +74,28 @@ class _ScanningPageState extends State<ScanningPage> {
       lastScannedBarcode = barcode;
     });
 
-    // Check if this lot/serial is already scanned
+    // Check if this barcode (lot OR serial) is already scanned
     final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
 
     if (existingIndex != -1) {
-      final existingItem = scannedItems[existingIndex];
-
-      // For serial tracking, prevent duplicate (each serial unique)
-      if (existingItem.tracking == 'serial') {
-        setState(() {
-          isScanning = true;
-          isLookingUp = false;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⚠️ Ce numéro de série a déjà été scanné!'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-        return;
-      } else {
-        // For lot or none, increment quantity
-        setState(() {
-          scannedItems[existingIndex].quantity++;
-          isScanning = true;
-          isLookingUp = false;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${scannedItems[existingIndex].productName}: Quantité ${scannedItems[existingIndex].quantity}'),
-              duration: const Duration(milliseconds: 800),
-            ),
-          );
-        }
-        return;
+      // Already scanned - prevent ANY duplicate regardless of type
+      setState(() {
+        isScanning = true;
+        isLookingUp = false;
+      });
+      if (mounted) {
+        String message = scannedItems[existingIndex].tracking == 'serial'
+            ? '⚠️ Ce numéro de série a déjà été scanné!'
+            : '⚠️ Ce numéro de lot a déjà été scanné! Modifiez la quantité manuellement dans la liste.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
+      return;
     }
 
     // Look up product by lot/serial number
@@ -126,6 +109,8 @@ class _ScanningPageState extends State<ScanningPage> {
           int lotIdValue = result['lot_id'] ?? 0;
           int productIdValue = result['id'];
 
+          // For both serial AND lot, quantity starts at 1 (user will edit manually)
+          // No auto-increment on subsequent scans because duplicates are blocked
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: result['name'] ?? 'Unknown',
@@ -146,12 +131,19 @@ class _ScanningPageState extends State<ScanningPage> {
             ),
           );
         } else {
-          // Lot/Serial not found
+          // show appropriate message based on error
+          String errorMessage = result != null && result['message'] != null
+              ? result['message']
+              : '⚠️ Numéro non trouvé: $barcode';
+
+          String barcodeType = result != null && result['barcode_type'] != null
+              ? result['barcode_type']
+              : '';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('⚠️ Numéro non trouvé: $barcode'),
+              content: Text(errorMessage),
               backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 2),
+              duration: const Duration(seconds: 3),
             ),
           );
         }

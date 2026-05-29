@@ -232,7 +232,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                       child: Text(
                         getStatusText(sheetState),
                         style: TextStyle(
-                          fontSize: 8,
+                          fontSize: 10,
                           fontWeight: FontWeight.w500,
                           color: getStatusColor(sheetState),
                         ),
@@ -248,7 +248,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                           Text(
                             sheetName,
                             style: const TextStyle(
-                              fontSize: 10,
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
                             ),
                             maxLines: 2,
@@ -262,7 +262,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               Expanded(
                                 child: Text(
                                   zoneName,
-                                  style: TextStyle(fontSize: 8, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -277,7 +277,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               Expanded(
                                 child: Text(
                                   getName(f["user_id"]),
-                                  style: TextStyle(fontSize: 8, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -296,7 +296,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 4),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                  textStyle: const TextStyle(fontSize: 9),
+                                  textStyle: const TextStyle(fontSize: 11),
                                 ),
                                 child: _startingSheetId == countingSheetId
                                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -342,7 +342,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(vertical: 4),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                      textStyle: const TextStyle(fontSize: 9),
+                                      textStyle: const TextStyle(fontSize: 10),
                                     ),
                                     child: _validatingSheetId == countingSheetId
                                         ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -359,7 +359,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               child: Text(
                                 '✓ Terminé',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 9, color: Colors.green, fontWeight: FontWeight.bold),
+                                style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],

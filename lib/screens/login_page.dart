@@ -36,6 +36,13 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _resetToFullLogin() {
+    setState(() {
+      onlyPassword = false;
+      passwordController.clear();
+    });
+  }
+
   void login() async {
     setState(() => isLoading = true);
 
@@ -49,10 +56,8 @@ class _LoginPageState extends State<LoginPage> {
 
       if (success && mounted) {
         if (onlyPassword) {
-          // Already have session, just proceed
           Navigator.pushReplacementNamed(context, '/adjustment-entry');
         } else {
-          // First login, save data and proceed
           await Storage.saveUserData(
             hostController.text.trim(),
             dbController.text.trim(),
@@ -172,6 +177,21 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
+
+                const SizedBox(height: 16),
+
+                // Return to login page link (only shown in password-only mode)
+                if (onlyPassword)
+                  TextButton(
+                    onPressed: _resetToFullLogin,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                    ),
+                    child: const Text(
+                      "Retour à la page de connexion",
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
               ],
             ),
           ),
