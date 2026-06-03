@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
+import '../services/auth_service.dart';
 import 'scanning_page.dart';
 
 class FeuilleListPage extends StatefulWidget {
@@ -26,17 +27,32 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   }
 
   void fetchFeuilles() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
     try {
       final data = await FeuilleService.getFeuilles(widget.adjustmentId);
+
       // Sort: progress first, then new, then confirm, then cancel
-      data.sort((a, b) {
-        const order = {'progress': 0, 'new': 1, 'confirm': 2, 'cancel': 3};
-        return (order[a['state']] ?? 4) - (order[b['state']] ?? 4);
-      });
-      setState(() {
-        feuilles = data;
-        isLoading = false;
-      });
+      if (data is List && data.isNotEmpty) {
+        data.sort((a, b) {
+          const order = {'progress': 0, 'new': 1, 'confirm': 2, 'cancel': 3};
+          final orderA = order[a['state']] ?? 4;
+          final orderB = order[b['state']] ?? 4;
+          return orderA - orderB;
+        });
+        setState(() {
+          feuilles = data;
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          feuilles = [];
+          isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         errorMessage = e.toString();
@@ -47,8 +63,15 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
   String getName(dynamic field) {
     if (field == null) return "";
-    if (field is List) return field[1];
+    if (field is List) return field.length > 1 ? field[1] : field[0].toString();
     return field.toString();
+  }
+
+  int getUserId(dynamic field) {
+    if (field == null) return 0;
+    if (field is List) return field.isNotEmpty ? field[0] : 0;
+    if (field is int) return field;
+    return 0;
   }
 
   Color getStatusColor(String? state) {
@@ -94,13 +117,46 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     }
   }
 
+  Future<void> _showValidateConfirmation(int sheetId, String sheetName) async {
+    final shouldValidate = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Terminer le comptage", style: TextStyle(fontSize: 18)),
+          content: Text(
+            "Voulez-vous terminer le comptage \"$sheetName\" ?\n\nCette action est irréversible.",
+            style: const TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Non", style: TextStyle(fontSize: 14)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("Oui, terminer", style: TextStyle(fontSize: 14)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldValidate == true) {
+      await _validateSheet(sheetId);
+    }
+  }
+
   Future<void> _validateSheet(int sheetId) async {
     setState(() => _validatingSheetId = sheetId);
     try {
       final success = await CountingService.validateSheet(sheetId);
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Comptage validé'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('✅ Comptage terminé'), backgroundColor: Colors.green),
         );
         fetchFeuilles();
       } else {
@@ -147,24 +203,27 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
           ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 40, color: Colors.red),
-            const SizedBox(height: 8),
-            Text("Error: $errorMessage", style: const TextStyle(fontSize: 11)),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  isLoading = true;
-                  errorMessage = null;
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 50, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                errorMessage!,
+                style: const TextStyle(fontSize: 13, color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () {
                   fetchFeuilles();
-                });
-              },
-              child: const Text("Réessayer", style: TextStyle(fontSize: 11)),
-            ),
-          ],
+                },
+                child: const Text("Réessayer", style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
         ),
       )
           : feuilles.isEmpty
@@ -178,7 +237,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           ],
         ),
       )
-          : SingleChildScrollView(
+          : Padding(
         padding: const EdgeInsets.all(6.0),
         child: Wrap(
           spacing: 6,
@@ -216,7 +275,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min, // ← shrink to content
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // Status bar
                     Container(
@@ -248,7 +307,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                           Text(
                             sheetName,
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                             ),
                             maxLines: 2,
@@ -262,7 +321,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               Expanded(
                                 child: Text(
                                   zoneName,
-                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 9, color: Colors.grey[600]),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -277,16 +336,16 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               Expanded(
                                 child: Text(
                                   getName(f["user_id"]),
-                                  style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 9, color: Colors.grey[600]),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
+                          const SizedBox(height: 6),
                           // Action buttons
-                          if (isNew && !previousSheetActive) ...[
-                            const SizedBox(height: 6),
+                          if (isNew && !previousSheetActive)
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
@@ -296,16 +355,14 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 4),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                  textStyle: const TextStyle(fontSize: 11),
+                                  textStyle: const TextStyle(fontSize: 10),
                                 ),
                                 child: _startingSheetId == countingSheetId
                                     ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                     : const Text('Commencer'),
                               ),
                             ),
-                          ],
                           if (isProgress) ...[
-                            const SizedBox(height: 6),
                             Row(
                               children: [
                                 Expanded(
@@ -336,13 +393,13 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: _validatingSheetId == countingSheetId ? null : () => _validateSheet(countingSheetId),
+                                    onPressed: () => _showValidateConfirmation(countingSheetId, sheetName),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.orange,
                                       foregroundColor: Colors.white,
                                       padding: const EdgeInsets.symmetric(vertical: 4),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                      textStyle: const TextStyle(fontSize: 10),
+                                      textStyle: const TextStyle(fontSize: 9),
                                     ),
                                     child: _validatingSheetId == countingSheetId
                                         ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -352,8 +409,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               ],
                             ),
                           ],
-                          if (isConfirm) ...[
-                            const SizedBox(height: 6),
+                          if (isConfirm)
                             const SizedBox(
                               width: double.infinity,
                               child: Text(
@@ -362,7 +418,6 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                 style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
                               ),
                             ),
-                          ],
                         ],
                       ),
                     ),

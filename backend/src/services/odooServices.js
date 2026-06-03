@@ -34,8 +34,8 @@ class OdooService {
     return data.result;
   }
 
-  async fetchAdjustments(host, userId) {
-    console.log("Fetching adjustments for user ID:", userId);
+  async fetchAdjustments(host) {
+
     console.log("Has session cookie:", this.sessionCookie ? "Yes" : "No");
 
     const response = await fetch(`${host}/web/dataset/call_kw`, {
@@ -50,9 +50,9 @@ class OdooService {
         params: {
           model: "stock.inventory",
           method: "search_read",
-          args: [[["manager_id", "=", userId]]],
+          args: [[["state", "in", ["draft", "confirm"]]]],
           kwargs: {
-            fields: ["id", "name", "state", "date", "manager_id"]
+            fields: ["id", "name", "state", "date"]
           }
         }
       })
@@ -60,16 +60,16 @@ class OdooService {
 
     const data = await response.json();
     console.log("Adjustments response status:", response.status);
-    console.log("Adjustments found for user:", data.result?.length || 0);
+    console.log("Adjustment found:", data.result?.length || 0);
 
     if (data.error) throw new Error(data.error.data?.message || data.error.message);
     return data.result || [];
   }
 
-  async fetchFeuilles(host, adjustmentId) {
+  async fetchFeuilles(host, adjustmentId, userId) {
     console.log("=== FETCHING FEUILLES ===");
     console.log("Adjustment ID:", adjustmentId);
-    console.log("Type of adjustmentId:", typeof adjustmentId);
+    console.log("User ID:", userId);
     console.log("Has session cookie:", !!this.sessionCookie);
 
     // Ensure adjustmentId is a number
@@ -83,7 +83,7 @@ class OdooService {
         model: "counting.sheet",
         method: "search_read",
         args: [
-          [["stock_inventory_id", "=", adjId]]
+          [["stock_inventory_id", "=", adjId], ["user_id", "=", userId]]
         ],
         kwargs: {
           fields: ["id", "name", "state", "stock_inventory_id", "zone_id", "user_id"]
@@ -110,40 +110,7 @@ class OdooService {
       throw new Error(data.error.data?.message || data.error.message);
     }
 
-    console.log(`Found ${data.result?.length || 0} feuilles for adjustment ${adjId}`);
-
-    // Log each feuille found
-    if (data.result && data.result.length > 0) {
-      data.result.forEach((sheet, index) => {
-        console.log(`Feuille ${index + 1}: ID=${sheet.id}, Name=${sheet.name}, Stock Inventory ID=${sheet.stock_inventory_id}`);
-      });
-    } else {
-      console.log("No feuilles found. Checking if adjustment exists...");
-
-      // Verify the adjustment exists
-      const checkResponse = await fetch(`${host}/web/dataset/call_kw`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cookie": this.sessionCookie
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "call",
-          params: {
-            model: "stock.inventory",
-            method: "search_read",
-            args: [[["id", "=", adjId]]],
-            kwargs: {
-              fields: ["id", "name"]
-            }
-          }
-        })
-      });
-
-      const checkData = await checkResponse.json();
-      console.log("Adjustment check:", JSON.stringify(checkData, null, 2));
-    }
+    console.log(`Found ${data.result?.length || 0} feuilles for adjustment ${adjId} where user is responsible`);
 
     return data.result || [];
   }

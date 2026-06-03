@@ -138,7 +138,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 40),
 
                 if (!onlyPassword) ...[
-                  _buildTextField(hostController, "Enter URL", "http://your-odoo-server:8069"),
+                  _buildTextField(hostController, "Enter URL", "http://your-odoo-server:8069  (sans / à la fin)"),
                   const SizedBox(height: 16),
                   _buildTextField(dbController, "Enter DB name (optional)", "Database name"),
                   const SizedBox(height: 16),

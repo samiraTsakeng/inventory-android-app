@@ -8,6 +8,22 @@ class AuthService {
   static const String _sessionDbKey = 'session_db';
   static const String _sessionEmailKey = 'session_email';
 
+  //helper method to sanitize url
+  static String _sanitizeUrl(String url) {
+    String sanitized = url.trim();
+    //remove trailing slash if present
+    if (sanitized.endsWith('/')) {
+      sanitized = sanitized.substring(0, sanitized.length - 1);
+    }
+    // Ensure http:// or https:// prefix
+    if (!sanitized.startsWith('http://') && !sanitized.startsWith('https://')) {
+      sanitized = 'http://$sanitized';
+    }
+    print("Original URL: $url");
+    print("Sanitized URL: $sanitized");
+    return sanitized;
+  }
+
   static Future<bool> login({
     required String host,
     required String db,
@@ -15,6 +31,9 @@ class AuthService {
     required String password,
   }) async {
     try {
+      //sanitize the host url remove trailing slash
+      final sanitizedHost = _sanitizeUrl(host);
+
       // First, get available databases
       List<String> databases = await _getDatabases(host);
       print("Available databases: $databases");
