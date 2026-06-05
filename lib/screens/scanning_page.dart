@@ -62,6 +62,146 @@ class _ScanningPageState extends State<ScanningPage> {
     super.dispose();
   }
 
+  // Helper function to check if barcode is a product barcode (EAN/UPC)
+  bool isProductBarcode(String code) {
+    return RegExp(r'^\d{8}$|^\d{12}$|^\d{13}$').hasMatch(code);
+  }
+
+  // Helper function to detect if a barcode is a valid equipment identifier
+  bool isValidEquipmentIdentifier(String code) {
+    if (RegExp(r'^\d{14,15}$').hasMatch(code)) return true;
+    if (RegExp(r'^[0-9A-F]{14,16}$', caseSensitive: false).hasMatch(code)) return true;
+    if (RegExp(r'^\d{19,20}$').hasMatch(code)) return true;
+    if (RegExp(r'^\d{10,15}$').hasMatch(code)) return true;
+    if (RegExp(r'^[A-Z0-9]{11,12}$', caseSensitive: false).hasMatch(code)) return true;
+    if (RegExp(r'^[A-Z0-9]{8,20}$', caseSensitive: false).hasMatch(code) && RegExp(r'[A-Za-z]').hasMatch(code)) return true;
+    if (code.length >= 8 && code.length <= 20 && RegExp(r'[A-Za-z]').hasMatch(code) && RegExp(r'\d').hasMatch(code)) return true;
+    return false;
+  }
+
+  // Manual barcode entry dialog
+  Future<void> _addManualBarcode() async {
+    final TextEditingController barcodeController = TextEditingController();
+
+    final shouldAdd = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Ajouter un code-barres", style: TextStyle(fontSize: 18)),
+          content: TextField(
+            controller: barcodeController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: "Numéro de série / IMEI / MEID",
+              hintText: "Entrez le code-barres manuellement",
+              border: OutlineInputBorder(),
+            ),
+            style: const TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Annuler", style: TextStyle(fontSize: 14)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("Ajouter", style: TextStyle(fontSize: 14)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldAdd == true && barcodeController.text.isNotEmpty) {
+      setState(() {
+        isLookingUp = true;
+        isScanning = false;
+      });
+
+      final barcode = barcodeController.text.trim();
+
+      // Check if already in list
+      final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
+      if (existingIndex != -1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ Ce code-barres est déjà dans la liste'), backgroundColor: Colors.orange),
+        );
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+        return;
+      }
+
+      // Check if it's a product barcode
+      if (isProductBarcode(barcode)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ Veuillez scanner un numéro de série, pas un code-barres produit.'), backgroundColor: Colors.orange),
+        );
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+        return;
+      }
+
+      // Look up product
+      final result = await CountingService.lookupProduct(barcode);
+
+      if (result != null && result['id'] != 0 && result['id'] != null) {
+        final tracking = result['tracking'] ?? 'serial';
+        final lotName = result['lot_name'] ?? barcode;
+        final lotIdValue = result['lot_id'] ?? 0;
+        final productIdValue = result['id'];
+
+        // Set quantity based on tracking type
+        final initialQuantity = tracking == 'serial' ? 1 : 0;
+
+        setState(() {
+          scannedItems.add(ScannedItem(
+            barcode: barcode,
+            productName: result['name'] ?? 'Unknown',
+            productId: productIdValue,
+            quantity: initialQuantity,
+            lotNumber: lotName,
+            lotId: lotIdValue,
+            tracking: tracking,
+          ));
+          _saveItems();
+        });
+
+        String trackingText = tracking == 'serial' ? 'N° Série' : (tracking == 'lot' ? 'Lot' : 'Sans traçabilité');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Ajouté manuellement: ${result['name']} ($lotName)'),
+            backgroundColor: Colors.green,
+            duration: const Duration(milliseconds: 800),
+          ),
+        );
+      } else {
+        String errorMessage = result != null && result['message'] != null
+            ? result['message']
+            : '⚠️ Code-barres non trouvé: $barcode';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      setState(() {
+        isLookingUp = false;
+        isScanning = true;
+      });
+    }
+  }
+
   void onBarcodeDetected(BarcodeCapture capture) async {
     if (!isScanning || isLookingUp) return;
 
@@ -109,13 +249,14 @@ class _ScanningPageState extends State<ScanningPage> {
           int lotIdValue = result['lot_id'] ?? 0;
           int productIdValue = result['id'];
 
-          // For both serial AND lot, quantity starts at 1 (user will edit manually)
-          // No auto-increment on subsequent scans because duplicates are blocked
+          // MODIFICATION 1: Set default lot quantity to 0, serial quantity to 1
+          final initialQuantity = tracking == 'serial' ? 1 : 0;
+
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: result['name'] ?? 'Unknown',
             productId: productIdValue,
-            quantity: 1,
+            quantity: initialQuantity,
             lotNumber: lotName,
             lotId: lotIdValue,
             tracking: tracking,
@@ -130,7 +271,7 @@ class _ScanningPageState extends State<ScanningPage> {
               duration: const Duration(milliseconds: 800),
             ),
           );
-        } else {
+        } /*else {
           // show appropriate message based on error
           String errorMessage = result != null && result['message'] != null
               ? result['message']
@@ -146,7 +287,7 @@ class _ScanningPageState extends State<ScanningPage> {
               duration: const Duration(seconds: 3),
             ),
           );
-        }
+        }*/
         isScanning = true;
         isLookingUp = false;
       });
@@ -368,9 +509,12 @@ class _ScanningPageState extends State<ScanningPage> {
           ),
         ),
         actions: [
+          // MODIFICATION 2: Add manual barcode entry button in menu
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'save') {
+              if (value == 'add_barcode') {
+                _addManualBarcode();
+              } else if (value == 'save') {
                 _showSaveConfirmation();
               } else if (value == 'finish') {
                 Navigator.pop(context);
@@ -389,6 +533,16 @@ class _ScanningPageState extends State<ScanningPage> {
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'add_barcode',
+                child: Row(
+                  children: [
+                    Icon(Icons.qr_code, size: 18, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Ajouter un code-barres'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'save',
                 child: Row(

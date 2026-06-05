@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
-import '../services/auth_service.dart';
 import 'scanning_page.dart';
 
 class FeuilleListPage extends StatefulWidget {
@@ -35,7 +34,6 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     try {
       final data = await FeuilleService.getFeuilles(widget.adjustmentId);
 
-      // Sort: progress first, then new, then confirm, then cancel
       if (data is List && data.isNotEmpty) {
         data.sort((a, b) {
           const order = {'progress': 0, 'new': 1, 'confirm': 2, 'cancel': 3};
@@ -67,13 +65,6 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     return field.toString();
   }
 
-  int getUserId(dynamic field) {
-    if (field == null) return 0;
-    if (field is List) return field.isNotEmpty ? field[0] : 0;
-    if (field is int) return field;
-    return 0;
-  }
-
   Color getStatusColor(String? state) {
     switch (state) {
       case 'progress': return Colors.green;
@@ -92,6 +83,24 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       case 'cancel': return 'Annulé';
       default: return state ?? 'Inconnu';
     }
+  }
+
+  // Find the current sheet in progress
+  int? getCurrentProgressSheetId() {
+    final progressSheet = feuilles.firstWhere(
+          (sheet) => sheet['state'] == 'progress',
+      orElse: () => null,
+    );
+    return progressSheet?['id'];
+  }
+
+  // Get current sheet name
+  String? getCurrentProgressSheetName() {
+    final progressSheet = feuilles.firstWhere(
+          (sheet) => sheet['state'] == 'progress',
+      orElse: () => null,
+    );
+    return progressSheet?['name'] ?? 'Feuille en cours';
   }
 
   Future<void> _startSheet(int sheetId) async {
@@ -117,7 +126,17 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     }
   }
 
-  Future<void> _showValidateConfirmation(int sheetId, String sheetName) async {
+  Future<void> _validateCurrentSheet() async {
+    final sheetId = getCurrentProgressSheetId();
+    final sheetName = getCurrentProgressSheetName();
+
+    if (sheetId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
     final shouldValidate = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -188,6 +207,30 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // Menu button with Terminer option
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'terminer') {
+                _validateCurrentSheet();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem<String>(
+                value: 'terminer',
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, size: 18, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('Terminer le comptage en cours'),
+                  ],
+                ),
+              ),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.more_vert, size: 22),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Image.asset(
@@ -344,7 +387,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          // Action buttons
+                          // Action buttons - Only "Commencer" and "Scanner" (NO "Valider")
                           if (isNew && !previousSheetActive)
                             SizedBox(
                               width: double.infinity,
@@ -362,53 +405,33 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                     : const Text('Commencer'),
                               ),
                             ),
-                          if (isProgress) ...[
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => ScanningPage(
-                                            countingSheetId: countingSheetId,
-                                            adjustmentId: widget.adjustmentId,
-                                            zoneName: zoneName,
-                                            sheetName: sheetName,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 4),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                      textStyle: const TextStyle(fontSize: 9),
+                          if (isProgress)
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ScanningPage(
+                                        countingSheetId: countingSheetId,
+                                        adjustmentId: widget.adjustmentId,
+                                        zoneName: zoneName,
+                                        sheetName: sheetName,
+                                      ),
                                     ),
-                                    child: const Text('Scanner'),
-                                  ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  textStyle: const TextStyle(fontSize: 9),
                                 ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () => _showValidateConfirmation(countingSheetId, sheetName),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(vertical: 4),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                      textStyle: const TextStyle(fontSize: 9),
-                                    ),
-                                    child: _validatingSheetId == countingSheetId
-                                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                        : const Text('Valider'),
-                                  ),
-                                ),
-                              ],
+                                child: const Text('Scanner'),
+                              ),
                             ),
-                          ],
                           if (isConfirm)
                             const SizedBox(
                               width: double.infinity,
