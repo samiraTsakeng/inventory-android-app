@@ -1,36 +1,44 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 
 class AdjustmentEntryPage extends StatefulWidget {
+  const AdjustmentEntryPage({super.key});
+
   @override
-  _AdjustmentEntryPageState createState() => _AdjustmentEntryPageState();
+  State<AdjustmentEntryPage> createState() => _AdjustmentEntryPageState();
 }
 
 class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
   bool _isHovered = false;
+  bool _isChecking = true;
 
-  void _logout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Déconnexion"),
-        content: const Text("Voulez-vous vraiment vous déconnecter ?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Non")),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text("Oui", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    final session = await AuthService.getSession();
+    if (session == null) {
+      // No session, redirect to login
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/');
+      }
+    }
+    if (mounted) {
+      setState(() => _isChecking = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isChecking) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -66,7 +74,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             const DrawerHeader(
               decoration: BoxDecoration(color: Colors.blue),
               child: Text(
-                'Inventory App',
+                'Wise Inventory',
                 style: TextStyle(color: Colors.white, fontSize: 24),
               ),
             ),
@@ -81,7 +89,10 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Déconnexion', style: TextStyle(color: Colors.red)),
-              onTap: _logout,
+              onTap: () {
+                AuthService.clearSession();
+                Navigator.pushReplacementNamed(context, '/');
+              },
             ),
           ],
         ),
@@ -90,7 +101,6 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
         child: Column(
           children: [
             const Spacer(),
-            // Center icon
             MouseRegion(
               onEnter: (_) => setState(() => _isHovered = true),
               onExit: (_) => setState(() => _isHovered = false),
@@ -115,7 +125,6 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
-            // Continue button
             Padding(
               padding: const EdgeInsets.all(20),
               child: SizedBox(

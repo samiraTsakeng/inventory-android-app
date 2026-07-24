@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../services/product_cache_service.dart';
 import '../utils/storage.dart';
 
 class LoginPage extends StatefulWidget {
@@ -17,6 +19,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool onlyPassword = false;
   bool isLoading = false;
+  bool _isCaching = false;
 
   @override
   void initState() {
@@ -25,7 +28,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _checkSession() async {
-    final session = await AuthService.getSession();
+    final session = await AuthService.getFullSession();
     if (session != null && session['host'] != null && session['email'] != null) {
       setState(() {
         hostController.text = session['host'] ?? '';
@@ -43,6 +46,34 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
+  // ✅ Cache products after successful login
+  Future<void> _cacheProductsAfterLogin() async {
+    if (_isCaching) return;
+
+    setState(() => _isCaching = true);
+
+    try {
+      final count = await ProductCacheService.cacheAllProducts();
+      print("✅ Cached $count products for offline use");
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📥 $count produits chargés pour le mode hors ligne'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print("❌ Product caching error: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isCaching = false);
+      }
+    }
+  }
+
   void login() async {
     setState(() => isLoading = true);
 
@@ -55,16 +86,10 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (success && mounted) {
-        if (onlyPassword) {
-          Navigator.pushReplacementNamed(context, '/adjustment-entry');
-        } else {
-          await Storage.saveUserData(
-            hostController.text.trim(),
-            dbController.text.trim(),
-            emailController.text.trim(),
-          );
-          Navigator.pushReplacementNamed(context, '/adjustment-entry');
-        }
+        // ✅ Cache products in the background
+        _cacheProductsAfterLogin();
+
+        Navigator.pushReplacementNamed(context, '/adjustment-entry');
       }
     } catch (e) {
       if (mounted) {
@@ -89,6 +114,9 @@ class _LoginPageState extends State<LoginPage> {
       final success = await AuthService.secondAuthentication(passwordController.text);
 
       if (success && mounted) {
+        // ✅ Cache products in the background
+        _cacheProductsAfterLogin();
+
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
       } else {
         throw Exception("Invalid password");
@@ -150,6 +178,16 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 30),
 
+                // Loading indicator
+                if (_isCaching)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      "📥 Chargement des produits pour le mode hors ligne...",
+                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                    ),
+                  ),
+
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -180,7 +218,6 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 16),
 
-                // Return to login page link (only shown in password-only mode)
                 if (onlyPassword)
                   TextButton(
                     onPressed: _resetToFullLogin,

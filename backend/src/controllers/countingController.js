@@ -61,7 +61,6 @@ async function processLotFound(session, lot, barcode) {
 
 class CountingController {
   // Look up product by lot/serial number barcode
-  // Look up product by lot/serial number barcode
   static async lookupProduct(req, res) {
     try {
       const session = AuthController.getSession();
@@ -688,6 +687,124 @@ class CountingController {
       });
     }
   }
+
+  // Cache all products for offline use
+  static async cacheProducts(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({
+          success: false,
+          message: "Not authenticated"
+        });
+      }
+
+      const { offset = 0, limit = 100 } = req.body;
+      console.log(`📥 Fetching products from offset ${offset}, limit ${limit}`);
+
+      // Fetch products with their barcodes and tracking info
+      const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "product.product",
+            method: "search_read",
+            args: [[]],
+            kwargs: {
+              fields: ["id", "name", "barcode", "default_code", "tracking"],
+              limit: limit,
+              offset: offset,
+            }
+          }
+        })
+      });
+
+      const data = await response.json();
+      console.log(`📥 Found ${data.result?.length || 0} products`);
+
+      if (data.error) {
+        throw new Error(data.error.data?.message || data.error.message);
+      }
+
+      return res.json({
+        success: true,
+        products: data.result || [],
+      });
+
+    } catch (error) {
+      console.error("Cache products error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // Cache products by barcode list
+  static async cacheProductsByBarcode(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({
+          success: false,
+          message: "Not authenticated"
+        });
+      }
+
+      const { barcodes } = req.body;
+      if (!barcodes || barcodes.length === 0) {
+        return res.json({ success: true, products: [] });
+      }
+
+      console.log(`📥 Fetching products for ${barcodes.length} barcodes`);
+
+      const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "product.product",
+            method: "search_read",
+            args: [[["barcode", "in", barcodes]]],
+            kwargs: {
+              fields: ["id", "name", "barcode", "default_code", "tracking"],
+            }
+          }
+        })
+      });
+
+      const data = await response.json();
+      console.log(`📥 Found ${data.result?.length || 0} products`);
+
+      if (data.error) {
+        throw new Error(data.error.data?.message || data.error.message);
+      }
+
+      return res.json({
+        success: true,
+        products: data.result || [],
+      });
+
+    } catch (error) {
+      console.error("Cache products by barcode error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
 }
 
 module.exports = CountingController;

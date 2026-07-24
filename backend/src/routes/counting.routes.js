@@ -23,4 +23,9 @@ router.get('/check-sheet/:sheet_id', CountingController.checkSheetLines);
 // GET /counting/check-sheet-state/:sheet_id
 router.get('/check-sheet-state/:sheet_id', CountingController.checkSheetState);
 
+// POST /counting/cache-products
+router.post('/cache-products', CountingController.cacheProducts);
+
+// POST /counting/cache-products-by-barcode
+router.post('/cache-products-by-barcode', CountingController.cacheProductsByBarcode);
 module.exports = router;

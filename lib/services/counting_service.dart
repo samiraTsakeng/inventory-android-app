@@ -2,11 +2,21 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import '../models/scanned_item.dart';
+import 'local_storage_service.dart';
 
 class CountingService {
-  // Look up product by lot/serial number barcode
+  // ✅ OFFLINE-FIRST: Check cache, then API
   static Future<Map<String, dynamic>?> lookupProduct(String barcode) async {
     try {
+      // 1️⃣ Check local cache FIRST (instant, no internet needed)
+      final cachedProduct = await LocalStorageService.getCachedProduct(barcode);
+      if (cachedProduct != null) {
+        print("✅ Product found in OFFLINE cache: ${cachedProduct['name']}");
+        return cachedProduct;
+      }
+
+      // 2️⃣ If not in cache, try API (requires internet)
+      print("🌐 Looking up product ONLINE: $barcode");
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/lookup-product'),
         headers: {"Content-Type": "application/json"},
@@ -19,12 +29,17 @@ class CountingService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true && data['product'] != null) {
-          return data['product'];
+          final product = data['product'];
+          // ✅ Cache the product for future offline use
+          await LocalStorageService.cacheProduct(barcode, product);
+          print("✅ Product cached for offline use: ${product['name']}");
+          return product;
         }
       }
       return null;
     } catch (e) {
       print("Product lookup error: $e");
+      // ✅ If offline, return null (product not in cache)
       return null;
     }
   }
@@ -134,5 +149,10 @@ class CountingService {
       print("Submit error: $e");
       return false;
     }
+  }
+
+  // ✅ Get number of cached products
+  static Future<int> getCachedProductsCount() async {
+    return await LocalStorageService.getCachedProductsCount();
   }
 }

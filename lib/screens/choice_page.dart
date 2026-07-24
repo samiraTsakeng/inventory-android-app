@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'consolidation_list_page.dart';
 class ChoicePage extends StatelessWidget {
   final int? adjustmentId;
 
@@ -69,18 +69,20 @@ class ChoicePage extends StatelessWidget {
             _buildChoiceCard(
               context: context,
               title: "Feuille de consolidation",
-              subtitle: "Consolider les comptages (à venir)",
+              subtitle: "Consolider les comptages",
               icon: Icons.merge_type,
-              color: Colors.grey,
+              color: Colors.purple,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Fonctionnalité à venir"),
-                    backgroundColor: Colors.orange,
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConsolidationListPage(
+                      adjustmentId: adjId,
+                    ),
                   ),
                 );
               },
-              enabled: false,
+              enabled: true,
             ),
           ],
         ),

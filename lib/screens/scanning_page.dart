@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:badges/badges.dart' as badges;
+import 'dart:async';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
@@ -8,6 +9,7 @@ import 'scanned_items_list_page.dart';
 import '../models/batch.dart';
 import '../services/batch_storage_service.dart';
 import 'batch_list_page.dart';
+import 'feuille_list_page.dart';
 
 class ScanningPage extends StatefulWidget {
   final int countingSheetId;
@@ -27,7 +29,7 @@ class ScanningPage extends StatefulWidget {
   State<ScanningPage> createState() => _ScanningPageState();
 }
 
-class _ScanningPageState extends State<ScanningPage> {
+class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderStateMixin {
   final MobileScannerController scannerController = MobileScannerController(
     facing: CameraFacing.back,
     torchEnabled: false,
@@ -37,49 +39,123 @@ class _ScanningPageState extends State<ScanningPage> {
   String? lastScannedBarcode;
   bool isLookingUp = false;
   bool isLoading = true;
+  bool _isMounted = false;
+
+  // Laser animation
+  late AnimationController _laserAnimationController;
+  late Animation<double> _laserAnimation;
+  bool _isLaserOn = true;
 
   @override
   void initState() {
     super.initState();
+    _isMounted = true;
     _loadSavedItems();
+
+    // Laser animation - constantly scanning
+    _laserAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+
+    _laserAnimation = Tween<double>(begin: 0.1, end: 0.9).animate(
+      CurvedAnimation(
+        parent: _laserAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
   }
 
   Future<void> _loadSavedItems() async {
     final savedItems = await LocalStorageService.loadScannedItems(widget.countingSheetId);
-    setState(() {
-      scannedItems = savedItems;
-      isLoading = false;
-    });
+    if (_isMounted) {
+      setState(() {
+        scannedItems = savedItems;
+        isLoading = false;
+      });
+    }
   }
 
   Future<void> _saveItems() async {
-    await LocalStorageService.saveScannedItems(widget.countingSheetId, scannedItems);
+    if (_isMounted) {
+      await LocalStorageService.saveScannedItems(widget.countingSheetId, scannedItems);
+    }
+  }
+
+  Future<int?> _showQuantityDialog(String productName, String barcode) async {
+    final TextEditingController qtyController = TextEditingController(text: '1');
+
+    return showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('Quantité pour $productName'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Code: $barcode'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Quantité',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final qty = int.tryParse(qtyController.text);
+              if (qty != null && qty > 0) {
+                Navigator.pop(context, qty);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Veuillez entrer une quantité valide')),
+                );
+              }
+            },
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   void dispose() {
+    _isMounted = false;
+    _laserAnimationController.dispose();
     scannerController.dispose();
     super.dispose();
   }
 
-  // Helper function to check if barcode is a product barcode (EAN/UPC)
-  bool isProductBarcode(String code) {
-    return RegExp(r'^\d{8}$|^\d{12}$|^\d{13}$').hasMatch(code);
+  // Check if barcode already exists in saved batches
+  Future<bool> _isInSavedBatches(String barcode) async {
+    try {
+      final batches = await BatchStorageService.getBatches();
+      for (final batch in batches) {
+        if (!batch.isSynced) {
+          for (final item in batch.items) {
+            if (item.barcode == barcode) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
   }
 
-  // Helper function to detect if a barcode is a valid equipment identifier
-  bool isValidEquipmentIdentifier(String code) {
-    if (RegExp(r'^\d{14,15}$').hasMatch(code)) return true;
-    if (RegExp(r'^[0-9A-F]{14,16}$', caseSensitive: false).hasMatch(code)) return true;
-    if (RegExp(r'^\d{19,20}$').hasMatch(code)) return true;
-    if (RegExp(r'^\d{10,15}$').hasMatch(code)) return true;
-    if (RegExp(r'^[A-Z0-9]{11,12}$', caseSensitive: false).hasMatch(code)) return true;
-    if (RegExp(r'^[A-Z0-9]{8,20}$', caseSensitive: false).hasMatch(code) && RegExp(r'[A-Za-z]').hasMatch(code)) return true;
-    if (code.length >= 8 && code.length <= 20 && RegExp(r'[A-Za-z]').hasMatch(code) && RegExp(r'\d').hasMatch(code)) return true;
-    return false;
-  }
-
-  // Manual barcode entry dialog
+  // Manual barcode entry
   Future<void> _addManualBarcode() async {
     final TextEditingController barcodeController = TextEditingController();
 
@@ -87,12 +163,12 @@ class _ScanningPageState extends State<ScanningPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Ajouter un code-barres", style: TextStyle(fontSize: 18)),
+          title: const Text("Saisir manuellement", style: TextStyle(fontSize: 18)),
           content: TextField(
             controller: barcodeController,
             autofocus: true,
             decoration: const InputDecoration(
-              labelText: "Numéro de série / IMEI / MEID",
+              labelText: "Numéro de série",
               hintText: "Entrez le code-barres manuellement",
               border: OutlineInputBorder(),
             ),
@@ -124,11 +200,10 @@ class _ScanningPageState extends State<ScanningPage> {
 
       final barcode = barcodeController.text.trim();
 
-      // Check if already in list
       final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
       if (existingIndex != -1) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('⚠️ Ce code-barres est déjà dans la liste'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('⚠️ Cet article est déjà dans la liste'), backgroundColor: Colors.orange),
         );
         setState(() {
           isLookingUp = false;
@@ -137,10 +212,10 @@ class _ScanningPageState extends State<ScanningPage> {
         return;
       }
 
-      // Check if it's a product barcode
-      if (isProductBarcode(barcode)) {
+      final inBatch = await _isInSavedBatches(barcode);
+      if (inBatch) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('⚠️ Veuillez scanner un numéro de série, pas un code-barres produit.'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('⚠️ Cet article est déjà dans un lot sauvegardé'), backgroundColor: Colors.orange),
         );
         setState(() {
           isLookingUp = false;
@@ -149,7 +224,6 @@ class _ScanningPageState extends State<ScanningPage> {
         return;
       }
 
-      // Look up product
       final result = await CountingService.lookupProduct(barcode);
 
       if (result != null && result['id'] != 0 && result['id'] != null) {
@@ -158,15 +232,25 @@ class _ScanningPageState extends State<ScanningPage> {
         final lotIdValue = result['lot_id'] ?? 0;
         final productIdValue = result['id'];
 
-        // Set quantity based on tracking type
-        final initialQuantity = tracking == 'serial' ? 1 : 0;
+        int finalQuantity = tracking == 'serial' ? 1 : 0;
+        if (tracking == 'lot') {
+          final qty = await _showQuantityDialog(result['name'] ?? 'Unknown', barcode);
+          if (qty == null) {
+            setState(() {
+              isLookingUp = false;
+              isScanning = true;
+            });
+            return;
+          }
+          finalQuantity = qty;
+        }
 
         setState(() {
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: result['name'] ?? 'Unknown',
             productId: productIdValue,
-            quantity: initialQuantity,
+            quantity: finalQuantity,
             lotNumber: lotName,
             lotId: lotIdValue,
             tracking: tracking,
@@ -174,21 +258,17 @@ class _ScanningPageState extends State<ScanningPage> {
           _saveItems();
         });
 
-        String trackingText = tracking == 'serial' ? 'N° Série' : (tracking == 'lot' ? 'Lot' : 'Sans traçabilité');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Ajouté manuellement: ${result['name']} ($lotName)'),
+            content: Text('✅ Ajouté: ${result['name']}'),
             backgroundColor: Colors.green,
             duration: const Duration(milliseconds: 800),
           ),
         );
       } else {
-        String errorMessage = result != null && result['message'] != null
-            ? result['message']
-            : '⚠️ Code-barres non trouvé: $barcode';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
+            content: Text('⚠️ Code-barres non trouvé: $barcode'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -202,104 +282,166 @@ class _ScanningPageState extends State<ScanningPage> {
     }
   }
 
+  // ✅ LASER SCANNER - Only scans when barcode is detected
   void onBarcodeDetected(BarcodeCapture capture) async {
+    // Only scan if laser is active and not already processing
     if (!isScanning || isLookingUp) return;
 
     final barcode = capture.barcodes.first.rawValue;
     if (barcode == null || barcode == lastScannedBarcode) return;
 
+    // ✅ LASER FLASH - quick flash when scanning
     setState(() {
+      _isLaserOn = false;
       isScanning = false;
       isLookingUp = true;
       lastScannedBarcode = barcode;
     });
 
-    // Check if this barcode (lot OR serial) is already scanned
-    final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
+    // Flash back on after 200ms
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (_isMounted) {
+        setState(() {
+          _isLaserOn = true;
+        });
+      }
+    });
 
+    // Check if already in current list
+    final existingIndex = scannedItems.indexWhere((item) =>
+    item.barcode == barcode);
     if (existingIndex != -1) {
-      // Already scanned - prevent ANY duplicate regardless of type
       setState(() {
         isScanning = true;
         isLookingUp = false;
       });
       if (mounted) {
-        String message = scannedItems[existingIndex].tracking == 'serial'
-            ? '⚠️ Ce numéro de série a déjà été scanné!'
-            : '⚠️ Ce numéro de lot a déjà été scanné! Modifiez la quantité manuellement dans la liste.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
+          const SnackBar(
+            content: Text('⚠️ Cet article a déjà été scanné!'),
             backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 2),
+            duration: Duration(seconds: 2),
           ),
         );
       }
       return;
     }
 
-    // Look up product by lot/serial number
+    // Check if already in saved batches
+    final inBatch = await _isInSavedBatches(barcode);
+    if (inBatch) {
+      setState(() {
+        isScanning = true;
+        isLookingUp = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Cet article est déjà dans un lot sauvegardé'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Look up product
     final result = await CountingService.lookupProduct(barcode);
 
-    if (mounted) {
+    if (_isMounted) {
       setState(() {
         if (result != null && result['id'] != 0 && result['id'] != null) {
+          //product found (either from cache or API)
           String tracking = result['tracking'] ?? 'serial';
           String lotName = result['lot_name'] ?? barcode;
           int lotIdValue = result['lot_id'] ?? 0;
           int productIdValue = result['id'];
 
-          // MODIFICATION 1: Set default lot quantity to 0, serial quantity to 1
-          final initialQuantity = tracking == 'serial' ? 1 : 0;
+          //for lot, ask for quantity
 
+          if (tracking == 'lot') {
+            //handle lot product
+
+            _handleLotProduct(
+                result, barcode, tracking, lotName, lotIdValue, productIdValue);
+            return;
+          }
+          //serial product - add
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: result['name'] ?? 'Unknown',
             productId: productIdValue,
-            quantity: initialQuantity,
+            quantity: 1,
             lotNumber: lotName,
             lotId: lotIdValue,
             tracking: tracking,
           ));
           _saveItems();
+          isScanning = true;
+          isLookingUp = false;
 
-          String trackingText = tracking == 'serial' ? 'N° Série' : (tracking == 'lot' ? 'Lot' : 'Sans traçabilité');
+          String source = result['fromCache'] == true ? '💾 (cache)' : '🌐';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Ajouté: ${result['name']} ($lotName)'),
+              content: Text('✅ Ajouté: ${result['name']}'),
               backgroundColor: Colors.green,
               duration: const Duration(milliseconds: 800),
             ),
           );
-        } /*else {
-          // show appropriate message based on error
-          String errorMessage = result != null && result['message'] != null
-              ? result['message']
-              : '⚠️ Numéro non trouvé: $barcode';
+        } else {
+          //product not found (cache filled and API failed)
+          isScanning = true;
+          isLookingUp = false;
 
-          String barcodeType = result != null && result['barcode_type'] != null
-              ? result['barcode_type']
-              : '';
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(errorMessage),
-              backgroundColor: Colors.orange,
+              content: Text('⚠️ Code-barres non trouvé: $barcode'),
+              backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
           );
-        }*/
+        }
+      });
+    }
+  }
+
+  Future<void> _handleLotProduct(Map<String, dynamic> result, String barcode, String tracking, String lotName, int lotIdValue, int productIdValue) async {
+    final qty = await _showQuantityDialog(result['name'] ?? 'Unknown', barcode);
+    if (qty == null) {
+      if (_isMounted) {
+        setState(() {
+          isScanning = true;
+          isLookingUp = false;
+        });
+      }
+      return;
+    }
+
+    if (_isMounted) {
+      setState(() {
+        scannedItems.add(ScannedItem(
+          barcode: barcode,
+          productName: result['name'] ?? 'Unknown',
+          productId: productIdValue,
+          quantity: qty,
+          lotNumber: lotName,
+          lotId: lotIdValue,
+          tracking: tracking,
+        ));
+        _saveItems();
         isScanning = true;
         isLookingUp = false;
       });
-    }
 
-    if (scannedItems.length >= 50) {
-      setState(() => isScanning = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Limite de 50 articles atteinte!'), backgroundColor: Colors.orange),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Ajouté: ${result['name']} - Quantité: $qty'),
+          backgroundColor: Colors.green,
+          duration: const Duration(milliseconds: 800),
+        ),
+      );
     }
   }
 
@@ -332,7 +474,6 @@ class _ScanningPageState extends State<ScanningPage> {
       return;
     }
 
-    // Filter only registered products (productId != 0)
     final validItems = scannedItems.where((item) => item.productId != 0).toList();
 
     if (validItems.isEmpty) {
@@ -354,7 +495,7 @@ class _ScanningPageState extends State<ScanningPage> {
       items: validItems,
     );
 
-    if (mounted) {
+    if (_isMounted) {
       Navigator.pop(context);
       if (success) {
         await LocalStorageService.clearScannedItems(widget.countingSheetId);
@@ -385,13 +526,28 @@ class _ScanningPageState extends State<ScanningPage> {
           countingSheetId: widget.countingSheetId,
           adjustmentId: widget.adjustmentId,
           onItemsUpdated: (updatedItems) {
-            setState(() {
-              scannedItems = updatedItems;
-              _saveItems();
-            });
+            if (_isMounted) {
+              setState(() {
+                scannedItems = updatedItems;
+                _saveItems();
+              });
+            }
           },
         ),
       ),
+    );
+  }
+
+  void navigateToFeuilleList() {
+    // Navigate back to the feuille list page
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FeuilleListPage(
+          adjustmentId: widget.adjustmentId,
+        ),
+      ),
+          (route) => false,
     );
   }
 
@@ -406,12 +562,12 @@ class _ScanningPageState extends State<ScanningPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Enregistrer le batch", style: TextStyle(fontSize: 18)),
+        title: const Text("Enregistrer le lot", style: TextStyle(fontSize: 18)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Voulez-vous sauvegarder ce batch ?", style: TextStyle(fontSize: 14)),
+            const Text("Voulez-vous sauvegarder ce lot ?", style: TextStyle(fontSize: 14)),
             const SizedBox(height: 8),
             Text(
               "Articles: ${scannedItems.length}",
@@ -425,7 +581,7 @@ class _ScanningPageState extends State<ScanningPage> {
             onPressed: () async {
               Navigator.pop(context);
               final batchNumber = await _getNextBatchNumber();
-              final batchName = "Batch $batchNumber";
+              final batchName = "lot $batchNumber";
               final batch = Batch(
                 id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: batchName,
@@ -438,33 +594,31 @@ class _ScanningPageState extends State<ScanningPage> {
                 sheetName: widget.sheetName,
               );
               await BatchStorageService.saveBatch(batch);
-              setState(() {
-                scannedItems.clear();
-                lastScannedBarcode = null;
-                isScanning = true;
-              });
-              await _saveItems();
+              if (_isMounted) {
+                setState(() {
+                  scannedItems.clear();
+                  lastScannedBarcode = null;
+                  isScanning = true;
+                });
+                await _saveItems();
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => BatchesListPage(
+                      countingSheetId: widget.countingSheetId,
+                      adjustmentId: widget.adjustmentId,
+                      zoneName: widget.zoneName,
+                      sheetName: widget.sheetName,
+                    ),
+                  ),
+                );
+              }
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('✅ $batchName sauvegardé (${batch.items.length} articles)'),
                   backgroundColor: Colors.green,
-                  action: SnackBarAction(
-                    label: 'Voir',
-                    textColor: Colors.white,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => BatchesListPage(
-                            countingSheetId: widget.countingSheetId,
-                            adjustmentId: widget.adjustmentId,
-                            zoneName: widget.zoneName,
-                            sheetName: widget.sheetName,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
                 ),
               );
             },
@@ -483,8 +637,6 @@ class _ScanningPageState extends State<ScanningPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isLimitReached = scannedItems.length >= 50;
-
     if (isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -495,11 +647,9 @@ class _ScanningPageState extends State<ScanningPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(widget.zoneName, style: const TextStyle(fontSize: 16)),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu, size: 22),
@@ -509,82 +659,44 @@ class _ScanningPageState extends State<ScanningPage> {
           ),
         ),
         actions: [
-          // MODIFICATION 2: Add manual barcode entry button in menu
+          IconButton(
+            icon: const Icon(Icons.create_sharp, size: 22, color: Colors.white),
+            onPressed: _addManualBarcode,
+          ),
+          IconButton(
+            icon: const Icon(Icons.save, size: 22, color: Colors.white),
+            onPressed: _showSaveConfirmation,
+          ),
+          // ✅ Added: List icon to navigate to scanned items
+          badges.Badge(
+            showBadge: scannedItems.isNotEmpty,
+            badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10)),
+            child: IconButton(
+              icon: const Icon(Icons.list, size: 22, color: Colors.white),
+              onPressed: navigateToSummary,
+            ),
+          ),
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'add_barcode') {
-                _addManualBarcode();
-              } else if (value == 'save') {
-                _showSaveConfirmation();
-              } else if (value == 'finish') {
-                Navigator.pop(context);
-              } else if (value == 'batches') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BatchesListPage(
-                      countingSheetId: widget.countingSheetId,
-                      adjustmentId: widget.adjustmentId,
-                      zoneName: widget.zoneName,
-                      sheetName: widget.sheetName,
-                    ),
-                  ),
-                );
+              if (value == 'logout') {
+                _logout();
               }
             },
             itemBuilder: (context) => [
               const PopupMenuItem(
-                value: 'add_barcode',
+                value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.qr_code, size: 18, color: Colors.blue),
+                    Icon(Icons.logout, size: 18, color: Colors.red),
                     SizedBox(width: 8),
-                    Text('Ajouter un code-barres'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'save',
-                child: Row(
-                  children: [
-                    Icon(Icons.save, size: 18),
-                    SizedBox(width: 8),
-                    Text('Enregistrer'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'batches',
-                child: Row(
-                  children: [
-                    Icon(Icons.folder, size: 18),
-                    SizedBox(width: 8),
-                    Text('Batches sauvegardés'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'finish',
-                child: Row(
-                  children: [
-                    Icon(Icons.exit_to_app, size: 18),
-                    SizedBox(width: 8),
-                    Text('Terminer'),
+                    Text('Déconnexion', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
             ],
             child: const Padding(
               padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.more_vert, size: 22),
-            ),
-          ),
-          badges.Badge(
-            showBadge: scannedItems.isNotEmpty,
-            badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10)),
-            child: IconButton(
-              icon: const Icon(Icons.list, size: 22),
-              onPressed: navigateToSummary,
+              child: Icon(Icons.more_vert, size: 22, color: Colors.white),
             ),
           ),
         ],
@@ -600,7 +712,7 @@ class _ScanningPageState extends State<ScanningPage> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   const Text(
-                    'Inventory App',
+                    'Wise Inventory',
                     style: TextStyle(color: Colors.white, fontSize: 24),
                   ),
                   const SizedBox(height: 8),
@@ -610,6 +722,15 @@ class _ScanningPageState extends State<ScanningPage> {
                   ),
                 ],
               ),
+            ),
+            // ✅ Added: Feuilles de comptage
+            ListTile(
+              leading: const Icon(Icons.inventory, color: Colors.blue),
+              title: const Text('Feuilles de comptage'),
+              onTap: () {
+                Navigator.pop(context);
+                navigateToFeuilleList();
+              },
             ),
             ListTile(
               leading: const Icon(Icons.qr_code_scanner),
@@ -628,7 +749,7 @@ class _ScanningPageState extends State<ScanningPage> {
             ),
             ListTile(
               leading: const Icon(Icons.folder),
-              title: const Text('Batches sauvegardés'),
+              title: const Text('Lots sauvegardés'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -644,12 +765,6 @@ class _ScanningPageState extends State<ScanningPage> {
                 );
               },
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Déconnexion', style: TextStyle(color: Colors.red)),
-              onTap: _logout,
-            ),
           ],
         ),
       ),
@@ -659,12 +774,30 @@ class _ScanningPageState extends State<ScanningPage> {
             flex: 3,
             child: Stack(
               children: [
+                // Camera preview
                 MobileScanner(
                   controller: scannerController,
                   onDetect: onBarcodeDetected,
                 ),
-                if (!isScanning)
-                  Container(color: Colors.black54, child: const Center(child: CircularProgressIndicator())),
+
+                // ✅ LASER SCANNER EFFECT - Red laser line
+                if (_isLaserOn)
+                  AnimatedBuilder(
+                    animation: _laserAnimation,
+                    builder: (context, child) {
+                      return CustomPaint(
+                        painter: LaserScannerPainter(
+                          laserPosition: _laserAnimation.value,
+                        ),
+                        size: Size.infinite,
+                      );
+                    },
+                  ),
+
+                // Corner indicators
+                _buildCornerIndicators(),
+
+                // Looking up overlay
                 if (isLookingUp)
                   Positioned(
                     bottom: 20,
@@ -698,23 +831,23 @@ class _ScanningPageState extends State<ScanningPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(widget.sheetName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    Text('${scannedItems.length}/50', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text('${scannedItems.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 const SizedBox(height: 6),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: scannedItems.length / 50,
+                    value: scannedItems.length / 999,
                     minHeight: 4,
                     backgroundColor: Colors.grey[200],
-                    color: isLimitReached ? Colors.red : Colors.green,
+                    color: Colors.green,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   scannedItems.isEmpty
-                      ? "Scan des articles (1 à 50)"
+                      ? "Scannez le code-barres"
                       : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
                   style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
@@ -743,5 +876,186 @@ class _ScanningPageState extends State<ScanningPage> {
         child: const Icon(Icons.flash_on, size: 20),
       ),
     );
+  }
+
+  Widget _buildCornerIndicators() {
+    return IgnorePointer(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: Colors.red.withOpacity(0.5),
+            width: 2,
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Top-left corner
+            Positioned(
+              top: 10,
+              left: 10,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: Colors.red, width: 3),
+                    left: BorderSide(color: Colors.red, width: 3),
+                  ),
+                ),
+              ),
+            ),
+            // Top-right corner
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: Colors.red, width: 3),
+                    right: BorderSide(color: Colors.red, width: 3),
+                  ),
+                ),
+              ),
+            ),
+            // Bottom-left corner
+            Positioned(
+              bottom: 10,
+              left: 10,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.red, width: 3),
+                    left: BorderSide(color: Colors.red, width: 3),
+                  ),
+                ),
+              ),
+            ),
+            // Bottom-right corner
+            Positioned(
+              bottom: 10,
+              right: 10,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.red, width: 3),
+                    right: BorderSide(color: Colors.red, width: 3),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ✅ LASER SCANNER PAINTER - Thin laser line that moves up and down
+class LaserScannerPainter extends CustomPainter {
+  final double laserPosition;
+
+  LaserScannerPainter({required this.laserPosition});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerY = size.height * laserPosition;
+    final startX = size.width * 0.05;
+    final endX = size.width * 0.95;
+
+    // 1. Laser line (thin, bright red)
+    final laserPaint = Paint()
+      ..color = Colors.red.withOpacity(0.9)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+
+    canvas.drawLine(
+      Offset(startX, centerY),
+      Offset(endX, centerY),
+      laserPaint,
+    );
+
+    // 2. Glow effect (wider, dimmer)
+    final glowPaint = Paint()
+      ..color = Colors.red.withOpacity(0.2)
+      ..strokeWidth = 12
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    canvas.drawLine(
+      Offset(startX, centerY),
+      Offset(endX, centerY),
+      glowPaint,
+    );
+
+    // 3. Laser dot at the ends
+    final dotPaint = Paint()
+      ..color = Colors.red.withOpacity(0.9)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(Offset(startX, centerY), 4, dotPaint);
+    canvas.drawCircle(Offset(endX, centerY), 4, dotPaint);
+
+    // 4. Scan bracket indicators (left and right)
+    final bracketPaint = Paint()
+      ..color = Colors.red.withOpacity(0.6)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    // Left bracket
+    canvas.drawLine(
+      Offset(startX - 10, centerY - 20),
+      Offset(startX - 10, centerY - 10),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(startX - 10, centerY + 20),
+      Offset(startX - 10, centerY + 10),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(startX - 10, centerY - 20),
+      Offset(startX - 5, centerY - 20),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(startX - 10, centerY + 20),
+      Offset(startX - 5, centerY + 20),
+      bracketPaint,
+    );
+
+    // Right bracket
+    canvas.drawLine(
+      Offset(endX + 10, centerY - 20),
+      Offset(endX + 10, centerY - 10),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(endX + 10, centerY + 20),
+      Offset(endX + 10, centerY + 10),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(endX + 10, centerY - 20),
+      Offset(endX + 5, centerY - 20),
+      bracketPaint,
+    );
+    canvas.drawLine(
+      Offset(endX + 10, centerY + 20),
+      Offset(endX + 5, centerY + 20),
+      bracketPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(LaserScannerPainter oldDelegate) {
+    return oldDelegate.laserPosition != laserPosition;
   }
 }

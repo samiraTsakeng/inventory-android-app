@@ -35,6 +35,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       final data = await FeuilleService.getFeuilles(widget.adjustmentId);
 
       if (data is List && data.isNotEmpty) {
+        // Sort: progress first, then new, then confirm, then cancel
         data.sort((a, b) {
           const order = {'progress': 0, 'new': 1, 'confirm': 2, 'cancel': 3};
           final orderA = order[a['state']] ?? 4;
@@ -295,10 +296,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             final isNew = sheetState == 'new';
             final isConfirm = sheetState == 'confirm';
 
-            bool previousSheetActive = false;
-            if (index > 0 && feuilles[index - 1]["state"] != 'confirm') {
-              previousSheetActive = true;
-            }
+            // ✅ FIXED: REMOVED the dependency - each sheet can be started independently
+            // Teams can start counting at the same time - that's the whole point of having 2 teams!
 
             final cardWidth = (MediaQuery.of(context).size.width - 18) / 2;
 
@@ -387,8 +386,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          // Action buttons - Only "Commencer" and "Scanner" (NO "Valider")
-                          if (isNew && !previousSheetActive)
+                          // ✅ FIXED: "Commencer" button is ALWAYS shown for NEW sheets (no dependency)
+                          if (isNew)
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(

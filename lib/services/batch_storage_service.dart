@@ -33,6 +33,15 @@ class BatchStorageService {
     await prefs.setString(_batchesKey, jsonEncode(batchesJson));
   }
 
+  // Remove multiple batches
+  static Future<void> removeBatches(List<String> batchIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    final batches = await getBatches();
+    batches.removeWhere((b) => batchIds.contains(b.id));
+    final batchesJson = batches.map((b) => b.toJson()).toList();
+    await prefs.setString(_batchesKey, jsonEncode(batchesJson));
+  }
+
   // Update batch sync status
   static Future<void> markBatchAsSynced(String batchId) async {
     final prefs = await SharedPreferences.getInstance();

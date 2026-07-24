@@ -49,6 +49,13 @@ try {
   console.error('❌ counting.routes failed:', e.message);
 }
 
+try {
+    app.use('/consolidation', require('./routes/consolidation.routes'));
+    console.log('consolidation.routes loaded');
+ } catch(e) {
+ console.error('consolidation.routes failed:', e.message);
+}
+
 const PORT = process.env.PORT || 3001;
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);

@@ -6,22 +6,44 @@ import 'screens/choice_page.dart';
 import 'screens/feuille_list_page.dart';
 import 'screens/scanning_page.dart';
 import 'screens/scanned_items_list_page.dart';
+import 'screens/batch_list_page.dart';
+import 'screens/consolidation_list_page.dart';
+import 'services/auth_service.dart';
 
-void main() {
-  runApp(MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Try auto-login on app start
+  bool autoLoginSuccess = false;
+  try {
+    autoLoginSuccess = await AuthService.autoLogin();
+    print("Auto-login result: $autoLoginSuccess");
+  } catch (e) {
+    print("Auto-login error: $e");
+  }
+
+  // If auto-login fails, clear session to force login
+  if (!autoLoginSuccess) {
+    await AuthService.clearSession();
+  }
+
+  runApp(MyApp(initialRoute: autoLoginSuccess ? '/adjustment-entry' : '/'));
 }
 
 class MyApp extends StatelessWidget {
+  final String initialRoute;
+  const MyApp({Key? key, this.initialRoute = '/'}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Wise inventory',
+      title: 'Wise Inventory',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         fontFamily: 'Roboto',
       ),
-      initialRoute: '/',
+      initialRoute: initialRoute,
       routes: {
         '/': (context) => LoginPage(),
         '/adjustment-entry': (context) => AdjustmentEntryPage(),
@@ -38,6 +60,12 @@ class MyApp extends StatelessWidget {
           final adjustmentId = settings.arguments as int;
           return MaterialPageRoute(
             builder: (context) => FeuilleListPage(adjustmentId: adjustmentId),
+          );
+        }
+        if (settings.name == '/consolidation-list') {
+          final adjustmentId = settings.arguments as int;
+          return MaterialPageRoute(
+            builder: (context) => ConsolidationListPage(adjustmentId: adjustmentId),
           );
         }
         return null;

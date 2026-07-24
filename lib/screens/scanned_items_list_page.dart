@@ -25,6 +25,8 @@ class ScannedItemsListPage extends StatefulWidget {
 
 class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   late List<ScannedItem> _items;
+  List<ScannedItem> _filteredItems = [];
+  String _searchQuery = '';
   bool _isSending = false;
   final TextEditingController _quantityController = TextEditingController();
   int _editingIndex = -1;
@@ -33,13 +35,30 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   void initState() {
     super.initState();
     _items = List.from(widget.items);
+    _filteredItems = List.from(_items);
+  }
+
+  void _filterItems(String query) {
+    setState(() {
+      _searchQuery = query.toLowerCase();
+      if (query.isEmpty) {
+        _filteredItems = List.from(_items);
+      } else {
+        _filteredItems = _items.where((item) =>
+          item.productName.toLowerCase().contains(_searchQuery) ||
+          item.barcode.contains(_searchQuery)
+        ).toList();
+      }
+    });
   }
 
   void _saveItemQuantity(int index) {
     final newQuantity = int.tryParse(_quantityController.text);
     if (newQuantity != null && newQuantity > 0) {
+      final realIndex = _items.indexOf(_filteredItems[index]);
       setState(() {
-        _items[index].quantity = newQuantity;
+        _items[realIndex].quantity = newQuantity;
+        _filteredItems[index].quantity = newQuantity;
         _editingIndex = -1;
         _quantityController.clear();
       });
@@ -58,7 +77,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   void _startEditing(int index) {
     setState(() {
       _editingIndex = index;
-      _quantityController.text = _items[index].quantity.toString();
+      _quantityController.text = _filteredItems[index].quantity.toString();
     });
   }
 
@@ -109,6 +128,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         await LocalStorageService.clearScannedItems(widget.countingSheetId);
         setState(() {
           _items.clear();
+          _filteredItems.clear();
         });
         widget.onItemsUpdated([]);
 
@@ -177,6 +197,33 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       )
           : Column(
         children: [
+          // Search bar
+          Container(
+            margin: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: TextField(
+              onChanged: (value) {
+                _filterItems(value);
+              },
+              decoration: const InputDecoration(
+                hintText: 'Rechercher un article...',
+                border: InputBorder.none,
+                icon: Icon(Icons.search),
+              ),
+            ),
+          ),
+
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -206,9 +253,9 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
           ),
           Expanded(
             child: ListView.builder(
-              itemCount: _items.length,
+              itemCount: _filteredItems.length,
               itemBuilder: (context, index) {
-                final item = _items[index];
+                final item = _filteredItems[index];
                 final isEditing = _editingIndex == index;
                 final isSerial = item.tracking == 'serial';
                 final trackingText = _getTrackingText(item.tracking);
@@ -325,8 +372,10 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                             IconButton(
                               icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
                               onPressed: () {
+                                final realIndex = _items.indexOf(item);
                                 setState(() {
-                                  _items.removeAt(index);
+                                  _items.removeAt(realIndex);
+                                  _filteredItems.removeAt(index);
                                   if (_editingIndex == index) {
                                     _editingIndex = -1;
                                     _quantityController.clear();
