@@ -12,7 +12,7 @@ class ConsolidationListPage extends StatefulWidget {
 }
 
 class _ConsolidationListPageState extends State<ConsolidationListPage> {
-  List consolidationSheets = [];
+  List<dynamic> consolidationSheets = [];
   bool isLoading = true;
   String? errorMessage;
 
@@ -29,12 +29,27 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
     });
 
     try {
+      print("📥 Fetching consolidation sheets for adjustment: ${widget.adjustmentId}");
       final data = await ConsolidationService.getConsolidationSheets(widget.adjustmentId);
-      setState(() {
-        consolidationSheets = data;
-        isLoading = false;
-      });
+      print("📥 Data received: $data");
+
+      // ✅ Ensure data is a list
+      if (data is List) {
+        setState(() {
+          consolidationSheets = data;
+          isLoading = false;
+        });
+        print("✅ Loaded ${consolidationSheets.length} consolidation sheets");
+      } else {
+        print("❌ Data is not a list: ${data.runtimeType}");
+        setState(() {
+          consolidationSheets = [];
+          isLoading = false;
+          errorMessage = "Format de données invalide";
+        });
+      }
     } catch (e) {
+      print("❌ Error fetching consolidation sheets: $e");
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
@@ -45,7 +60,22 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
   String getName(dynamic field) {
     if (field == null) return "";
     if (field is List) return field.length > 1 ? field[1] : field[0].toString();
+    if (field is Map && field.containsKey('name')) return field['name'];
     return field.toString();
+  }
+
+  int getSheetId(dynamic sheet) {
+    if (sheet is Map && sheet.containsKey('id')) {
+      return sheet['id'] is int ? sheet['id'] : int.tryParse(sheet['id'].toString()) ?? 0;
+    }
+    return 0;
+  }
+
+  String getSheetState(dynamic sheet) {
+    if (sheet is Map && sheet.containsKey('state')) {
+      return sheet['state']?.toString() ?? 'new';
+    }
+    return 'new';
   }
 
   Color getStatusColor(String? state) {
@@ -68,24 +98,13 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
     }
   }
 
-  int getTotalLines(Map sheet) {
+  int getTotalLines(Map<String, dynamic> sheet) {
     final countingLines = sheet['counting_line_ids'] as List? ?? [];
     final contradictoryLines = sheet['counting_contradictory_line_ids'] as List? ?? [];
     return countingLines.length + contradictoryLines.length;
   }
 
-  int getVerifiedLines(Map sheet) {
-    final contradictoryLines = sheet['counting_contradictory_line_ids'] as List? ?? [];
-    int verified = 0;
-    for (final line in contradictoryLines) {
-      if (line['verified_qty'] != null && line['verified_qty'] > 0) {
-        verified++;
-      }
-    }
-    return verified;
-  }
-
-  bool hasContradictoryLines(Map sheet) {
+  bool hasContradictoryLines(Map<String, dynamic> sheet) {
     final contradictoryLines = sheet['counting_contradictory_line_ids'] as List? ?? [];
     return contradictoryLines.isNotEmpty;
   }
@@ -151,8 +170,9 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
             Text("Aucune consolidation trouvée", style: TextStyle(fontSize: 12)),
             SizedBox(height: 4),
             Text(
-              "Les consolidations sont créées automatiquement",
+              "Les consolidations sont créées après validation des comptages",
               style: TextStyle(fontSize: 11, color: Colors.grey),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -162,28 +182,32 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
         child: ListView.builder(
           itemCount: consolidationSheets.length,
           itemBuilder: (context, index) {
-            final sheet = consolidationSheets[index];
+            final sheet = consolidationSheets[index] as Map<String, dynamic>;
+            final sheetId = getSheetId(sheet);
+            final sheetName = sheet['name'] ?? "Consolidation ${sheetId}";
             final zoneName = getName(sheet['zone_id']);
-            final sheetName = sheet['name'] ?? "Consolidation ${sheet['id']}";
-            final state = sheet['state'];
+            final state = getSheetState(sheet);
             final totalLines = getTotalLines(sheet);
-            final verifiedLines = getVerifiedLines(sheet);
             final hasContradictory = hasContradictoryLines(sheet);
             final isProgress = state == 'progress' || state == 'new';
             final isConfirm = state == 'confirm';
 
+            print("📊 Building card: $sheetName (ID: $sheetId, State: $state)");
+
             return GestureDetector(
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ConsolidationDetailPage(
-                      sheetId: sheet['id'],
-                      sheetName: sheetName,
-                      zoneName: zoneName,
+                if (sheetId > 0) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ConsolidationDetailPage(
+                        sheetId: sheetId,
+                        sheetName: sheetName,
+                        zoneName: zoneName,
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }
               },
               child: Card(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -262,13 +286,10 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 if (hasContradictory && isProgress)
-                                  Text(
-                                    "$verifiedLines/$totalLines vérifiées",
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.orange,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                  const Icon(
+                                    Icons.warning_amber,
+                                    size: 14,
+                                    color: Colors.orange,
                                   ),
                                 if (isConfirm)
                                   const Icon(
@@ -276,12 +297,14 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
                                     size: 14,
                                     color: Colors.green,
                                   ),
-                                if (hasContradictory && isProgress)
-                                  const Icon(
-                                    Icons.warning_amber,
-                                    size: 14,
-                                    color: Colors.orange,
+                                const SizedBox(width: 4),
+                                Text(
+                                  "$totalLines lignes",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey[500],
                                   ),
+                                ),
                               ],
                             ),
                           ],

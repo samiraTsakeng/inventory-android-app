@@ -6,47 +6,60 @@ class ConsolidationService {
   // Get all consolidation sheets for an adjustment
   static Future<List<dynamic>> getConsolidationSheets(int adjustmentId) async {
     try {
+      print("📥 Calling API: ${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId");
+
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId'),
       );
 
-      print("Consolidation sheets status: ${response.statusCode}");
-      print("Consolidation sheets body: ${response.body}");
+      print("📥 Response status: ${response.statusCode}");
+      print("📥 Response body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print("📥 Decoded data type: ${data.runtimeType}");
+
         if (data is List) {
+          print("✅ Data is a list with ${data.length} items");
           return data;
-        } else if (data is Map && data['success'] == true && data['sheets'] != null) {
-          return data['sheets'];
+        } else if (data is Map && data.containsKey('success') && data['success'] == true) {
+          if (data.containsKey('sheets') && data['sheets'] is List) {
+            print("✅ Found sheets in response: ${data['sheets'].length}");
+            return data['sheets'];
+          }
+          return [];
         }
         return [];
       } else {
-        throw Exception('Failed to fetch consolidation sheets');
+        print("❌ Server returned error: ${response.statusCode}");
+        throw Exception('Failed to fetch consolidation sheets: ${response.statusCode}');
       }
     } catch (e) {
-      print("Get consolidation sheets error: $e");
-      return [];
+      print("❌ Get consolidation sheets error: $e");
+      rethrow;
     }
   }
 
   // Get consolidation sheet details with lines
   static Future<Map<String, dynamic>?> getConsolidationSheetDetail(int sheetId) async {
     try {
+      print("📥 Getting detail for sheet: $sheetId");
+
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheet/$sheetId'),
       );
 
-      print("Consolidation sheet detail status: ${response.statusCode}");
-      print("Consolidation sheet detail body: ${response.body}");
+      print("📥 Detail status: ${response.statusCode}");
+      print("📥 Detail body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print("✅ Detail data loaded successfully");
         return data;
       }
       return null;
     } catch (e) {
-      print("Get consolidation sheet detail error: $e");
+      print("❌ Get consolidation sheet detail error: $e");
       return null;
     }
   }
@@ -63,8 +76,8 @@ class ConsolidationService {
         }),
       );
 
-      print("Update contradictory line status: ${response.statusCode}");
-      print("Update contradictory line body: ${response.body}");
+      print("📥 Update contradictory line status: ${response.statusCode}");
+      print("📥 Update contradictory line body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -72,7 +85,7 @@ class ConsolidationService {
       }
       return false;
     } catch (e) {
-      print("Update contradictory line error: $e");
+      print("❌ Update contradictory line error: $e");
       return false;
     }
   }
@@ -88,8 +101,8 @@ class ConsolidationService {
         }),
       );
 
-      print("Validate consolidation sheet status: ${response.statusCode}");
-      print("Validate consolidation sheet body: ${response.body}");
+      print("📥 Validate consolidation sheet status: ${response.statusCode}");
+      print("📥 Validate consolidation sheet body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -97,7 +110,7 @@ class ConsolidationService {
       }
       return false;
     } catch (e) {
-      print("Validate consolidation sheet error: $e");
+      print("❌ Validate consolidation sheet error: $e");
       return false;
     }
   }

@@ -24,12 +24,6 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
   String? errorMessage;
   Map<int, TextEditingController> _quantityControllers = {};
 
-  // Data for the two counting sheets
-  List<dynamic> _countingSheet1Lines = [];
-  List<dynamic> _countingSheet2Lines = [];
-  List<dynamic> _contradictoryLines = [];
-  List<dynamic> _correspondingLines = [];
-
   @override
   void initState() {
     super.initState();
@@ -48,9 +42,6 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
         setState(() {
           sheetData = data;
           isLoading = false;
-
-          // Process the lines
-          _processLines(data);
 
           // Initialize controllers for contradictory lines
           final contradictoryLines = data['counting_contradictory_line_ids'] as List? ?? [];
@@ -77,24 +68,10 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     }
   }
 
-  void _processLines(Map<String, dynamic> data) {
-    // Get the two counting sheets from the consolidation
-    // The consolidation sheet has references to the original counting sheets
-    // We need to fetch the lines from both counting sheets
-
-    // For now, we'll use the data from the API
-    // The API should return the lines from both sheets
-    // You may need to fetch this data from the server
-
-    _countingSheet1Lines = data['counting_sheet_1_lines'] as List? ?? [];
-    _countingSheet2Lines = data['counting_sheet_2_lines'] as List? ?? [];
-    _contradictoryLines = data['counting_contradictory_line_ids'] as List? ?? [];
-    _correspondingLines = data['counting_line_ids'] as List? ?? [];
-  }
-
   String getName(dynamic field) {
     if (field == null) return "";
     if (field is List) return field.length > 1 ? field[1] : field[0].toString();
+    if (field is Map && field.containsKey('name')) return field['name'];
     return field.toString();
   }
 
@@ -267,6 +244,8 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     final isConfirm = state == 'confirm';
     final isProgress = state == 'progress' || state == 'new';
     final contradictoryLines = sheetData!['counting_contradictory_line_ids'] as List? ?? [];
+    final countingLines = sheetData!['counting_line_ids'] as List? ?? [];
+
     final allVerified = contradictoryLines.every(
             (line) => line['verified_qty'] != null && line['verified_qty'] > 0
     );
@@ -320,7 +299,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                     ),
                     const Spacer(),
                     Text(
-                      "Total: ${sheetData!['counting_line_ids']?.length ?? 0 + contradictoryLines.length} lignes",
+                      "Total: ${countingLines.length + contradictoryLines.length} lignes",
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
@@ -383,7 +362,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
               child: Column(
                 children: [
                   // Corresponding lines (both teams agree)
-                  if (sheetData!['counting_line_ids'] != null && (sheetData!['counting_line_ids'] as List).isNotEmpty) ...[
+                  if (countingLines.isNotEmpty) ...[
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -396,7 +375,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                           Icon(Icons.check_circle, size: 16, color: Colors.green[700]),
                           const SizedBox(width: 8),
                           Text(
-                            "✅ Lignes correspondantes (${(sheetData!['counting_line_ids'] as List).length})",
+                            "✅ Lignes correspondantes (${countingLines.length})",
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -407,17 +386,17 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ...(sheetData!['counting_line_ids'] as List).map((line) => Card(
+                    ...countingLines.map((line) => Card(
                       margin: const EdgeInsets.only(bottom: 4),
                       child: ListTile(
                         dense: true,
                         leading: const Icon(Icons.check, size: 16, color: Colors.green),
                         title: Text(
-                          getName(line['lot_id']) ?? 'N/A',
+                          getName(line['lot_id']),
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                         ),
                         subtitle: Text(
-                          getName(line['product_id']) ?? 'N/A',
+                          getName(line['product_id']),
                           style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                         ),
                         trailing: Text(
@@ -506,14 +485,14 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          getName(line['lot_id']) ?? 'N/A',
+                                          getName(line['lot_id']),
                                           style: const TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                         Text(
-                                          getName(line['product_id']) ?? 'N/A',
+                                          getName(line['product_id']),
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: Colors.grey[600],
@@ -527,7 +506,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              // Team comparison
+                              // Team comparison - NOW SHOWS ACTUAL QUANTITIES
                               Row(
                                 children: [
                                   // Team 1

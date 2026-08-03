@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
+import 'local_storage_service.dart';
 
 class AuthService {
   static const String _sessionHostKey = 'session_host';
@@ -60,7 +61,10 @@ class AuthService {
       final data = jsonDecode(response.body);
 
       if (data["success"] == true) {
-        // Save ALL session data including password for auto-login
+        // ✅ Generate a unique session ID based on host + email
+        final sessionId = '${host}_${email}_${DateTime.now().millisecondsSinceEpoch}';
+
+        // ✅ Save session
         await _saveSession(
           host: host,
           db: dbName,
@@ -68,7 +72,12 @@ class AuthService {
           password: password,
           uid: data["uid"],
           name: data["name"],
+          sessionId: sessionId,
         );
+
+        // ✅ Set session ID in local storage for cache
+        await LocalStorageService.setSessionId(sessionId);
+
         return true;
       }
 
@@ -170,6 +179,7 @@ class AuthService {
     required String password,
     required int uid,
     required String name,
+    required String sessionId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sessionHostKey, host);
@@ -219,6 +229,7 @@ class AuthService {
     return null;
   }
 
+  // ✅ Clear session (called on logout)
   static Future<void> clearSession() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionHostKey);
@@ -228,6 +239,9 @@ class AuthService {
     await prefs.remove(_sessionUidKey);
     await prefs.remove(_sessionNameKey);
     await prefs.remove('is_logged_in');
+
+    // ✅ Clear all local data for this session
+    await LocalStorageService.clearAllSessionData();
   }
 
   static Future<bool> secondAuthentication(String password) async {

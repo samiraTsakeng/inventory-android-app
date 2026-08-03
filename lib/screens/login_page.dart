@@ -182,10 +182,21 @@ class _LoginPageState extends State<LoginPage> {
                 if (_isCaching)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      "📥 Chargement des produits pour le mode hors ligne...",
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                      "Chargement des produits pour le mode hors ligne...",
                       style: TextStyle(fontSize: 12, color: Colors.blue),
                     ),
+                    ],
+                  ),
                   ),
 
                 SizedBox(
