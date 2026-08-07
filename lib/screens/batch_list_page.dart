@@ -107,7 +107,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
               if (hasSynced) ...[
                 const SizedBox(height: 8),
                 const Text(
-                  "⚠️ Certains lots sont déjà synchronisés. Ils seront également supprimés.",
+                  "Certains lots sont déjà synchronisés. Ils seront également supprimés.",
                   style: TextStyle(fontSize: 12, color: Colors.orange),
                 ),
               ],
@@ -147,7 +147,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ $deletedCount lot(s) supprimé(s) avec succès'),
+          content: Text('$deletedCount lot(s) supprimé(s) avec succès'),
           backgroundColor: Colors.green,
         ),
       );
@@ -171,7 +171,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
               if (batch.isSynced) ...[
                 const SizedBox(height: 8),
                 const Text(
-                  "⚠️ Ce lot est déjà synchronisé. Il sera également supprimé.",
+                  "Ce lot est déjà synchronisé. Il sera également supprimé.",
                   style: TextStyle(fontSize: 12, color: Colors.orange),
                 ),
               ],
@@ -202,7 +202,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Lot "${batch.name}" supprimé avec succès'),
+          content: Text('Lot "${batch.name}" supprimé avec succès'),
           backgroundColor: Colors.green,
         ),
       );
@@ -225,7 +225,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✅ Lot synchronisé avec succès !'),
+              content: Text('Lot synchronisé avec succès !'),
               backgroundColor: Colors.green,
             ),
           );
@@ -238,7 +238,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Erreur: ${e.toString()}'),
+            content: Text('Erreur: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -292,7 +292,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ $successCount lots synchronisés, $failCount échoués'),
+          content: Text(' $successCount lots synchronisés, $failCount échoués'),
           backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
         ),
       );

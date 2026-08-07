@@ -4,7 +4,7 @@ import 'api_config.dart';
 import 'local_storage_service.dart';
 
 class ProductCacheService {
-  static const int _batchSize = 200; // Fetch 100 products at a time
+  static const int _batchSize = 9000; // Fetch 100 products at a time
 
   // ✅ Fetch and cache ALL products from Odoo
   static Future<int> cacheAllProducts() async {

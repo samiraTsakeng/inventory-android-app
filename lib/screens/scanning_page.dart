@@ -41,29 +41,14 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   bool isLoading = true;
   bool _isMounted = false;
 
-  // Laser animation
-  late AnimationController _laserAnimationController;
-  late Animation<double> _laserAnimation;
-  bool _isLaserOn = true;
+  // For scan flash effect
+  bool _showScanZone = true;
 
   @override
   void initState() {
     super.initState();
     _isMounted = true;
     _loadSavedItems();
-
-    // Laser animation - constantly scanning
-    _laserAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-
-    _laserAnimation = Tween<double>(begin: 0.1, end: 0.9).animate(
-      CurvedAnimation(
-        parent: _laserAnimationController,
-        curve: Curves.easeInOut,
-      ),
-    );
   }
 
   Future<void> _loadSavedItems() async {
@@ -131,7 +116,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   @override
   void dispose() {
     _isMounted = false;
-    _laserAnimationController.dispose();
     scannerController.dispose();
     super.dispose();
   }
@@ -203,7 +187,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
       if (existingIndex != -1) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('⚠️ Cet article est déjà dans la liste'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('Cet article est déjà dans la liste'), backgroundColor: Colors.orange),
         );
         setState(() {
           isLookingUp = false;
@@ -215,7 +199,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       final inBatch = await _isInSavedBatches(barcode);
       if (inBatch) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('⚠️ Cet article est déjà dans un lot sauvegardé'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('Cet article est déjà dans un lot sauvegardé'), backgroundColor: Colors.orange),
         );
         setState(() {
           isLookingUp = false;
@@ -260,7 +244,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Ajouté: ${result['name']}'),
+            content: Text('Ajouté: ${result['name']}'),
             backgroundColor: Colors.green,
             duration: const Duration(milliseconds: 800),
           ),
@@ -268,7 +252,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('⚠️ Code-barres non trouvé: $barcode'),
+            content: Text('Code-barres non trouvé: $barcode'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -282,34 +266,30 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     }
   }
 
-  // ✅ LASER SCANNER - Only scans when barcode is detected
+  // ✅ FOCUSED SCANNER - Only scans barcodes in the narrow zone
   void onBarcodeDetected(BarcodeCapture capture) async {
-    // Only scan if laser is active and not already processing
     if (!isScanning || isLookingUp) return;
 
     final barcode = capture.barcodes.first.rawValue;
     if (barcode == null || barcode == lastScannedBarcode) return;
 
-    // ✅ LASER FLASH - quick flash when scanning
+    // ✅ Flash effect - bar blinks
     setState(() {
-      _isLaserOn = false;
+      _showScanZone = false;
       isScanning = false;
       isLookingUp = true;
       lastScannedBarcode = barcode;
     });
 
-    // Flash back on after 200ms
-    Future.delayed(const Duration(milliseconds: 200), () {
+    // Restore the scan zone after flash
+    Future.delayed(const Duration(milliseconds: 150), () {
       if (_isMounted) {
-        setState(() {
-          _isLaserOn = true;
-        });
+        setState(() => _showScanZone = true);
       }
     });
 
     // Check if already in current list
-    final existingIndex = scannedItems.indexWhere((item) =>
-    item.barcode == barcode);
+    final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
     if (existingIndex != -1) {
       setState(() {
         isScanning = true;
@@ -318,7 +298,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('⚠️ Cet article a déjà été scanné!'),
+            content: Text('Cet article a déjà été scanné!'),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 2),
           ),
@@ -337,7 +317,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('⚠️ Cet article est déjà dans un lot sauvegardé'),
+            content: Text('Cet article est déjà dans un lot sauvegardé'),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 2),
           ),
@@ -352,22 +332,16 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     if (_isMounted) {
       setState(() {
         if (result != null && result['id'] != 0 && result['id'] != null) {
-          //product found (either from cache or API)
           String tracking = result['tracking'] ?? 'serial';
           String lotName = result['lot_name'] ?? barcode;
           int lotIdValue = result['lot_id'] ?? 0;
           int productIdValue = result['id'];
 
-          //for lot, ask for quantity
-
           if (tracking == 'lot') {
-            //handle lot product
-
-            _handleLotProduct(
-                result, barcode, tracking, lotName, lotIdValue, productIdValue);
+            _handleLotProduct(result, barcode, tracking, lotName, lotIdValue, productIdValue);
             return;
           }
-          //serial product - add
+
           scannedItems.add(ScannedItem(
             barcode: barcode,
             productName: result['name'] ?? 'Unknown',
@@ -381,23 +355,20 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           isScanning = true;
           isLookingUp = false;
 
-          String source = result['fromCache'] == true ? '💾 (cache)' : '🌐';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Ajouté: ${result['name']}'),
+              content: Text('Ajouté: ${result['name']}'),
               backgroundColor: Colors.green,
               duration: const Duration(milliseconds: 800),
             ),
           );
         } else {
-          //product not found (cache filled and API failed)
           isScanning = true;
           isLookingUp = false;
 
-
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('⚠️ Code-barres non trouvé: $barcode'),
+              content: Text('Code-barres non trouvé: $barcode'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
@@ -437,7 +408,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Ajouté: ${result['name']} - Quantité: $qty'),
+          content: Text('Ajouté: ${result['name']} - Quantité: $qty'),
           backgroundColor: Colors.green,
           duration: const Duration(milliseconds: 800),
         ),
@@ -506,11 +477,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Envoyé avec succès !"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("Envoyé avec succès !"), backgroundColor: Colors.green),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
         );
       }
     }
@@ -539,7 +510,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   }
 
   void navigateToFeuilleList() {
-    // Navigate back to the feuille list page
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
@@ -617,7 +587,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('✅ $batchName sauvegardé (${batch.items.length} articles)'),
+                  content: Text('$batchName sauvegardé (${batch.items.length} articles)'),
                   backgroundColor: Colors.green,
                 ),
               );
@@ -667,7 +637,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
             icon: const Icon(Icons.save, size: 22, color: Colors.white),
             onPressed: _showSaveConfirmation,
           ),
-          // ✅ Added: List icon to navigate to scanned items
           badges.Badge(
             showBadge: scannedItems.isNotEmpty,
             badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10)),
@@ -723,7 +692,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 ],
               ),
             ),
-            // ✅ Added: Feuilles de comptage
             ListTile(
               leading: const Icon(Icons.inventory, color: Colors.blue),
               title: const Text('Feuilles de comptage'),
@@ -780,19 +748,9 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                   onDetect: onBarcodeDetected,
                 ),
 
-                // ✅ LASER SCANNER EFFECT - Red laser line
-                if (_isLaserOn)
-                  AnimatedBuilder(
-                    animation: _laserAnimation,
-                    builder: (context, child) {
-                      return CustomPaint(
-                        painter: LaserScannerPainter(
-                          laserPosition: _laserAnimation.value,
-                        ),
-                        size: Size.infinite,
-                      );
-                    },
-                  ),
+                // ✅ FOCUSED SCANNING ZONE - Narrow bar, only scans what's inside
+                if (_showScanZone)
+                  _buildFocusedScanZone(),
 
                 // Corner indicators
                 _buildCornerIndicators(),
@@ -878,14 +836,167 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     );
   }
 
+  // ✅ FOCUSED SCANNING ZONE - Thin, precise bar like a real barcode scanner
+  Widget _buildFocusedScanZone() {
+    return IgnorePointer(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: Colors.red.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Stack(
+          children: [
+            // ✅ Thin scanning bar (only ~8% of screen height)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                margin: EdgeInsets.symmetric(
+                  vertical: MediaQuery.of(context).size.height * 0.40,
+                ),
+                child: Stack(
+                  children: [
+                    // Main bar - thin red line
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 30),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.red.withOpacity(0.3),
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      height: 3,
+                      child: Stack(
+                        children: [
+                          // Center bright line
+                          Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 40),
+                            height: 2,
+                            color: Colors.red.withOpacity(0.8),
+                          ),
+                          // Scanning dots animation (moving left to right)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            bottom: 0,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 20),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _buildDot(),
+                                  _buildDot(),
+                                  _buildDot(),
+                                  _buildDot(),
+                                  _buildDot(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Left and right markers
+                    Positioned(
+                      left: 10,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            border: Border(
+                              right: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                              top: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                              bottom: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 10,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            border: Border(
+                              left: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                              top: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                              bottom: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // "Scan here" label
+                    Positioned(
+                      bottom: 20,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'SCANNEZ ICI',
+                            style: TextStyle(
+                              color: Colors.red.withOpacity(0.5),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDot() {
+    return Container(
+      width: 3,
+      height: 3,
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.5),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+
   Widget _buildCornerIndicators() {
     return IgnorePointer(
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: Colors.red.withOpacity(0.5),
-            width: 2,
+            color: Colors.red.withOpacity(0.2),
+            width: 1,
           ),
         ),
         child: Stack(
@@ -899,8 +1010,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Colors.red, width: 3),
-                    left: BorderSide(color: Colors.red, width: 3),
+                    top: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    left: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),
@@ -914,8 +1025,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Colors.red, width: 3),
-                    right: BorderSide(color: Colors.red, width: 3),
+                    top: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    right: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),
@@ -929,8 +1040,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    bottom: BorderSide(color: Colors.red, width: 3),
-                    left: BorderSide(color: Colors.red, width: 3),
+                    bottom: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    left: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),
@@ -944,8 +1055,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    bottom: BorderSide(color: Colors.red, width: 3),
-                    right: BorderSide(color: Colors.red, width: 3),
+                    bottom: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    right: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),
@@ -954,108 +1065,5 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         ),
       ),
     );
-  }
-}
-
-// ✅ LASER SCANNER PAINTER - Thin laser line that moves up and down
-class LaserScannerPainter extends CustomPainter {
-  final double laserPosition;
-
-  LaserScannerPainter({required this.laserPosition});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centerY = size.height * laserPosition;
-    final startX = size.width * 0.05;
-    final endX = size.width * 0.95;
-
-    // 1. Laser line (thin, bright red)
-    final laserPaint = Paint()
-      ..color = Colors.red.withOpacity(0.9)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-
-    canvas.drawLine(
-      Offset(startX, centerY),
-      Offset(endX, centerY),
-      laserPaint,
-    );
-
-    // 2. Glow effect (wider, dimmer)
-    final glowPaint = Paint()
-      ..color = Colors.red.withOpacity(0.2)
-      ..strokeWidth = 12
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-
-    canvas.drawLine(
-      Offset(startX, centerY),
-      Offset(endX, centerY),
-      glowPaint,
-    );
-
-    // 3. Laser dot at the ends
-    final dotPaint = Paint()
-      ..color = Colors.red.withOpacity(0.9)
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(Offset(startX, centerY), 4, dotPaint);
-    canvas.drawCircle(Offset(endX, centerY), 4, dotPaint);
-
-    // 4. Scan bracket indicators (left and right)
-    final bracketPaint = Paint()
-      ..color = Colors.red.withOpacity(0.6)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    // Left bracket
-    canvas.drawLine(
-      Offset(startX - 10, centerY - 20),
-      Offset(startX - 10, centerY - 10),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(startX - 10, centerY + 20),
-      Offset(startX - 10, centerY + 10),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(startX - 10, centerY - 20),
-      Offset(startX - 5, centerY - 20),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(startX - 10, centerY + 20),
-      Offset(startX - 5, centerY + 20),
-      bracketPaint,
-    );
-
-    // Right bracket
-    canvas.drawLine(
-      Offset(endX + 10, centerY - 20),
-      Offset(endX + 10, centerY - 10),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(endX + 10, centerY + 20),
-      Offset(endX + 10, centerY + 10),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(endX + 10, centerY - 20),
-      Offset(endX + 5, centerY - 20),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(endX + 10, centerY + 20),
-      Offset(endX + 5, centerY + 20),
-      bracketPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(LaserScannerPainter oldDelegate) {
-    return oldDelegate.laserPosition != laserPosition;
   }
 }

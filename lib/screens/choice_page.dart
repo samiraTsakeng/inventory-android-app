@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'consolidation_list_page.dart';
+import 'consolidation_zones_page.dart';
+import 'adjustment_action_page.dart';
+
 class ChoicePage extends StatelessWidget {
   final int? adjustmentId;
 
@@ -7,11 +10,9 @@ class ChoicePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Get adjustmentId from arguments if not provided directly
     final adjId = ModalRoute.of(context)?.settings.arguments as int? ?? adjustmentId;
 
     if (adjId == null) {
-      // If no adjustment ID, go back
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.pop(context);
       });
@@ -56,7 +57,6 @@ class ChoicePage extends StatelessWidget {
               icon: Icons.qr_code_scanner,
               color: Colors.blue,
               onTap: () {
-                // Navigate to feuilles list with adjustment ID
                 Navigator.pushNamed(
                   context,
                   '/feuilles-list',
@@ -65,19 +65,21 @@ class ChoicePage extends StatelessWidget {
               },
             ),
             const SizedBox(height: 20),
-            // Consolidation Sheet Card (disabled for now)
+
+            // ✅ NEW: Consolidation Management Card (combines everything)
             _buildChoiceCard(
               context: context,
-              title: "Feuille de consolidation",
-              subtitle: "Consolider les comptages",
+              title: "Gestion des consolidations",
+              subtitle: "Consolider les zones et appliquer au stock",
               icon: Icons.merge_type,
               color: Colors.purple,
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ConsolidationListPage(
+                    builder: (context) => AdjustmentActionPage(
                       adjustmentId: adjId,
+                      adjustmentName: 'Ajustement $adjId',
                     ),
                   ),
                 );

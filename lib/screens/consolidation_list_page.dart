@@ -29,9 +29,9 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
     });
 
     try {
-      print("📥 Fetching consolidation sheets for adjustment: ${widget.adjustmentId}");
+      print("Fetching consolidation sheets for adjustment: ${widget.adjustmentId}");
       final data = await ConsolidationService.getConsolidationSheets(widget.adjustmentId);
-      print("📥 Data received: $data");
+      print("Data received: $data");
 
       // ✅ Ensure data is a list
       if (data is List) {
@@ -39,9 +39,9 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
           consolidationSheets = data;
           isLoading = false;
         });
-        print("✅ Loaded ${consolidationSheets.length} consolidation sheets");
+        print("Loaded ${consolidationSheets.length} consolidation sheets");
       } else {
-        print("❌ Data is not a list: ${data.runtimeType}");
+        print("Data is not a list: ${data.runtimeType}");
         setState(() {
           consolidationSheets = [];
           isLoading = false;
@@ -49,7 +49,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
         });
       }
     } catch (e) {
-      print("❌ Error fetching consolidation sheets: $e");
+      print("Error fetching consolidation sheets: $e");
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
@@ -192,7 +192,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
             final isProgress = state == 'progress' || state == 'new';
             final isConfirm = state == 'confirm';
 
-            print("📊 Building card: $sheetName (ID: $sheetId, State: $state)");
+            print("Building card: $sheetName (ID: $sheetId, State: $state)");
 
             return GestureDetector(
               onTap: () {

@@ -133,12 +133,12 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         widget.onItemsUpdated([]);
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Envoyé avec succès !'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Envoyé avec succès !'), backgroundColor: Colors.green),
         );
         Navigator.pop(context, true);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
         );
       }
     } catch (e) {

@@ -119,7 +119,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Quantité vérifiée sauvegardée'),
+          content: Text(' Quantité vérifiée sauvegardée'),
           backgroundColor: Colors.green,
         ),
       );
@@ -127,7 +127,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('❌ Erreur lors de la sauvegarde'),
+          content: Text(' Erreur lors de la sauvegarde'),
           backgroundColor: Colors.red,
         ),
       );
@@ -170,7 +170,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Consolidation validée avec succès !'),
+            content: Text(' Consolidation validée avec succès !'),
             backgroundColor: Colors.green,
           ),
         );
@@ -178,7 +178,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('❌ Erreur lors de la validation'),
+            content: Text(' Erreur lors de la validation'),
             backgroundColor: Colors.red,
           ),
         );
@@ -318,7 +318,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                         ),
                         child: Center(
                           child: Text(
-                            "👤 Équipe 1",
+                            " Équipe 1",
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
@@ -340,7 +340,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                         ),
                         child: Center(
                           child: Text(
-                            "👤 Équipe 2",
+                            " Équipe 2",
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
@@ -375,7 +375,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                           Icon(Icons.check_circle, size: 16, color: Colors.green[700]),
                           const SizedBox(width: 8),
                           Text(
-                            "✅ Lignes correspondantes (${countingLines.length})",
+                            " Lignes correspondantes (${countingLines.length})",
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -421,7 +421,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                           Icon(Icons.warning_amber, size: 16, color: Colors.orange[700]),
                           const SizedBox(width: 8),
                           Text(
-                            "⚠️ Lignes contradictoires (${contradictoryLines.length})",
+                            "️ Lignes contradictoires (${contradictoryLines.length})",
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -681,8 +681,8 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                             ? const CircularProgressIndicator(color: Colors.white)
                             : Text(
                           allVerified
-                              ? "✅ Valider la consolidation"
-                              : "⚠️ Vérifiez toutes les lignes contradictoires",
+                              ? " Valider la consolidation"
+                              : " Vérifiez toutes les lignes contradictoires",
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                       ),

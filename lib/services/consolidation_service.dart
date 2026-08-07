@@ -114,4 +114,109 @@ class ConsolidationService {
       return false;
     }
   }
+
+  // ✅ NEW: Get zones ready for consolidation
+  static Future<List<dynamic>> getConsolidationZones(int adjustmentId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/consolidation/zones/$adjustmentId'),
+      );
+
+      print("📥 Get zones status: ${response.statusCode}");
+      print("📥 Get zones body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return data['zones'] ?? [];
+        }
+        return [];
+      }
+      throw Exception('Failed to fetch consolidation zones');
+    } catch (e) {
+      print("❌ Get consolidation zones error: $e");
+      rethrow;
+    }
+  }
+
+  // ✅ NEW: Create consolidation sheet (uses existing Odoo wizard)
+  static Future<int?> createConsolidationSheet({
+    required int adjustmentId,
+    required int zoneId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/consolidation/create'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          'adjustment_id': adjustmentId,
+          'zone_id': zoneId,
+        }),
+      );
+
+      print("📥 Create consolidation status: ${response.statusCode}");
+      print("📥 Create consolidation body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return data['consolidation_sheet_id'];
+        }
+        return null;
+      }
+      throw Exception('Failed to create consolidation sheet');
+    } catch (e) {
+      print("❌ Create consolidation error: $e");
+      rethrow;
+    }
+  }
+
+  // ✅ NEW: Apply consolidation to stock
+  static Future<bool> applyConsolidation(int adjustmentId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/consolidation/apply'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          'adjustment_id': adjustmentId,
+        }),
+      );
+
+      print("📥 Apply consolidation status: ${response.statusCode}");
+      print("📥 Apply consolidation body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['success'] == true;
+      }
+      return false;
+    } catch (e) {
+      print("❌ Apply consolidation error: $e");
+      return false;
+    }
+  }
+
+  // ✅ NEW: Get adjustment status
+  static Future<Map<String, dynamic>?> getAdjustmentStatus(int adjustmentId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/consolidation/adjustment-status/$adjustmentId'),
+      );
+
+      print("📥 Adjustment status: ${response.statusCode}");
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return data['adjustment'];
+        }
+        return null;
+      }
+      return null;
+    } catch (e) {
+      print("❌ Get adjustment status error: $e");
+      return null;
+    }
+  }
 }
+

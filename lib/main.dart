@@ -9,6 +9,7 @@ import 'screens/scanned_items_list_page.dart';
 import 'screens/batch_list_page.dart';
 import 'screens/consolidation_list_page.dart';
 import 'services/auth_service.dart';
+import 'screens/adjustment_action_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +69,16 @@ class MyApp extends StatelessWidget {
             builder: (context) => ConsolidationListPage(adjustmentId: adjustmentId),
           );
         }
+        if (settings.name == '/adjustment-action') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (context) => AdjustmentActionPage(
+              adjustmentId: args['adjustmentId'],
+              adjustmentName: args['adjustmentName'] ?? 'Ajustement',
+            ),
+          );
+        }
+
         return null;
       },
     );

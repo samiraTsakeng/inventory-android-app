@@ -14,4 +14,12 @@ router.post('/update-contradictory-line', ConsolidationController.updateContradi
 // POST /consolidation/validate-sheet
 router.post('/validate-sheet', ConsolidationController.validateConsolidationSheet);
 
+router.get('/zones/:adjustment_id', ConsolidationController.getConsolidationZones);
+
+router.post('/create', ConsolidationController.createConsolidationSheet);
+
+router.post('/apply', ConsolidationController.applyConsolidation);
+
+router.get('/adjustment-status/:adjustment_id', ConsolidationController.getAdjustmentStatus);
+
 module.exports = router;

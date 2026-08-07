@@ -54,19 +54,19 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final count = await ProductCacheService.cacheAllProducts();
-      print("✅ Cached $count products for offline use");
+      print("Cached $count products for offline use");
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📥 $count produits chargés pour le mode hors ligne'),
+            content: Text('$count produits chargés pour le mode hors ligne'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print("❌ Product caching error: $e");
+      print("Product caching error: $e");
     } finally {
       if (mounted) {
         setState(() => _isCaching = false);
