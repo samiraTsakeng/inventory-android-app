@@ -1064,6 +1064,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           ],
         ),
       ),
+
     );
   }
 }
