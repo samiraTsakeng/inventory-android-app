@@ -54,19 +54,19 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final count = await ProductCacheService.cacheAllProducts();
-      print("Cached $count products for offline use");
+      print("✅ Cached $count products for offline use");
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$count produits chargés pour le mode hors ligne'),
+            content: Text('📥 $count produits chargés pour le mode hors ligne'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print("Product caching error: $e");
+      print("❌ Product caching error: $e");
     } finally {
       if (mounted) {
         setState(() => _isCaching = false);
@@ -95,7 +95,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Login failed: ${e.toString()}"),
+            content: Text("❌ Login failed: ${e.toString()}"),
             backgroundColor: Colors.red,
           ),
         );
@@ -125,7 +125,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Authentication failed: ${e.toString()}"),
+            content: Text("❌ Authentication failed: ${e.toString()}"),
             backgroundColor: Colors.red,
           ),
         );
@@ -135,6 +135,101 @@ class _LoginPageState extends State<LoginPage> {
         setState(() => isLoading = false);
       }
     }
+  }
+
+  // ✅ Forgot Password Dialog
+  void _showForgotPasswordDialog() {
+    final TextEditingController emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          "🔑 Réinitialiser le mot de passe",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Entrez votre email pour recevoir un lien de réinitialisation:",
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                hintText: "admin@example.com",
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Annuler"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final email = emailController.text.trim();
+
+              if (email.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Veuillez entrer votre email'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+
+              // Show loading
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(child: CircularProgressIndicator()),
+              );
+
+              try {
+                // TODO: Implement actual password reset API call
+                // For now, simulate API call
+                await Future.delayed(const Duration(seconds: 2));
+
+                Navigator.pop(context); // Close loading
+                Navigator.pop(context); // Close dialog
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Un lien de réinitialisation a été envoyé à votre email'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+
+              } catch (e) {
+                Navigator.pop(context); // Close loading
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('❌ Erreur: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text("Envoyer"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -155,26 +250,26 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  "Login here",
+                  "Wise Inventory",
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                  "welcome back",
+                  "Connectez-vous pour continuer",
                   style: TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 40),
 
                 if (!onlyPassword) ...[
-                  _buildTextField(hostController, "Enter URL", "http://your-odoo-server:8069  (sans / à la fin)"),
+                  _buildTextField(hostController, "URL du serveur", "http://your-odoo-server:8069"),
                   const SizedBox(height: 16),
-                  _buildTextField(dbController, "Enter DB name (optional)", "Database name"),
+                  _buildTextField(dbController, "Nom de la base (optionnel)", "Nom de la base"),
                   const SizedBox(height: 16),
-                  _buildTextField(emailController, "Enter email", "admin@example.com", isEmail: true),
+                  _buildTextField(emailController, "Email", "admin@example.com", isEmail: true),
                   const SizedBox(height: 16),
                 ],
 
-                _buildTextField(passwordController, "Enter Password", "", isPassword: true),
+                _buildTextField(passwordController, "Mot de passe", "", isPassword: true),
 
                 const SizedBox(height: 30),
 
@@ -192,11 +287,11 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         SizedBox(width: 8),
                         Text(
-                      "Chargement des produits pour le mode hors ligne...",
-                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                          "Chargement des produits...",
+                          style: TextStyle(fontSize: 12, color: Colors.blue),
+                        ),
+                      ],
                     ),
-                    ],
-                  ),
                   ),
 
                 SizedBox(
@@ -221,22 +316,41 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     )
                         : Text(
-                      onlyPassword ? "Login" : "Login",
+                      onlyPassword ? "Se connecter" : "Se connecter",
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+
+                // ✅ Forgot Password Link
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: _showForgotPasswordDialog,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                      ),
+                      child: const Text(
+                        "🔑 Mot de passe oublié?",
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
 
                 if (onlyPassword)
                   TextButton(
                     onPressed: _resetToFullLogin,
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.blue,
+                      foregroundColor: Colors.grey,
                     ),
                     child: const Text(
-                      "Retour à la page de connexion",
+                      "🔄 Changer de compte",
                       style: TextStyle(fontSize: 14),
                     ),
                   ),

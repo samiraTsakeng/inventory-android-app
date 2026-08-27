@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:badges/badges.dart' as badges;
 import 'dart:async';
+import 'package:flutter/services.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
@@ -29,7 +30,7 @@ class ScanningPage extends StatefulWidget {
   State<ScanningPage> createState() => _ScanningPageState();
 }
 
-class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderStateMixin {
+class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final MobileScannerController scannerController = MobileScannerController(
     facing: CameraFacing.back,
     torchEnabled: false,
@@ -40,6 +41,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   bool isLookingUp = false;
   bool isLoading = true;
   bool _isMounted = false;
+  Timer? _scanDebounceTimer;
+  bool _isProcessingScan = false;
 
   // For scan flash effect
   bool _showScanZone = true;
@@ -48,22 +51,77 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _isMounted = true;
+    WidgetsBinding.instance.addObserver(this);
     _loadSavedItems();
   }
 
+  @override
+  void dispose() {
+    _isMounted = false;
+    WidgetsBinding.instance.removeObserver(this);
+    _scanDebounceTimer?.cancel();
+    scannerController.dispose();
+    super.dispose();
+  }
+
+  // ✅ Detect when app comes back from background
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print("🔄 App resumed, reloading scanned items...");
+      _loadSavedItems();
+    }
+  }
+
   Future<void> _loadSavedItems() async {
-    final savedItems = await LocalStorageService.loadScannedItems(widget.countingSheetId);
-    if (_isMounted) {
+    try {
       setState(() {
-        scannedItems = savedItems;
-        isLoading = false;
+        isLoading = true;
       });
+
+      // Load items from local storage
+      final savedItems = await LocalStorageService.loadScannedItems(widget.countingSheetId);
+
+      if (_isMounted) {
+        setState(() {
+          scannedItems = savedItems;
+          isLoading = false;
+        });
+
+        // Show count of restored items
+        if (savedItems.isNotEmpty) {
+          print("✅ Restored ${savedItems.length} scanned items from local storage");
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && scannedItems.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('📱 ${scannedItems.length} articles scannés restaurés'),
+                  backgroundColor: Colors.blue,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          });
+        } else {
+          print("📭 No saved items found for sheet: ${widget.countingSheetId}");
+        }
+      }
+    } catch (e) {
+      print("❌ Error loading saved items: $e");
+      if (_isMounted) {
+        setState(() {
+          scannedItems = [];
+          isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _saveItems() async {
     if (_isMounted) {
       await LocalStorageService.saveScannedItems(widget.countingSheetId, scannedItems);
+      print("💾 Saved ${scannedItems.length} items to local storage");
     }
   }
 
@@ -113,13 +171,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     );
   }
 
-  @override
-  void dispose() {
-    _isMounted = false;
-    scannerController.dispose();
-    super.dispose();
-  }
-
   // Check if barcode already exists in saved batches
   Future<bool> _isInSavedBatches(String barcode) async {
     try {
@@ -136,6 +187,129 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       return false;
     } catch (e) {
       return false;
+    }
+  }
+
+  // ✅ Process a single barcode
+  Future<void> _processBarcode(String barcode) async {
+    setState(() {
+      isLookingUp = true;
+      isScanning = false;
+    });
+
+    // Check if already in current list
+    final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
+    if (existingIndex != -1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cet article est déjà dans la liste'), backgroundColor: Colors.orange),
+      );
+      setState(() {
+        isLookingUp = false;
+        isScanning = true;
+      });
+      return;
+    }
+
+    // Check if already in saved batches
+    final inBatch = await _isInSavedBatches(barcode);
+    if (inBatch) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cet article est déjà dans un lot sauvegardé'), backgroundColor: Colors.orange),
+      );
+      setState(() {
+        isLookingUp = false;
+        isScanning = true;
+      });
+      return;
+    }
+
+    // Look up product
+    final result = await CountingService.lookupProduct(barcode);
+
+    if (_isMounted) {
+      setState(() {
+        if (result != null && result['id'] != 0 && result['id'] != null) {
+          final tracking = result['tracking'] ?? 'serial';
+          final lotName = result['lot_name'] ?? barcode;
+          final lotIdValue = result['lot_id'] ?? 0;
+          final productIdValue = result['id'];
+
+          if (tracking == 'lot') {
+            _handleLotProduct(result, barcode, tracking, lotName, lotIdValue, productIdValue);
+            return;
+          }
+
+          scannedItems.add(ScannedItem(
+            barcode: barcode,
+            productName: result['name'] ?? 'Unknown',
+            productId: productIdValue,
+            quantity: 1,
+            lotNumber: lotName,
+            lotId: lotIdValue,
+            tracking: tracking,
+          ));
+          _saveItems(); // ✅ Save immediately
+          isLookingUp = false;
+          isScanning = true;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Ajouté: ${result['name']}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(milliseconds: 800),
+            ),
+          );
+        } else {
+          isLookingUp = false;
+          isScanning = true;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Code non trouvé: $barcode'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  Future<void> _handleLotProduct(Map<String, dynamic> result, String barcode, String tracking, String lotName, int lotIdValue, int productIdValue) async {
+    final qty = await _showQuantityDialog(result['name'] ?? 'Unknown', barcode);
+    if (qty == null) {
+      if (_isMounted) {
+        setState(() {
+          isScanning = true;
+          isLookingUp = false;
+        });
+      }
+      return;
+    }
+
+    if (_isMounted) {
+      setState(() {
+        scannedItems.add(ScannedItem(
+          barcode: barcode,
+          productName: result['name'] ?? 'Unknown',
+          productId: productIdValue,
+          quantity: qty,
+          lotNumber: lotName,
+          lotId: lotIdValue,
+          tracking: tracking,
+        ));
+        _saveItems(); // ✅ Save immediately
+        isScanning = true;
+        isLookingUp = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Ajouté: ${result['name']} - Quantité: $qty'),
+          backgroundColor: Colors.green,
+          duration: const Duration(milliseconds: 800),
+        ),
+      );
     }
   }
 
@@ -177,103 +351,23 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     );
 
     if (shouldAdd == true && barcodeController.text.isNotEmpty) {
-      setState(() {
-        isLookingUp = true;
-        isScanning = false;
-      });
-
-      final barcode = barcodeController.text.trim();
-
-      final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
-      if (existingIndex != -1) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cet article est déjà dans la liste'), backgroundColor: Colors.orange),
-        );
-        setState(() {
-          isLookingUp = false;
-          isScanning = true;
-        });
-        return;
-      }
-
-      final inBatch = await _isInSavedBatches(barcode);
-      if (inBatch) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cet article est déjà dans un lot sauvegardé'), backgroundColor: Colors.orange),
-        );
-        setState(() {
-          isLookingUp = false;
-          isScanning = true;
-        });
-        return;
-      }
-
-      final result = await CountingService.lookupProduct(barcode);
-
-      if (result != null && result['id'] != 0 && result['id'] != null) {
-        final tracking = result['tracking'] ?? 'serial';
-        final lotName = result['lot_name'] ?? barcode;
-        final lotIdValue = result['lot_id'] ?? 0;
-        final productIdValue = result['id'];
-
-        int finalQuantity = tracking == 'serial' ? 1 : 0;
-        if (tracking == 'lot') {
-          final qty = await _showQuantityDialog(result['name'] ?? 'Unknown', barcode);
-          if (qty == null) {
-            setState(() {
-              isLookingUp = false;
-              isScanning = true;
-            });
-            return;
-          }
-          finalQuantity = qty;
-        }
-
-        setState(() {
-          scannedItems.add(ScannedItem(
-            barcode: barcode,
-            productName: result['name'] ?? 'Unknown',
-            productId: productIdValue,
-            quantity: finalQuantity,
-            lotNumber: lotName,
-            lotId: lotIdValue,
-            tracking: tracking,
-          ));
-          _saveItems();
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ajouté: ${result['name']}'),
-            backgroundColor: Colors.green,
-            duration: const Duration(milliseconds: 800),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Code-barres non trouvé: $barcode'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-
-      setState(() {
-        isLookingUp = false;
-        isScanning = true;
-      });
+      await _processBarcode(barcodeController.text.trim());
     }
   }
 
-  // ✅ FOCUSED SCANNER - Only scans barcodes in the narrow zone
   void onBarcodeDetected(BarcodeCapture capture) async {
-    if (!isScanning || isLookingUp) return;
+    if (!isScanning || isLookingUp || _isProcessingScan) return;
+    if (_scanDebounceTimer?.isActive ?? false) return;
+
+    _scanDebounceTimer = Timer(const Duration(milliseconds: 400), () {});
+    _isProcessingScan = true;
 
     final barcode = capture.barcodes.first.rawValue;
-    if (barcode == null || barcode == lastScannedBarcode) return;
+    if (barcode == null || barcode == lastScannedBarcode) {
+      _isProcessingScan = false;
+      return;
+    }
 
-    // ✅ Flash effect - bar blinks
     setState(() {
       _showScanZone = false;
       isScanning = false;
@@ -281,139 +375,15 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       lastScannedBarcode = barcode;
     });
 
-    // Restore the scan zone after flash
     Future.delayed(const Duration(milliseconds: 150), () {
       if (_isMounted) {
         setState(() => _showScanZone = true);
       }
     });
 
-    // Check if already in current list
-    final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
-    if (existingIndex != -1) {
-      setState(() {
-        isScanning = true;
-        isLookingUp = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cet article a déjà été scanné!'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
+    await _processBarcode(barcode);
 
-    // Check if already in saved batches
-    final inBatch = await _isInSavedBatches(barcode);
-    if (inBatch) {
-      setState(() {
-        isScanning = true;
-        isLookingUp = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cet article est déjà dans un lot sauvegardé'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Look up product
-    final result = await CountingService.lookupProduct(barcode);
-
-    if (_isMounted) {
-      setState(() {
-        if (result != null && result['id'] != 0 && result['id'] != null) {
-          String tracking = result['tracking'] ?? 'serial';
-          String lotName = result['lot_name'] ?? barcode;
-          int lotIdValue = result['lot_id'] ?? 0;
-          int productIdValue = result['id'];
-
-          if (tracking == 'lot') {
-            _handleLotProduct(result, barcode, tracking, lotName, lotIdValue, productIdValue);
-            return;
-          }
-
-          scannedItems.add(ScannedItem(
-            barcode: barcode,
-            productName: result['name'] ?? 'Unknown',
-            productId: productIdValue,
-            quantity: 1,
-            lotNumber: lotName,
-            lotId: lotIdValue,
-            tracking: tracking,
-          ));
-          _saveItems();
-          isScanning = true;
-          isLookingUp = false;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ajouté: ${result['name']}'),
-              backgroundColor: Colors.green,
-              duration: const Duration(milliseconds: 800),
-            ),
-          );
-        } else {
-          isScanning = true;
-          isLookingUp = false;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Code-barres non trouvé: $barcode'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      });
-    }
-  }
-
-  Future<void> _handleLotProduct(Map<String, dynamic> result, String barcode, String tracking, String lotName, int lotIdValue, int productIdValue) async {
-    final qty = await _showQuantityDialog(result['name'] ?? 'Unknown', barcode);
-    if (qty == null) {
-      if (_isMounted) {
-        setState(() {
-          isScanning = true;
-          isLookingUp = false;
-        });
-      }
-      return;
-    }
-
-    if (_isMounted) {
-      setState(() {
-        scannedItems.add(ScannedItem(
-          barcode: barcode,
-          productName: result['name'] ?? 'Unknown',
-          productId: productIdValue,
-          quantity: qty,
-          lotNumber: lotName,
-          lotId: lotIdValue,
-          tracking: tracking,
-        ));
-        _saveItems();
-        isScanning = true;
-        isLookingUp = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ajouté: ${result['name']} - Quantité: $qty'),
-          backgroundColor: Colors.green,
-          duration: const Duration(milliseconds: 800),
-        ),
-      );
-    }
+    _isProcessingScan = false;
   }
 
   void _logout() {
@@ -477,11 +447,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Envoyé avec succès !"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("✅ Envoyé avec succès !"), backgroundColor: Colors.green),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
         );
       }
     }
@@ -587,7 +557,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('$batchName sauvegardé (${batch.items.length} articles)'),
+                  content: Text('✅ $batchName sauvegardé (${batch.items.length} articles)'),
                   backgroundColor: Colors.green,
                 ),
               );
@@ -742,20 +712,13 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
             flex: 3,
             child: Stack(
               children: [
-                // Camera preview
                 MobileScanner(
                   controller: scannerController,
                   onDetect: onBarcodeDetected,
                 ),
-
-                // ✅ FOCUSED SCANNING ZONE - Narrow bar, only scans what's inside
                 if (_showScanZone)
                   _buildFocusedScanZone(),
-
-                // Corner indicators
                 _buildCornerIndicators(),
-
-                // Looking up overlay
                 if (isLookingUp)
                   Positioned(
                     bottom: 20,
@@ -836,7 +799,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     );
   }
 
-  // ✅ FOCUSED SCANNING ZONE - Thin, precise bar like a real barcode scanner
   Widget _buildFocusedScanZone() {
     return IgnorePointer(
       child: Container(
@@ -849,7 +811,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         ),
         child: Stack(
           children: [
-            // ✅ Thin scanning bar (only ~8% of screen height)
             Positioned(
               top: 0,
               left: 0,
@@ -861,7 +822,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 ),
                 child: Stack(
                   children: [
-                    // Main bar - thin red line
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 30),
                       decoration: BoxDecoration(
@@ -878,13 +838,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                       height: 3,
                       child: Stack(
                         children: [
-                          // Center bright line
                           Container(
                             margin: const EdgeInsets.symmetric(horizontal: 40),
                             height: 2,
                             color: Colors.red.withOpacity(0.8),
                           ),
-                          // Scanning dots animation (moving left to right)
                           Positioned(
                             left: 0,
                             right: 0,
@@ -907,7 +865,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                         ],
                       ),
                     ),
-                    // Left and right markers
                     Positioned(
                       left: 10,
                       top: 0,
@@ -944,7 +901,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                         ),
                       ),
                     ),
-                    // "Scan here" label
                     Positioned(
                       bottom: 20,
                       left: 0,
@@ -1001,7 +957,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         ),
         child: Stack(
           children: [
-            // Top-left corner
             Positioned(
               top: 10,
               left: 10,
@@ -1016,7 +971,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 ),
               ),
             ),
-            // Top-right corner
             Positioned(
               top: 10,
               right: 10,
@@ -1031,7 +985,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 ),
               ),
             ),
-            // Bottom-left corner
             Positioned(
               bottom: 10,
               left: 10,
@@ -1046,7 +999,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 ),
               ),
             ),
-            // Bottom-right corner
             Positioned(
               bottom: 10,
               right: 10,
@@ -1064,7 +1016,6 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           ],
         ),
       ),
-
     );
   }
 }

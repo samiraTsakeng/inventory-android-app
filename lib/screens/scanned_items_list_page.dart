@@ -63,6 +63,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         _quantityController.clear();
       });
       widget.onItemsUpdated(_items);
+      _saveItemsToStorage();
       _saveToLocalStorage();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Quantité mise à jour'), duration: Duration(seconds: 1)),
@@ -153,6 +154,10 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       }
     }
   }
+ void _saveItemsToStorage() async {
+    await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
+    print ("saved ${_items.length} items from list page");
+ }
 
   @override
   Widget build(BuildContext context) {
@@ -382,6 +387,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                                   }
                                 });
                                 widget.onItemsUpdated(_items);
+                                _saveToLocalStorage();
                                 _saveToLocalStorage();
                               },
                               padding: EdgeInsets.zero,

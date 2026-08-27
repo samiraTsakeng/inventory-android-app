@@ -12,6 +12,13 @@ class AuthService {
   static const String _sessionUidKey = 'session_uid';
   static const String _sessionNameKey = 'session_name';
 
+  // ✅ Deterministic session id: same host+email always -> same id.
+  // Sanitized so it stays a safe, readable SharedPreferences key fragment.
+  static String _generateSessionId(String host, String email) {
+    final raw = '${host}_$email'.toLowerCase();
+    return raw.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+  }
+
   static Future<bool> login({
     required String host,
     required String db,
@@ -61,8 +68,18 @@ class AuthService {
       final data = jsonDecode(response.body);
 
       if (data["success"] == true) {
-        // ✅ Generate a unique session ID based on host + email
-        final sessionId = '${host}_${email}_${DateTime.now().millisecondsSinceEpoch}';
+        // ✅ Generate a STABLE session ID based on host + email only.
+        // IMPORTANT: this must NOT include a timestamp. Every app restart
+        // (including the silent autoLogin() call in main.dart) calls this
+        // same login() method. If the session ID changes on every login,
+        // it changes the SharedPreferences key namespace used to persist
+        // not-yet-saved scanned items (see LocalStorageService), which
+        // orphans and effectively "deletes" any scanned articles that
+        // hadn't been saved into a batch yet (e.g. after a battery death
+        // or app crash mid-scan). Keeping it deterministic per account
+        // means the same user always maps back to the same storage keys,
+        // so their unsaved scanned items are recovered automatically.
+        final sessionId = _generateSessionId(host, email);
 
         // ✅ Save session
         await _saveSession(
@@ -92,8 +109,18 @@ class AuthService {
   // Auto-login using stored credentials
   static Future<bool> autoLogin() async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+
+      if (!isLoggedIn) {
+        print ("No saved session found");
+        return false;
+      }
       final session = await getFullSession();
-      if (session == null) return false;
+      if (session == null) {
+        print("session data incomplete");
+        return false;
+      }
 
       final host = session['host'];
       final db = session['db'] ?? '';
@@ -101,18 +128,31 @@ class AuthService {
       final password = session['password'];
 
       if (host == null || email == null || password == null) {
+        print("Missing credentials");
         return false;
       }
+      print("attempting auto login for: $email");
 
       // Try to login with stored credentials
-      return await login(
+
+      final success = await login(
         host: host,
         db: db,
         email: email,
         password: password,
       );
+
+      if (success) {
+        print("auto-login successful!");
+        return true;
+      } else {
+        print("Auto-login failed, clearing session");
+        await clearSession();
+        return false;
+      }
     } catch (e) {
       print("Auto-login error: $e");
+      await clearSession();
       return false;
     }
   }
