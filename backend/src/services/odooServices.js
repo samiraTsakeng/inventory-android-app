@@ -50,9 +50,9 @@ class OdooService {
         params: {
           model: "stock.inventory",
           method: "search_read",
-          args: [[["state", "in", ["draft", "confirm"]]]],
+          args: [[["state", "in", ["draft", "in_progress"]]]],
           kwargs: {
-            fields: ["id", "name", "state", "date"]
+            fields: ["id", "name", "state", "date", "manager_id"]
           }
         }
       })

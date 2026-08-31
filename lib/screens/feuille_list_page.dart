@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
+import '../services/local_storage_service.dart';
 import 'scanning_page.dart';
 
 class FeuilleListPage extends StatefulWidget {
@@ -18,6 +19,10 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   String? errorMessage;
   int? _startingSheetId;
   int? _validatingSheetId;
+
+  // ✅ sheetId -> number of scanned articles saved locally but not yet
+  // saved into a batch / sent to the ERP for that sheet.
+  Map<int, int> _pendingCounts = {};
 
   @override
   void initState() {
@@ -56,6 +61,31 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
+      });
+    }
+
+    // ✅ After sheets are (re)loaded, check local storage for any
+    // not-yet-saved scanned items for each one.
+    await _loadPendingCounts();
+  }
+
+  Future<void> _loadPendingCounts() async {
+    final Map<int, int> counts = {};
+    for (final f in feuilles) {
+      final id = f['id'];
+      if (id == null) continue;
+      try {
+        final items = await LocalStorageService.loadScannedItems(id);
+        if (items.isNotEmpty) {
+          counts[id] = items.length;
+        }
+      } catch (e) {
+        // Ignore lookup errors for a single sheet, don't block the rest.
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _pendingCounts = counts;
       });
     }
   }
@@ -295,6 +325,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             final isProgress = sheetState == 'progress';
             final isNew = sheetState == 'new';
             final isConfirm = sheetState == 'confirm';
+            final pendingCount = _pendingCounts[countingSheetId] ?? 0;
 
             // ✅ FIXED: REMOVED the dependency - each sheet can be started independently
             // Teams can start counting at the same time - that's the whole point of having 2 teams!
@@ -330,13 +361,45 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                           topRight: Radius.circular(8),
                         ),
                       ),
-                      child: Text(
-                        getStatusText(sheetState),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: getStatusColor(sheetState),
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            getStatusText(sheetState),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: getStatusColor(sheetState),
+                            ),
+                          ),
+                          // ✅ "Articles en attente" badge: shows there are
+                          // scanned articles saved locally for this sheet
+                          // that haven't been saved into a batch or sent
+                          // to the ERP yet — visible without reopening it.
+                          if (pendingCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.orange,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.hourglass_bottom, size: 8, color: Colors.white),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '$pendingCount en attente',
+                                    style: const TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     // Content
@@ -408,8 +471,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: () {
-                                  Navigator.push(
+                                onPressed: () async {
+                                  await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => ScanningPage(
@@ -420,6 +483,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                       ),
                                     ),
                                   );
+                                  // ✅ Refresh the "en attente" badge as soon
+                                  // as the user comes back from scanning.
+                                  _loadPendingCounts();
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.blue,

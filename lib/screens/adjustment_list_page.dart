@@ -65,6 +65,91 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
     }
   }
 
+  // ✅ Shows the full adjustment info (untruncated name, status, date) in a
+  // popup before navigating, since the card itself is too small to show
+  // long adjustment names in full.
+  void _showAdjustmentDetails(dynamic adj) {
+    final name = adj["name"] ?? "Sans nom";
+    final state = adj["state"];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.inventory_2, color: getStatusColor(state), size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text("Détails de l'ajustement", style: TextStyle(fontSize: 16)),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              name,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: getStatusColor(state).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    getStatusText(state),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: getStatusColor(state),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
+                const SizedBox(width: 4),
+                Text(
+                  formatDate(adj["date"]),
+                  style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Fermer"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // close the popup
+              Navigator.pushNamed(
+                context,
+                '/choice-page',
+                arguments: adj["id"],
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text("Continuer"),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -136,13 +221,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
             final cardWidth = (MediaQuery.of(context).size.width - 18) / 2;
 
             return GestureDetector(
-              onTap: () {
-                Navigator.pushNamed(
-                  context,
-                  '/choice-page',
-                  arguments: adj["id"],
-                );
-              },
+              onTap: () => _showAdjustmentDetails(adj),
               child: SizedBox(
                 width: cardWidth,
                 child: Container(
