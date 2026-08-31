@@ -64,11 +64,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     super.dispose();
   }
 
-  // ✅ Detect when app comes back from background
+  // Detect when app comes back from background
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      print("🔄 App resumed, reloading scanned items...");
+      print("App resumed, reloading scanned items...");
       _loadSavedItems();
     }
   }
@@ -90,13 +90,13 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
         // Show count of restored items
         if (savedItems.isNotEmpty) {
-          print("✅ Restored ${savedItems.length} scanned items from local storage");
+          print("Restored ${savedItems.length} scanned items from local storage");
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && scannedItems.isNotEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('📱 ${scannedItems.length} articles scannés restaurés'),
+                  content: Text('${scannedItems.length} articles scannés restaurés'),
                   backgroundColor: Colors.blue,
                   duration: const Duration(seconds: 2),
                 ),
@@ -104,11 +104,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
             }
           });
         } else {
-          print("📭 No saved items found for sheet: ${widget.countingSheetId}");
+          print(" No saved items found for sheet: ${widget.countingSheetId}");
         }
       }
     } catch (e) {
-      print("❌ Error loading saved items: $e");
+      print("Error loading saved items: $e");
       if (_isMounted) {
         setState(() {
           scannedItems = [];
@@ -121,7 +121,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   Future<void> _saveItems() async {
     if (_isMounted) {
       await LocalStorageService.saveScannedItems(widget.countingSheetId, scannedItems);
-      print("💾 Saved ${scannedItems.length} items to local storage");
+      print("Saved ${scannedItems.length} items to local storage");
     }
   }
 
@@ -190,7 +190,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     }
   }
 
-  // ✅ Process a single barcode
+  //  Process a single barcode
   Future<void> _processBarcode(String barcode) async {
     setState(() {
       isLookingUp = true;
@@ -248,13 +248,13 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
             lotId: lotIdValue,
             tracking: tracking,
           ));
-          _saveItems(); // ✅ Save immediately
+          _saveItems(); // Save immediately
           isLookingUp = false;
           isScanning = true;
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Ajouté: ${result['name']}'),
+              content: Text(' Ajouté: ${result['name']}'),
               backgroundColor: Colors.green,
               duration: const Duration(milliseconds: 800),
             ),
@@ -265,7 +265,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('❌ Code non trouvé: $barcode'),
+              content: Text('Code non trouvé: $barcode'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
@@ -298,14 +298,14 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           lotId: lotIdValue,
           tracking: tracking,
         ));
-        _saveItems(); // ✅ Save immediately
+        _saveItems(); // Save immediately
         isScanning = true;
         isLookingUp = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✅ Ajouté: ${result['name']} - Quantité: $qty'),
+          content: Text('Ajouté: ${result['name']} - Quantité: $qty'),
           backgroundColor: Colors.green,
           duration: const Duration(milliseconds: 800),
         ),
@@ -447,11 +447,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Envoyé avec succès !"), backgroundColor: Colors.green),
+          const SnackBar(content: Text(" Envoyé avec succès !"), backgroundColor: Colors.green),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
         );
       }
     }
@@ -557,7 +557,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('✅ $batchName sauvegardé (${batch.items.length} articles)'),
+                  content: Text('$batchName sauvegardé (${batch.items.length} articles)'),
                   backgroundColor: Colors.green,
                 ),
               );

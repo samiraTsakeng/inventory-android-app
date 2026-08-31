@@ -5,18 +5,18 @@ import '../models/scanned_item.dart';
 import 'local_storage_service.dart';
 
 class CountingService {
-  // ✅ OFFLINE-FIRST: Check cache, then API
+  // OFFLINE-FIRST: Check cache, then API
   static Future<Map<String, dynamic>?> lookupProduct(String barcode) async {
     try {
-      // 1️⃣ Check local cache FIRST (instant, no internet needed)
+      // 1️ Check local cache FIRST (instant, no internet needed)
       final cachedProduct = await LocalStorageService.getCachedProduct(barcode);
       if (cachedProduct != null) {
-        print("✅ Product found in OFFLINE cache: ${cachedProduct['name']}");
+        print("Product found in OFFLINE cache: ${cachedProduct['name']}");
         return cachedProduct;
       }
 
-      // 2️⃣ If not in cache, try API (requires internet)
-      print("🌐 Looking up product ONLINE: $barcode");
+      // 2️ If not in cache, try API (requires internet)
+      print(" Looking up product ONLINE: $barcode");
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/lookup-product'),
         headers: {"Content-Type": "application/json"},
@@ -30,16 +30,16 @@ class CountingService {
         final data = jsonDecode(response.body);
         if (data['success'] == true && data['product'] != null) {
           final product = data['product'];
-          // ✅ Cache the product for future offline use
+          // Cache the product for future offline use
           await LocalStorageService.cacheProduct(barcode, product);
-          print("✅ Product cached for offline use: ${product['name']}");
+          print(" Product cached for offline use: ${product['name']}");
           return product;
         }
       }
       return null;
     } catch (e) {
       print("Product lookup error: $e");
-      // ✅ If offline, return null (product not in cache)
+      // If offline, return null (product not in cache)
       return null;
     }
   }
@@ -151,7 +151,7 @@ class CountingService {
     }
   }
 
-  // ✅ Get number of cached products
+  // Get number of cached products
   static Future<int> getCachedProductsCount() async {
     return await LocalStorageService.getCachedProductsCount();
   }

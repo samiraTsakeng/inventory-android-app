@@ -46,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
-  // ✅ Cache products after successful login
+  //  Cache products after successful login
   Future<void> _cacheProductsAfterLogin() async {
     if (_isCaching) return;
 
@@ -54,19 +54,19 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final count = await ProductCacheService.cacheAllProducts();
-      print("✅ Cached $count products for offline use");
+      print("Cached $count products for offline use");
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('📥 $count produits chargés pour le mode hors ligne'),
+            content: Text(' $count produits chargés pour le mode hors ligne'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print("❌ Product caching error: $e");
+      print("Product caching error: $e");
     } finally {
       if (mounted) {
         setState(() => _isCaching = false);
@@ -86,7 +86,7 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (success && mounted) {
-        // ✅ Cache products in the background
+        // Cache products in the background
         _cacheProductsAfterLogin();
 
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
@@ -95,7 +95,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("❌ Login failed: ${e.toString()}"),
+            content: Text("Login failed: ${e.toString()}"),
             backgroundColor: Colors.red,
           ),
         );
@@ -114,7 +114,7 @@ class _LoginPageState extends State<LoginPage> {
       final success = await AuthService.secondAuthentication(passwordController.text);
 
       if (success && mounted) {
-        // ✅ Cache products in the background
+        // Cache products in the background
         _cacheProductsAfterLogin();
 
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
@@ -125,7 +125,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("❌ Authentication failed: ${e.toString()}"),
+            content: Text(" Authentication failed: ${e.toString()}"),
             backgroundColor: Colors.red,
           ),
         );
@@ -137,7 +137,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ Forgot Password Dialog
+  // Forgot Password Dialog
   void _showForgotPasswordDialog() {
     final TextEditingController emailController = TextEditingController();
 
@@ -146,7 +146,7 @@ class _LoginPageState extends State<LoginPage> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text(
-          "🔑 Réinitialiser le mot de passe",
+          "Réinitialiser le mot de passe",
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         content: Column(
@@ -206,7 +206,7 @@ class _LoginPageState extends State<LoginPage> {
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('✅ Un lien de réinitialisation a été envoyé à votre email'),
+                    content: Text('Un lien de réinitialisation a été envoyé à votre email'),
                     backgroundColor: Colors.green,
                   ),
                 );
@@ -215,7 +215,7 @@ class _LoginPageState extends State<LoginPage> {
                 Navigator.pop(context); // Close loading
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('❌ Erreur: ${e.toString()}'),
+                    content: Text('Erreur: ${e.toString()}'),
                     backgroundColor: Colors.red,
                   ),
                 );
@@ -324,7 +324,7 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 12),
 
-                // ✅ Forgot Password Link
+                // Forgot Password Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -334,7 +334,7 @@ class _LoginPageState extends State<LoginPage> {
                         foregroundColor: Colors.blue,
                       ),
                       child: const Text(
-                        "🔑 Mot de passe oublié?",
+                        "Mot de passe oublié?",
                         style: TextStyle(fontSize: 14),
                       ),
                     ),
@@ -350,7 +350,7 @@ class _LoginPageState extends State<LoginPage> {
                       foregroundColor: Colors.grey,
                     ),
                     child: const Text(
-                      "🔄 Changer de compte",
+                      "Changer de compte",
                       style: TextStyle(fontSize: 14),
                     ),
                   ),

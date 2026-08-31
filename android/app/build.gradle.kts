@@ -35,10 +35,14 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // ✅ proguardFiles is a FUNCTION in Kotlin DSL (build.gradle.kts),
+            // not a property — it can't be assigned with "=". It takes the
+            // default Android proguard file plus your own custom one.
+
+           // proguardFiles(
+             //   getDefaultProguardFile("proguard-android-optimize.txt"),
+               // "proguard-rules.pro"
+            //)
         }
     }
-}
-
-flutter {
-    source = "../.."
 }

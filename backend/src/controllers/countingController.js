@@ -785,7 +785,7 @@ class CountingController {
       });
 
       const data = await response.json();
-      console.log(`📥 Found ${data.result?.length || 0} products`);
+      console.log(`Found ${data.result?.length || 0} products`);
 
       if (data.error) {
         throw new Error(data.error.data?.message || data.error.message);

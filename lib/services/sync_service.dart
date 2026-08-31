@@ -11,7 +11,7 @@ class SyncService {
 
   factory SyncService() => _instance;
 
-  // ✅ Sync pending data when internet is available
+  // Sync pending data when internet is available
   Future<void> syncPendingData(BuildContext context) async {
     if (_isSyncing) return;
 
@@ -27,7 +27,7 @@ class SyncService {
       final unsyncedBatches = batches.where((b) => !b.isSynced).toList();
 
       if (unsyncedBatches.isNotEmpty) {
-        print("📤 Syncing ${unsyncedBatches.length} unsynced batches...");
+        print("Syncing ${unsyncedBatches.length} unsynced batches...");
         int syncedCount = 0;
 
         for (final batch in unsyncedBatches) {
@@ -46,13 +46,13 @@ class SyncService {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ $syncedCount lots synchronisés'),
+              content: Text('$syncedCount lots synchronisés'),
               backgroundColor: Colors.green,
             ),
           );
         }
       } else {
-        print("✅ No pending data to sync");
+        print("No pending data to sync");
       }
     } catch (e) {
       print("Sync error: $e");
@@ -61,7 +61,7 @@ class SyncService {
     }
   }
 
-  // ✅ Check if there are pending items
+  // Check if there are pending items
   Future<bool> hasPendingData() async {
     final batches = await BatchStorageService.getBatches();
     final unsyncedBatches = batches.where((b) => !b.isSynced).toList();

@@ -6,10 +6,10 @@ import 'local_storage_service.dart';
 class ProductCacheService {
   static const int _batchSize = 9000; // Fetch 100 products at a time
 
-  // ✅ Fetch and cache ALL products from Odoo
+  // Fetch and cache ALL products from Odoo
   static Future<int> cacheAllProducts() async {
     try {
-      print("📥 Starting product cache...");
+      print("Starting product cache...");
       int totalCached = 0;
       int offset = 0;
       bool hasMore = true;
@@ -49,7 +49,7 @@ class ProductCacheService {
             }
 
             offset += products.length;
-            print("📥 Cached ${products.length} products (Total: $totalCached)");
+            print("Cached ${products.length} products (Total: $totalCached)");
 
             // If less than batch size, we're done
             if (products.length < _batchSize) {
@@ -57,20 +57,20 @@ class ProductCacheService {
             }
           }
         } else {
-          print("❌ Failed to fetch products: ${response.statusCode}");
+          print("Failed to fetch products: ${response.statusCode}");
           hasMore = false;
         }
       }
 
-      print("✅ Product cache complete: $totalCached products cached");
+      print("product cache complete: $totalCached products cached");
       return totalCached;
     } catch (e) {
-      print("❌ Product cache error: $e");
+      print(" Product cache error: $e");
       return 0;
     }
   }
 
-  // ✅ Cache products by barcode list (for specific products)
+  // Cache products by barcode list (for specific products)
   static Future<void> cacheProductsByBarcodes(List<String> barcodes) async {
     try {
       final response = await http.post(
@@ -95,14 +95,14 @@ class ProductCacheService {
             });
           }
         }
-        print("✅ Cached ${products.length} products by barcodes");
+        print(" Cached ${products.length} products by barcodes");
       }
     } catch (e) {
-      print("❌ Cache products by barcodes error: $e");
+      print(" Cache products by barcodes error: $e");
     }
   }
 
-  // ✅ Get cached products count
+  // Get cached products count
   static Future<int> getCachedCount() async {
     return await LocalStorageService.getCachedProductsCount();
   }

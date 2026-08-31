@@ -6,36 +6,36 @@ class ConsolidationService {
   // Get all consolidation sheets for an adjustment
   static Future<List<dynamic>> getConsolidationSheets(int adjustmentId) async {
     try {
-      print("📥 Calling API: ${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId");
+      print(" Calling API: ${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId");
 
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId'),
       );
 
-      print("📥 Response status: ${response.statusCode}");
-      print("📥 Response body: ${response.body}");
+      print(" Response status: ${response.statusCode}");
+      print(" Response body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print("📥 Decoded data type: ${data.runtimeType}");
+        print(" Decoded data type: ${data.runtimeType}");
 
         if (data is List) {
-          print("✅ Data is a list with ${data.length} items");
+          print(" Data is a list with ${data.length} items");
           return data;
         } else if (data is Map && data.containsKey('success') && data['success'] == true) {
           if (data.containsKey('sheets') && data['sheets'] is List) {
-            print("✅ Found sheets in response: ${data['sheets'].length}");
+            print(" Found sheets in response: ${data['sheets'].length}");
             return data['sheets'];
           }
           return [];
         }
         return [];
       } else {
-        print("❌ Server returned error: ${response.statusCode}");
+        print(" Server returned error: ${response.statusCode}");
         throw Exception('Failed to fetch consolidation sheets: ${response.statusCode}');
       }
     } catch (e) {
-      print("❌ Get consolidation sheets error: $e");
+      print(" Get consolidation sheets error: $e");
       rethrow;
     }
   }
@@ -43,23 +43,23 @@ class ConsolidationService {
   // Get consolidation sheet details with lines
   static Future<Map<String, dynamic>?> getConsolidationSheetDetail(int sheetId) async {
     try {
-      print("📥 Getting detail for sheet: $sheetId");
+      print(" Getting detail for sheet: $sheetId");
 
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheet/$sheetId'),
       );
 
-      print("📥 Detail status: ${response.statusCode}");
-      print("📥 Detail body: ${response.body}");
+      print(" Detail status: ${response.statusCode}");
+      print(" Detail body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print("✅ Detail data loaded successfully");
+        print(" Detail data loaded successfully");
         return data;
       }
       return null;
     } catch (e) {
-      print("❌ Get consolidation sheet detail error: $e");
+      print(" Get consolidation sheet detail error: $e");
       return null;
     }
   }
@@ -76,8 +76,8 @@ class ConsolidationService {
         }),
       );
 
-      print("📥 Update contradictory line status: ${response.statusCode}");
-      print("📥 Update contradictory line body: ${response.body}");
+      print(" Update contradictory line status: ${response.statusCode}");
+      print(" Update contradictory line body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -85,7 +85,7 @@ class ConsolidationService {
       }
       return false;
     } catch (e) {
-      print("❌ Update contradictory line error: $e");
+      print(" Update contradictory line error: $e");
       return false;
     }
   }
@@ -101,8 +101,8 @@ class ConsolidationService {
         }),
       );
 
-      print("📥 Validate consolidation sheet status: ${response.statusCode}");
-      print("📥 Validate consolidation sheet body: ${response.body}");
+      print(" Validate consolidation sheet status: ${response.statusCode}");
+      print(" Validate consolidation sheet body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -110,20 +110,20 @@ class ConsolidationService {
       }
       return false;
     } catch (e) {
-      print("❌ Validate consolidation sheet error: $e");
+      print(" Validate consolidation sheet error: $e");
       return false;
     }
   }
 
-  // ✅ NEW: Get zones ready for consolidation
+  // NEW: Get zones ready for consolidation
   static Future<List<dynamic>> getConsolidationZones(int adjustmentId) async {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/zones/$adjustmentId'),
       );
 
-      print("📥 Get zones status: ${response.statusCode}");
-      print("📥 Get zones body: ${response.body}");
+      print(" Get zones status: ${response.statusCode}");
+      print(" Get zones body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -134,12 +134,12 @@ class ConsolidationService {
       }
       throw Exception('Failed to fetch consolidation zones');
     } catch (e) {
-      print("❌ Get consolidation zones error: $e");
+      print(" Get consolidation zones error: $e");
       rethrow;
     }
   }
 
-  // ✅ NEW: Create consolidation sheet (uses existing Odoo wizard)
+  //  NEW: Create consolidation sheet (uses existing Odoo wizard)
   static Future<int?> createConsolidationSheet({
     required int adjustmentId,
     required int zoneId,
@@ -154,8 +154,8 @@ class ConsolidationService {
         }),
       );
 
-      print("📥 Create consolidation status: ${response.statusCode}");
-      print("📥 Create consolidation body: ${response.body}");
+      print(" Create consolidation status: ${response.statusCode}");
+      print(" Create consolidation body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -166,12 +166,12 @@ class ConsolidationService {
       }
       throw Exception('Failed to create consolidation sheet');
     } catch (e) {
-      print("❌ Create consolidation error: $e");
+      print("Create consolidation error: $e");
       rethrow;
     }
   }
 
-  // ✅ NEW: Apply consolidation to stock
+  // NEW: Apply consolidation to stock
   static Future<bool> applyConsolidation(int adjustmentId) async {
     try {
       final response = await http.post(
@@ -182,8 +182,8 @@ class ConsolidationService {
         }),
       );
 
-      print("📥 Apply consolidation status: ${response.statusCode}");
-      print("📥 Apply consolidation body: ${response.body}");
+      print(" Apply consolidation status: ${response.statusCode}");
+      print(" Apply consolidation body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -191,19 +191,19 @@ class ConsolidationService {
       }
       return false;
     } catch (e) {
-      print("❌ Apply consolidation error: $e");
+      print("Apply consolidation error: $e");
       return false;
     }
   }
 
-  // ✅ NEW: Get adjustment status
+  // NEW: Get adjustment status
   static Future<Map<String, dynamic>?> getAdjustmentStatus(int adjustmentId) async {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/adjustment-status/$adjustmentId'),
       );
 
-      print("📥 Adjustment status: ${response.statusCode}");
+      print("Adjustment status: ${response.statusCode}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -214,7 +214,7 @@ class ConsolidationService {
       }
       return null;
     } catch (e) {
-      print("❌ Get adjustment status error: $e");
+      print("Get adjustment status error: $e");
       return null;
     }
   }

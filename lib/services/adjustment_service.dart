@@ -19,12 +19,12 @@ class AdjustmentService {
 
     final data = jsonDecode(response.body);
 
-    // ✅ HANDLE BACKEND ERRORS (IMPORTANT)
+    // HANDLE BACKEND ERRORS (IMPORTANT)
     if (data is Map && data.containsKey("success") && data["success"] == false) {
       throw Exception(data["message"]);
     }
 
-    // ✅ ENSURE LIST
+    // ENSURE LIST
     if (data is List) {
       return data;
     } else {

@@ -20,7 +20,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   int? _startingSheetId;
   int? _validatingSheetId;
 
-  // ✅ sheetId -> number of scanned articles saved locally but not yet
+
   // saved into a batch / sent to the ERP for that sheet.
   Map<int, int> _pendingCounts = {};
 
@@ -64,7 +64,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       });
     }
 
-    // ✅ After sheets are (re)loaded, check local storage for any
+    // After sheets are (re)loaded, check local storage for any
     // not-yet-saved scanned items for each one.
     await _loadPendingCounts();
   }
@@ -327,7 +327,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             final isConfirm = sheetState == 'confirm';
             final pendingCount = _pendingCounts[countingSheetId] ?? 0;
 
-            // ✅ FIXED: REMOVED the dependency - each sheet can be started independently
+
             // Teams can start counting at the same time - that's the whole point of having 2 teams!
 
             final cardWidth = (MediaQuery.of(context).size.width - 18) / 2;
@@ -372,10 +372,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               color: getStatusColor(sheetState),
                             ),
                           ),
-                          // ✅ "Articles en attente" badge: shows there are
-                          // scanned articles saved locally for this sheet
-                          // that haven't been saved into a batch or sent
-                          // to the ERP yet — visible without reopening it.
+
                           if (pendingCount > 0)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -449,7 +446,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          // ✅ FIXED: "Commencer" button is ALWAYS shown for NEW sheets (no dependency)
+
                           if (isNew)
                             SizedBox(
                               width: double.infinity,
@@ -483,8 +480,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                       ),
                                     ),
                                   );
-                                  // ✅ Refresh the "en attente" badge as soon
-                                  // as the user comes back from scanning.
+
+
                                   _loadPendingCounts();
                                 },
                                 style: ElevatedButton.styleFrom(

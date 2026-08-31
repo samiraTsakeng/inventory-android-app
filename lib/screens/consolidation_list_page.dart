@@ -33,7 +33,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
       final data = await ConsolidationService.getConsolidationSheets(widget.adjustmentId);
       print("Data received: $data");
 
-      // ✅ Ensure data is a list
+      // Ensure data is a list
       if (data is List) {
         setState(() {
           consolidationSheets = data;

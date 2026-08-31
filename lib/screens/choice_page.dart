@@ -66,7 +66,7 @@ class ChoicePage extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // ✅ NEW: Consolidation Management Card (combines everything)
+            // Consolidation Management Card (combines everything)
             _buildChoiceCard(
               context: context,
               title: "Gestion des consolidations",
