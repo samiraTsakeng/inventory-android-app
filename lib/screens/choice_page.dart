@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'consolidation_list_page.dart';
 import 'consolidation_zones_page.dart';
 import 'adjustment_action_page.dart';
+import '../utils/constants.dart';
 
 class ChoicePage extends StatelessWidget {
   final int? adjustmentId;
@@ -22,12 +23,9 @@ class ChoicePage extends StatelessWidget {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: const Text("Choisir une option"),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
@@ -55,7 +53,7 @@ class ChoicePage extends StatelessWidget {
               title: "Feuille de comptage",
               subtitle: "Scanner les articles pour le comptage",
               icon: Icons.qr_code_scanner,
-              color: Colors.blue,
+              color: AppColors.primaryColor,
               onTap: () {
                 Navigator.pushNamed(
                   context,
@@ -72,7 +70,7 @@ class ChoicePage extends StatelessWidget {
               title: "Gestion des consolidations",
               subtitle: "Consolider les zones et appliquer au stock",
               icon: Icons.merge_type,
-              color: Colors.purple,
+              color: AppColors.secondaryColor,
               onTap: () {
                 Navigator.push(
                   context,
@@ -133,17 +131,17 @@ class ChoicePage extends StatelessWidget {
                     Text(
                       title,
                       style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: enabled ? Colors.black87 : Colors.grey,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: enabled ? AppColors.textColor : Colors.grey,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: 14,
-                        color: enabled ? Colors.grey[600] : Colors.grey[400],
+                        fontSize: 13.5,
+                        color: enabled ? AppColors.textSecondary : Colors.grey[400],
                       ),
                     ),
                   ],

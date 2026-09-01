@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
@@ -98,10 +99,10 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'progress': return Colors.green;
-      case 'confirm': return Colors.blue;
-      case 'new': return Colors.orange;
-      case 'cancel': return Colors.red;
+      case 'progress': return AppColors.successColor;
+      case 'confirm': return AppColors.primaryColor;
+      case 'new': return AppColors.warningColor;
+      case 'cancel': return AppColors.errorColor;
       default: return Colors.grey;
     }
   }
@@ -140,17 +141,17 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       final success = await CountingService.startSheet(sheetId);
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comptage commencé'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Comptage commencé'), backgroundColor: AppColors.successColor),
         );
         fetchFeuilles();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors du démarrage'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erreur lors du démarrage'), backgroundColor: AppColors.errorColor),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: AppColors.errorColor),
       );
     } finally {
       setState(() => _startingSheetId = null);
@@ -163,7 +164,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
     if (sheetId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: AppColors.warningColor),
       );
       return;
     }
@@ -172,7 +173,14 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Terminer le comptage", style: TextStyle(fontSize: 18)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: AppColors.primaryColor, size: 20),
+              SizedBox(width: 8),
+              Text("Terminer le comptage", style: TextStyle(fontSize: 18)),
+            ],
+          ),
           content: Text(
             "Voulez-vous terminer le comptage \"$sheetName\" ?\n\nCette action est irréversible.",
             style: const TextStyle(fontSize: 14),
@@ -185,7 +193,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: AppColors.errorColor,
                 foregroundColor: Colors.white,
               ),
               child: const Text("Oui, terminer", style: TextStyle(fontSize: 14)),
@@ -206,17 +214,17 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       final success = await CountingService.validateSheet(sheetId);
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comptage terminé'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Comptage terminé'), backgroundColor: AppColors.successColor),
         );
         fetchFeuilles();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de la validation'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erreur lors de la validation'), backgroundColor: AppColors.errorColor),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: AppColors.errorColor),
       );
     } finally {
       setState(() => _validatingSheetId = null);
@@ -226,12 +234,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: const Text("Feuilles", style: TextStyle(fontSize: 15)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -245,12 +250,13 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                 _validateCurrentSheet();
               }
             },
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             itemBuilder: (context) => [
               const PopupMenuItem<String>(
                 value: 'terminer',
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle, size: 18, color: Colors.green),
+                    Icon(Icons.check_circle, size: 18, color: AppColors.successColor),
                     SizedBox(width: 8),
                     Text('Terminer le comptage en cours'),
                   ],
@@ -259,7 +265,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             ],
             child: const Padding(
               padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.more_vert, size: 22),
+              child: Icon(Icons.more_vert, size: 22, color: Colors.white),
             ),
           ),
           Padding(
@@ -282,11 +288,11 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 50, color: Colors.red),
+              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
               const SizedBox(height: 16),
               Text(
                 errorMessage!,
-                style: const TextStyle(fontSize: 13, color: Colors.red),
+                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -301,13 +307,20 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         ),
       )
           : feuilles.isEmpty
-          ? const Center(
+          ? Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory, size: 40, color: Colors.grey),
-            SizedBox(height: 8),
-            Text("Aucune feuille trouvée", style: TextStyle(fontSize: 12)),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor.withOpacity(0.06),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.description_outlined, size: 36, color: AppColors.primaryColor),
+            ),
+            const SizedBox(height: 12),
+            const Text("Aucune feuille trouvée", style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
           ],
         ),
       )
@@ -336,13 +349,15 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
               width: cardWidth,
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.surfaceColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderColor),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
+                      color: AppColors.primaryColor.withOpacity(0.05),
                       spreadRadius: 1,
-                      blurRadius: 2,
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
@@ -377,7 +392,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.orange,
+                                color: AppColors.warningColor,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -453,8 +468,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               child: ElevatedButton(
                                 onPressed: _startingSheetId == countingSheetId ? null : () => _startSheet(countingSheetId),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: AppColors.successColor,
                                   foregroundColor: Colors.white,
+                                  minimumSize: Size.zero,
                                   padding: const EdgeInsets.symmetric(vertical: 4),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                   textStyle: const TextStyle(fontSize: 10),
@@ -485,8 +501,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                   _loadPendingCounts();
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
+                                  backgroundColor: AppColors.primaryColor,
                                   foregroundColor: Colors.white,
+                                  minimumSize: Size.zero,
                                   padding: const EdgeInsets.symmetric(vertical: 4),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                                   textStyle: const TextStyle(fontSize: 9),
@@ -500,7 +517,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               child: Text(
                                 '✓ Terminé',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
+                                style: TextStyle(fontSize: 10, color: AppColors.successColor, fontWeight: FontWeight.bold),
                               ),
                             ),
                         ],

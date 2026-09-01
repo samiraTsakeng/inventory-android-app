@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:badges/badges.dart' as badges;
 import 'dart:async';
@@ -97,7 +98,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${scannedItems.length} articles scannés restaurés'),
-                  backgroundColor: Colors.blue,
+                  backgroundColor: AppColors.primaryColor,
                   duration: const Duration(seconds: 2),
                 ),
               );
@@ -132,18 +133,27 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: Text('Quantité pour $productName'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.numbers, color: AppColors.primaryColor, size: 20),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Quantité pour $productName', overflow: TextOverflow.ellipsis)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Code: $barcode'),
-            const SizedBox(height: 12),
+            Text('Code: $barcode', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+            const SizedBox(height: 14),
             TextField(
               controller: qtyController,
               keyboardType: TextInputType.number,
+              autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'Quantité',
-                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.tag, size: 20),
               ),
             ),
           ],
@@ -201,7 +211,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
     if (existingIndex != -1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cet article est déjà dans la liste'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('Cet article est déjà dans la liste'), backgroundColor: AppColors.warningColor),
       );
       setState(() {
         isLookingUp = false;
@@ -214,7 +224,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     final inBatch = await _isInSavedBatches(barcode);
     if (inBatch) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cet article est déjà dans un lot sauvegardé'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('Cet article est déjà dans un lot sauvegardé'), backgroundColor: AppColors.warningColor),
       );
       setState(() {
         isLookingUp = false;
@@ -255,7 +265,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(' Ajouté: ${result['name']}'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.successColor,
               duration: const Duration(milliseconds: 800),
             ),
           );
@@ -266,7 +276,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Code non trouvé: $barcode'),
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.errorColor,
               duration: const Duration(seconds: 3),
             ),
           );
@@ -306,7 +316,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Ajouté: ${result['name']} - Quantité: $qty'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.successColor,
           duration: const Duration(milliseconds: 800),
         ),
       );
@@ -321,14 +331,21 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Saisir manuellement", style: TextStyle(fontSize: 18)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.keyboard_outlined, color: AppColors.primaryColor, size: 20),
+              SizedBox(width: 8),
+              Text("Saisir manuellement", style: TextStyle(fontSize: 18)),
+            ],
+          ),
           content: TextField(
             controller: barcodeController,
             autofocus: true,
             decoration: const InputDecoration(
               labelText: "Numéro de série",
               hintText: "Entrez le code-barres manuellement",
-              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.qr_code, size: 20),
             ),
             style: const TextStyle(fontSize: 14),
           ),
@@ -340,7 +357,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: AppColors.successColor,
                 foregroundColor: Colors.white,
               ),
               child: const Text("Ajouter", style: TextStyle(fontSize: 14)),
@@ -390,6 +407,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Déconnexion"),
         content: const Text("Voulez-vous vraiment vous déconnecter ?"),
         actions: [
@@ -399,7 +417,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
               Navigator.pop(context);
               Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.errorColor),
             child: const Text("Oui", style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -447,11 +465,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(" Envoyé avec succès !"), backgroundColor: Colors.green),
+          const SnackBar(content: Text(" Envoyé avec succès !"), backgroundColor: AppColors.successColor),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: AppColors.errorColor),
         );
       }
     }
@@ -502,16 +520,30 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Enregistrer le lot", style: TextStyle(fontSize: 18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.save_outlined, color: AppColors.primaryColor, size: 20),
+            SizedBox(width: 8),
+            Text("Enregistrer le lot", style: TextStyle(fontSize: 18)),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text("Voulez-vous sauvegarder ce lot ?", style: TextStyle(fontSize: 14)),
-            const SizedBox(height: 8),
-            Text(
-              "Articles: ${scannedItems.length}",
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                "Articles: ${scannedItems.length}",
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryColor),
+              ),
             ),
           ],
         ),
@@ -558,7 +590,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('$batchName sauvegardé (${batch.items.length} articles)'),
-                  backgroundColor: Colors.green,
+                  backgroundColor: AppColors.successColor,
                 ),
               );
             },
@@ -586,10 +618,16 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
     return Scaffold(
       backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.black.withOpacity(0.35),
         foregroundColor: Colors.white,
         elevation: 0,
+        title: Text(
+          widget.zoneName,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          overflow: TextOverflow.ellipsis,
+        ),
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu, size: 22),
@@ -600,18 +638,22 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.create_sharp, size: 22, color: Colors.white),
+            tooltip: 'Saisie manuelle',
+            icon: const Icon(Icons.keyboard_outlined, size: 22, color: Colors.white),
             onPressed: _addManualBarcode,
           ),
           IconButton(
-            icon: const Icon(Icons.save, size: 22, color: Colors.white),
+            tooltip: 'Enregistrer le lot',
+            icon: const Icon(Icons.save_outlined, size: 22, color: Colors.white),
             onPressed: _showSaveConfirmation,
           ),
           badges.Badge(
             showBadge: scannedItems.isNotEmpty,
-            badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10)),
+            badgeStyle: const badges.BadgeStyle(badgeColor: AppColors.tertiaryColor),
+            badgeContent: Text('${scannedItems.length}', style: const TextStyle(fontSize: 10, color: Colors.black)),
             child: IconButton(
-              icon: const Icon(Icons.list, size: 22, color: Colors.white),
+              tooltip: 'Articles scannés',
+              icon: const Icon(Icons.list_alt, size: 22, color: Colors.white),
               onPressed: navigateToSummary,
             ),
           ),
@@ -621,14 +663,15 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 _logout();
               }
             },
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout, size: 18, color: Colors.red),
+                    Icon(Icons.logout, size: 18, color: AppColors.errorColor),
                     SizedBox(width: 8),
-                    Text('Déconnexion', style: TextStyle(color: Colors.red)),
+                    Text('Déconnexion', style: TextStyle(color: AppColors.errorColor)),
                   ],
                 ),
               ),
@@ -645,7 +688,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
+              decoration: BoxDecoration(color: AppColors.primaryColor),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -663,7 +706,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.inventory, color: Colors.blue),
+              leading: const Icon(Icons.inventory, color: AppColors.primaryColor),
               title: const Text('Feuilles de comptage'),
               onTap: () {
                 Navigator.pop(context);
@@ -716,6 +759,24 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                   controller: scannerController,
                   onDetect: onBarcodeDetected,
                 ),
+                // Voile dégradé pour la lisibilité de l'AppBar sur la caméra
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 110,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.black.withOpacity(0.55), Colors.transparent],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 if (_showScanZone)
                   _buildFocusedScanZone(),
                 _buildCornerIndicators(),
@@ -725,17 +786,21 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                     left: 20,
                     right: 20,
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.black.withOpacity(0.75),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.tertiaryColor),
+                          ),
                           SizedBox(width: 10),
-                          Text('Recherche...', style: TextStyle(color: Colors.white, fontSize: 12)),
+                          Text('Recherche du produit...', style: TextStyle(color: Colors.white, fontSize: 12.5)),
                         ],
                       ),
                     ),
@@ -743,26 +808,53 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
               ],
             ),
           ),
+          // Panneau d'état
           Container(
-            padding: const EdgeInsets.all(12),
-            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            decoration: const BoxDecoration(
+              color: AppColors.surfaceColor,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(22),
+                topRight: Radius.circular(22),
+              ),
+              boxShadow: [
+                BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, -4)),
+              ],
+            ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(widget.sheetName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                    Text('${scannedItems.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: Text(
+                        widget.sheetName,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textColor),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryColor.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${scannedItems.length}',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryColor),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    value: scannedItems.length / 999,
-                    minHeight: 4,
-                    backgroundColor: Colors.grey[200],
-                    color: Colors.green,
+                    value: (scannedItems.length / 999).clamp(0.0, 1.0),
+                    minHeight: 5,
+                    backgroundColor: AppColors.borderColor,
+                    color: AppColors.tertiaryColor,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -770,18 +862,15 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                   scannedItems.isEmpty
                       ? "Scannez le code-barres"
                       : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.list, size: 18),
-                  label: Text('Voir la liste (${scannedItems.length})', style: const TextStyle(fontSize: 12)),
-                  onPressed: navigateToSummary,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.list_alt, size: 18),
+                    label: Text('Voir la liste (${scannedItems.length})', style: const TextStyle(fontSize: 13)),
+                    onPressed: navigateToSummary,
                   ),
                 ),
               ],
@@ -792,7 +881,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       floatingActionButton: FloatingActionButton(
         mini: true,
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        foregroundColor: AppColors.primaryColor,
         onPressed: () => scannerController.toggleTorch(),
         child: const Icon(Icons.flash_on, size: 20),
       ),
@@ -805,7 +894,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: Colors.red.withOpacity(0.3),
+            color: AppColors.tertiaryColor.withOpacity(0.3),
             width: 1,
           ),
         ),
@@ -825,11 +914,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 30),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.15),
+                        color: AppColors.tertiaryColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.red.withOpacity(0.3),
+                            color: AppColors.tertiaryColor.withOpacity(0.3),
                             blurRadius: 10,
                             spreadRadius: 2,
                           ),
@@ -841,7 +930,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                           Container(
                             margin: const EdgeInsets.symmetric(horizontal: 40),
                             height: 2,
-                            color: Colors.red.withOpacity(0.8),
+                            color: AppColors.tertiaryColor.withOpacity(0.8),
                           ),
                           Positioned(
                             left: 0,
@@ -875,9 +964,9 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                           height: 20,
                           decoration: BoxDecoration(
                             border: Border(
-                              right: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
-                              top: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
-                              bottom: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                              right: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.5), width: 2),
+                              top: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.5), width: 2),
+                              bottom: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.5), width: 2),
                             ),
                           ),
                         ),
@@ -893,9 +982,9 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                           height: 20,
                           decoration: BoxDecoration(
                             border: Border(
-                              left: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
-                              top: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
-                              bottom: BorderSide(color: Colors.red.withOpacity(0.5), width: 2),
+                              left: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.5), width: 2),
+                              top: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.5), width: 2),
+                              bottom: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.5), width: 2),
                             ),
                           ),
                         ),
@@ -915,7 +1004,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                           child: Text(
                             'SCANNEZ ICI',
                             style: TextStyle(
-                              color: Colors.red.withOpacity(0.5),
+                              color: AppColors.tertiaryColor.withOpacity(0.5),
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 3,
@@ -939,7 +1028,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       width: 3,
       height: 3,
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.5),
+        color: AppColors.tertiaryColor.withOpacity(0.5),
         shape: BoxShape.circle,
       ),
     );
@@ -951,7 +1040,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: Colors.red.withOpacity(0.2),
+            color: AppColors.tertiaryColor.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -965,8 +1054,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
-                    left: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    top: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
+                    left: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),
@@ -979,8 +1068,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    top: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
-                    right: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    top: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
+                    right: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),
@@ -993,8 +1082,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    bottom: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
-                    left: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    bottom: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
+                    left: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),
@@ -1007,8 +1096,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 height: 20,
                 decoration: BoxDecoration(
                   border: Border(
-                    bottom: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
-                    right: BorderSide(color: Colors.red.withOpacity(0.4), width: 2),
+                    bottom: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
+                    right: BorderSide(color: AppColors.tertiaryColor.withOpacity(0.4), width: 2),
                   ),
                 ),
               ),

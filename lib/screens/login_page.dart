@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/product_cache_service.dart';
 import '../utils/storage.dart';
+import '../utils/constants.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -235,127 +236,178 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.backgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(height: 60),
-                Image.asset(
-                  "assets/images/image266622.png",
-                  height: 100,
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  "Wise Inventory",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 5),
-                const Text(
-                  "Connectez-vous pour continuer",
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 40),
-
-                if (!onlyPassword) ...[
-                  _buildTextField(hostController, "URL du serveur", "http://your-odoo-server:8069"),
-                  const SizedBox(height: 16),
-                  _buildTextField(dbController, "Nom de la base (optionnel)", "Nom de la base"),
-                  const SizedBox(height: 16),
-                  _buildTextField(emailController, "Email", "admin@example.com", isEmail: true),
-                  const SizedBox(height: 16),
-                ],
-
-                _buildTextField(passwordController, "Mot de passe", "", isPassword: true),
-
-                const SizedBox(height: 30),
-
-                // Loading indicator
-                if (_isCaching)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          "Chargement des produits...",
-                          style: TextStyle(fontSize: 12, color: Colors.blue),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : (onlyPassword ? secondAuthentication : login),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                        : Text(
-                      onlyPassword ? "Se connecter" : "Se connecter",
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // Forgot Password Link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Hero de marque
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(24, 36, 24, 40),
+                decoration: const BoxDecoration(gradient: AppColors.brandGradient),
+                child: Column(
                   children: [
-                    TextButton(
-                      onPressed: _showForgotPasswordDialog,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.blue,
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
                       ),
-                      child: const Text(
-                        "Mot de passe oublié?",
-                        style: TextStyle(fontSize: 14),
+                      child: Image.asset(
+                        "assets/images/image266622.png",
+                        height: 72,
+                        width: 72,
                       ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      "Wise Inventory",
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      onlyPassword
+                          ? "Ravi de vous revoir"
+                          : "Connectez-vous pour continuer",
+                      style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 14),
                     ),
                   ],
                 ),
+              ),
 
-                const SizedBox(height: 8),
+              // Carte de connexion
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(22),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (onlyPassword) ...[
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: AppColors.primaryColor.withOpacity(0.1),
+                                child: const Icon(Icons.person, color: AppColors.primaryColor, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      emailController.text,
+                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      hostController.text,
+                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                        ] else ...[
+                          _buildTextField(hostController, "URL du serveur", "http://your-odoo-server:8069",
+                              icon: Icons.dns_outlined),
+                          const SizedBox(height: 14),
+                          _buildTextField(dbController, "Nom de la base (optionnel)", "Nom de la base",
+                              icon: Icons.storage_outlined),
+                          const SizedBox(height: 14),
+                          _buildTextField(emailController, "Email", "admin@example.com",
+                              isEmail: true, icon: Icons.email_outlined),
+                          const SizedBox(height: 14),
+                        ],
 
-                if (onlyPassword)
-                  TextButton(
-                    onPressed: _resetToFullLogin,
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey,
-                    ),
-                    child: const Text(
-                      "Changer de compte",
-                      style: TextStyle(fontSize: 14),
+                        _buildTextField(passwordController, "Mot de passe", "",
+                            isPassword: true, icon: Icons.lock_outline),
+
+                        const SizedBox(height: 22),
+
+                        // Loading indicator
+                        if (_isCaching)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  "Chargement des produits...",
+                                  style: TextStyle(fontSize: 12, color: AppColors.secondaryColor),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        SizedBox(
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: isLoading ? null : (onlyPassword ? secondAuthentication : login),
+                            child: isLoading
+                                ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                                : const Text("Se connecter"),
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Forgot Password Link
+                        Center(
+                          child: TextButton(
+                            onPressed: _showForgotPasswordDialog,
+                            child: const Text("Mot de passe oublié ?"),
+                          ),
+                        ),
+
+                        if (onlyPassword)
+                          Center(
+                            child: TextButton(
+                              onPressed: _resetToFullLogin,
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.textSecondary,
+                              ),
+                              child: const Text("Changer de compte"),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -368,25 +420,16 @@ class _LoginPageState extends State<LoginPage> {
       String hint, {
         bool isPassword = false,
         bool isEmail = false,
+        IconData? icon,
       }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: TextField(
-        controller: controller,
-        obscureText: isPassword,
-        keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        ),
+    return TextField(
+      controller: controller,
+      obscureText: isPassword,
+      keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: icon != null ? Icon(icon, color: AppColors.textSecondary, size: 20) : null,
       ),
     );
   }

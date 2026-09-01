@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 
 class ConsolidationZonesPage extends StatefulWidget {
@@ -52,7 +53,14 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
     final shouldConsolidate = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Consolider la zone", style: TextStyle(fontSize: 18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.merge_type, color: AppColors.primaryColor, size: 20),
+            SizedBox(width: 8),
+            Text("Consolider la zone", style: TextStyle(fontSize: 18)),
+          ],
+        ),
         content: Text(
           "Voulez-vous consolider la zone \"$zoneName\" ?\n\nLes deux feuilles de comptage seront comparées et une feuille de consolidation sera créée.",
           style: const TextStyle(fontSize: 14),
@@ -65,7 +73,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.successColor,
               foregroundColor: Colors.white,
             ),
             child: const Text("Consolider", style: TextStyle(fontSize: 14)),
@@ -90,7 +98,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Consolidation créée avec succès!'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.successColor,
           ),
         );
         await fetchZones();
@@ -98,7 +106,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Erreur lors de la création de la consolidation'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
@@ -107,7 +115,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erreur: ${e.toString()}'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.errorColor,
         ),
       );
     }
@@ -116,12 +124,9 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: const Text("Zones à consolider", style: TextStyle(fontSize: 16)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -148,11 +153,11 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 50, color: Colors.red),
+              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
               const SizedBox(height: 16),
               Text(
                 errorMessage!,
-                style: const TextStyle(fontSize: 13, color: Colors.red),
+                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -165,20 +170,27 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
         ),
       )
           : zones.isEmpty
-          ? const Center(
+          ? Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle, size: 48, color: Colors.green),
-            SizedBox(height: 16),
-            Text(
-              "Toutes les zones sont consolidées!",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.successColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle, size: 44, color: AppColors.successColor),
             ),
-            SizedBox(height: 8),
-            Text(
+            const SizedBox(height: 18),
+            const Text(
+              "Toutes les zones sont consolidées !",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textColor),
+            ),
+            const SizedBox(height: 8),
+            const Text(
               "Retournez pour appliquer la consolidation",
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -191,19 +203,19 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
+                color: AppColors.primaryColor.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.blue[700]),
+                  Icon(Icons.info_outline, color: AppColors.primaryColor),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '${zones.length} zone(s) prête(s) à être consolidée(s)',
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.blue[700],
+                        color: AppColors.primaryColor,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -221,32 +233,21 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
                   final sheetCount = zone['sheets']?.length ?? 0;
 
                   return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: Padding(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.blue.withOpacity(0.2),
-                          width: 1,
-                        ),
-                      ),
                       child: Row(
                         children: [
                           Container(
                             width: 50,
                             height: 50,
                             decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.1),
+                              color: AppColors.primaryColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(25),
                             ),
                             child: const Icon(
                               Icons.merge_type,
-                              color: Colors.blue,
+                              color: AppColors.primaryColor,
                               size: 28,
                             ),
                           ),
@@ -265,9 +266,9 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '$sheetCount feuilles de comptage prêtes',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey[600],
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
                               ],
@@ -278,8 +279,9 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
                                 ? null
                                 : () => consolidateZone(zone['id'], zoneName),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
+                              backgroundColor: AppColors.successColor,
                               foregroundColor: Colors.white,
+                              minimumSize: Size.zero,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 10,

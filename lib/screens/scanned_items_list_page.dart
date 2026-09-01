@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
@@ -93,8 +94,8 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
 
   Color _getTrackingColor(String tracking) {
     switch (tracking) {
-      case 'serial': return Colors.purple;
-      case 'lot': return Colors.orange;
+      case 'serial': return AppColors.secondaryColor;
+      case 'lot': return AppColors.warningColor;
       default: return Colors.grey;
     }
   }
@@ -134,18 +135,18 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         widget.onItemsUpdated([]);
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Envoyé avec succès !'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Envoyé avec succès !'), backgroundColor: AppColors.successColor),
         );
         Navigator.pop(context, true);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: AppColors.errorColor),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: AppColors.errorColor),
         );
       }
     } finally {
@@ -162,12 +163,9 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: Text(widget.sheetName, style: const TextStyle(fontSize: 15)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -175,12 +173,25 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         ),
         actions: [
           if (_items.isNotEmpty)
-            TextButton.icon(
-              icon: _isSending
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.send, size: 16),
-              label: Text(_isSending ? 'Envoi...' : 'Envoyer', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-              onPressed: _isSending ? null : _sendToERP,
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: TextButton.icon(
+                    icon: _isSending
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send, size: 15, color: Colors.white),
+                    label: Text(_isSending ? 'Envoi...' : 'Envoyer', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white)),
+                    onPressed: _isSending ? null : _sendToERP,
+                  ),
+                ),
+              ),
             ),
         ],
       ),
@@ -189,13 +200,22 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.inventory, size: 48, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text('Aucun article scanné', style: TextStyle(fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 12),
-            ElevatedButton(
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor.withOpacity(0.06),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.inventory_2_outlined, size: 44, color: AppColors.primaryColor),
+            ),
+            const SizedBox(height: 16),
+            const Text('Aucun article scanné', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Retour au scan', style: TextStyle(fontSize: 12)),
+              icon: const Icon(Icons.qr_code_scanner, size: 18),
+              label: const Text('Retour au scan', style: TextStyle(fontSize: 13)),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 44)),
             ),
           ],
         ),
@@ -204,18 +224,12 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         children: [
           // Search bar
           Container(
-            margin: const EdgeInsets.all(8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
+              color: AppColors.surfaceColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderColor),
             ),
             child: TextField(
               onChanged: (value) {
@@ -224,33 +238,34 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
               decoration: const InputDecoration(
                 hintText: 'Rechercher un article...',
                 border: InputBorder.none,
-                icon: Icon(Icons.search),
+                icon: Icon(Icons.search, color: AppColors.textSecondary, size: 20),
               ),
             ),
           ),
 
           Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.primaryColor.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.qr_code, size: 14, color: Colors.blue),
-                    const SizedBox(width: 4),
-                    Text('${_items.length} articles', style: const TextStyle(fontSize: 12)),
+                    const Icon(Icons.qr_code, size: 15, color: AppColors.primaryColor),
+                    const SizedBox(width: 5),
+                    Text('${_items.length} articles', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
                   ],
                 ),
+                Container(width: 1, height: 14, color: AppColors.primaryColor.withOpacity(0.2)),
                 Row(
                   children: [
-                    const Icon(Icons.inventory, size: 14, color: Colors.blue),
-                    const SizedBox(width: 4),
-                    Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces', style: const TextStyle(fontSize: 12)),
+                    const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.primaryColor),
+                    const SizedBox(width: 5),
+                    Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
                   ],
                 ),
               ],
@@ -267,56 +282,59 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                 final trackingColor = _getTrackingColor(item.tracking);
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   child: Padding(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              width: 32,
-                              height: 32,
+                              width: 34,
+                              height: 34,
                               decoration: BoxDecoration(
-                                color: Colors.blue[100],
-                                borderRadius: BorderRadius.circular(6),
+                                color: AppColors.primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryColor),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     item.productName,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textColor),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 2),
+                                  const SizedBox(height: 4),
                                   Row(
                                     children: [
+                                      Icon(Icons.qr_code_2, size: 11, color: Colors.grey[500]),
+                                      const SizedBox(width: 3),
                                       Text(
                                         item.barcode,
-                                        style: const TextStyle(fontSize: 9, color: Colors.grey),
+                                        style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
                                       ),
                                       const SizedBox(width: 6),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: trackingColor.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(4),
+                                          color: trackingColor.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(5),
                                         ),
                                         child: Text(
                                           trackingText,
-                                          style: TextStyle(fontSize: 8, color: trackingColor, fontWeight: FontWeight.w500),
+                                          style: TextStyle(fontSize: 9, color: trackingColor, fontWeight: FontWeight.w600),
                                         ),
                                       ),
                                     ],
@@ -326,56 +344,62 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
+                        const Divider(height: 1),
+                        const SizedBox(height: 8),
                         Row(
                           children: [
                             Text(
                               isSerial ? 'Quantité fixe: ' : 'Quantité: ',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                             ),
                             if (isSerial)
                               Expanded(
                                 child: Text(
                                   '1 (N° Série)',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.purple),
+                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.secondaryColor),
                                 ),
                               )
                             else if (isEditing)
                               Expanded(
-                                child: TextField(
-                                  controller: _quantityController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: SizedBox(
+                                  height: 34,
+                                  child: TextField(
+                                    controller: _quantityController,
+                                    keyboardType: TextInputType.number,
+                                    autofocus: true,
+                                    decoration: const InputDecoration(
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    ),
+                                    style: const TextStyle(fontSize: 12),
                                   ),
-                                  style: const TextStyle(fontSize: 11),
                                 ),
                               )
                             else
                               Expanded(
                                 child: Text(
                                   '${item.quantity}',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.textColor),
                                 ),
                               ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             if (!isSerial && !isEditing)
                               IconButton(
-                                icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
+                                icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primaryColor),
                                 onPressed: () => _startEditing(index),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
                             if (!isSerial && isEditing)
                               IconButton(
-                                icon: const Icon(Icons.save, size: 16, color: Colors.green),
+                                icon: const Icon(Icons.check_circle, size: 20, color: AppColors.successColor),
                                 onPressed: () => _saveItemQuantity(index),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
+                            const SizedBox(width: 8),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
                               onPressed: () {
                                 final realIndex = _items.indexOf(item);
                                 setState(() {

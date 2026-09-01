@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 import 'consolidation_detail_page.dart';
 
@@ -80,10 +81,10 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
 
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'confirm': return Colors.green;
-      case 'progress': return Colors.orange;
-      case 'new': return Colors.blue;
-      case 'cancel': return Colors.red;
+      case 'confirm': return AppColors.successColor;
+      case 'progress': return AppColors.warningColor;
+      case 'new': return AppColors.primaryColor;
+      case 'cancel': return AppColors.errorColor;
       default: return Colors.grey;
     }
   }
@@ -112,12 +113,9 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: const Text("Consolidations", style: TextStyle(fontSize: 16)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -144,11 +142,11 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 50, color: Colors.red),
+              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
               const SizedBox(height: 16),
               Text(
                 errorMessage!,
-                style: const TextStyle(fontSize: 13, color: Colors.red),
+                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -161,20 +159,30 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
         ),
       )
           : consolidationSheets.isEmpty
-          ? const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.merge_type, size: 40, color: Colors.grey),
-            SizedBox(height: 8),
-            Text("Aucune consolidation trouvée", style: TextStyle(fontSize: 12)),
-            SizedBox(height: 4),
-            Text(
-              "Les consolidations sont créées après validation des comptages",
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-          ],
+          ? Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryColor.withOpacity(0.06),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.merge_type, size: 36, color: AppColors.primaryColor),
+              ),
+              const SizedBox(height: 14),
+              const Text("Aucune consolidation trouvée", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textColor)),
+              const SizedBox(height: 6),
+              const Text(
+                "Les consolidations sont créées après validation des comptages",
+                style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       )
           : Padding(
@@ -210,20 +218,13 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
                 }
               },
               child: Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                elevation: 2,
+                margin: const EdgeInsets.only(bottom: 10),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: getStatusColor(state).withOpacity(0.3), width: 1.5),
                 ),
-                child: Container(
+                child: Padding(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: getStatusColor(state).withOpacity(0.3),
-                      width: 2,
-                    ),
-                  ),
                   child: Row(
                     children: [
                       // Icon
@@ -258,9 +259,9 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
                             const SizedBox(height: 4),
                             Text(
                               "Zone: $zoneName",
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey[600],
+                                color: AppColors.textSecondary,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -289,20 +290,20 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
                                   const Icon(
                                     Icons.warning_amber,
                                     size: 14,
-                                    color: Colors.orange,
+                                    color: AppColors.warningColor,
                                   ),
                                 if (isConfirm)
                                   const Icon(
                                     Icons.check_circle,
                                     size: 14,
-                                    color: Colors.green,
+                                    color: AppColors.successColor,
                                   ),
                                 const SizedBox(width: 4),
                                 Text(
                                   "$totalLines lignes",
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 10,
-                                    color: Colors.grey[500],
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
                               ],

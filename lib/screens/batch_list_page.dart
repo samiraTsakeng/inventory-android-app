@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../models/batch.dart';
 import '../services/batch_storage_service.dart';
 import '../services/counting_service.dart';
@@ -82,7 +83,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Aucun lot sélectionné'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -95,7 +96,14 @@ class _BatchesListPageState extends State<BatchesListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Supprimer les lots", style: TextStyle(fontSize: 18)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.delete_outline, color: AppColors.errorColor, size: 20),
+              SizedBox(width: 8),
+              Text("Supprimer les lots", style: TextStyle(fontSize: 18)),
+            ],
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +116,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
                 const SizedBox(height: 8),
                 const Text(
                   "Certains lots sont déjà synchronisés. Ils seront également supprimés.",
-                  style: TextStyle(fontSize: 12, color: Colors.orange),
+                  style: TextStyle(fontSize: 12, color: AppColors.warningColor),
                 ),
               ],
             ],
@@ -121,7 +129,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: AppColors.errorColor,
                 foregroundColor: Colors.white,
               ),
               child: Text(
@@ -148,7 +156,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('$deletedCount lot(s) supprimé(s) avec succès'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.successColor,
         ),
       );
     }
@@ -159,7 +167,14 @@ class _BatchesListPageState extends State<BatchesListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Supprimer le lot", style: TextStyle(fontSize: 18)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.delete_outline, color: AppColors.errorColor, size: 20),
+              SizedBox(width: 8),
+              Text("Supprimer le lot", style: TextStyle(fontSize: 18)),
+            ],
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,7 +187,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
                 const SizedBox(height: 8),
                 const Text(
                   "Ce lot est déjà synchronisé. Il sera également supprimé.",
-                  style: TextStyle(fontSize: 12, color: Colors.orange),
+                  style: TextStyle(fontSize: 12, color: AppColors.warningColor),
                 ),
               ],
             ],
@@ -185,7 +200,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: AppColors.errorColor,
                 foregroundColor: Colors.white,
               ),
               child: const Text("Supprimer", style: TextStyle(fontSize: 14)),
@@ -203,7 +218,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Lot "${batch.name}" supprimé avec succès'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.successColor,
         ),
       );
     }
@@ -226,7 +241,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Lot synchronisé avec succès !'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.successColor,
             ),
           );
           await _loadBatches();
@@ -239,7 +254,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erreur: ${e.toString()}'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
@@ -256,7 +271,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Aucun lot à synchroniser'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -293,7 +308,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(' $successCount lots synchronisés, $failCount échoués'),
-          backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
+          backgroundColor: failCount > 0 ? AppColors.warningColor : AppColors.successColor,
         ),
       );
     }
@@ -323,14 +338,11 @@ class _BatchesListPageState extends State<BatchesListPage> {
     final selectedCount = _selectedBatches.length;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: _isSelectionMode
             ? Text('$selectedCount lot(s) sélectionné(s)')
             : const Text('Lots sauvegardés', style: TextStyle(fontSize: 16)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: _isSelectionMode
             ? IconButton(
@@ -373,16 +385,24 @@ class _BatchesListPageState extends State<BatchesListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'Aucun lot sauvegardé',
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor.withOpacity(0.06),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.folder_open_outlined, size: 46, color: AppColors.primaryColor),
             ),
-            const SizedBox(height: 8),
-            Text(
+            const SizedBox(height: 16),
+            const Text(
+              'Aucun lot sauvegardé',
+              style: TextStyle(color: AppColors.textColor, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            const Text(
               'Scannez et utilisez "Enregistrer" pour créer un lot',
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -391,24 +411,38 @@ class _BatchesListPageState extends State<BatchesListPage> {
         children: [
           // Summary
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
+                color: AppColors.primaryColor.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${_batches.length} lot(s) total',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  Row(
+                    children: [
+                      const Icon(Icons.folder_outlined, size: 15, color: AppColors.primaryColor),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${_batches.length} lot(s) total',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryColor),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '$unsyncedCount à synchroniser',
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  if (unsyncedCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.warningColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$unsyncedCount à synchroniser',
+                        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.warningColor),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -444,16 +478,18 @@ class _BatchesListPageState extends State<BatchesListPage> {
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue[50] : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: isSelected
-                          ? Border.all(color: Colors.blue, width: 2)
-                          : null,
+                      color: isSelected ? AppColors.primaryColor.withOpacity(0.06) : AppColors.surfaceColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isSelected ? AppColors.primaryColor : AppColors.borderColor,
+                        width: isSelected ? 2 : 1,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
+                          color: AppColors.primaryColor.withOpacity(0.05),
                           spreadRadius: 1,
-                          blurRadius: 4,
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
@@ -467,7 +503,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
                             child: Checkbox(
                               value: isSelected,
                               onChanged: (_) => _toggleSelection(batch),
-                              activeColor: Colors.blue,
+                              activeColor: AppColors.primaryColor,
                             ),
                           ),
                         // Icon
@@ -475,35 +511,43 @@ class _BatchesListPageState extends State<BatchesListPage> {
                           width: 50,
                           height: 50,
                           decoration: BoxDecoration(
-                            color: isSynced ? Colors.green[100] : Colors.blue[100],
+                            color: isSynced ? AppColors.successColor.withOpacity(0.12) : AppColors.primaryColor.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(25),
                           ),
                           child: Icon(
-                            isSynced ? Icons.check_circle : Icons.save,
-                            color: isSynced ? Colors.green : Colors.blue,
-                            size: 28,
+                            isSynced ? Icons.check_circle : Icons.save_outlined,
+                            color: isSynced ? AppColors.successColor : AppColors.primaryColor,
+                            size: 26,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         Text(
                           batch.name,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
+                            color: AppColors.textColor,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '${batch.items.length} articles',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          isSynced ? 'Synchronisé' : 'En attente',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isSynced ? Colors.green : Colors.orange,
-                            fontWeight: FontWeight.w500,
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (isSynced ? AppColors.successColor : AppColors.warningColor).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            isSynced ? 'Synchronisé' : 'En attente',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isSynced ? AppColors.successColor : AppColors.warningColor,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                         // Action buttons (only if not in selection mode)
@@ -516,8 +560,9 @@ class _BatchesListPageState extends State<BatchesListPage> {
                                 ElevatedButton(
                                   onPressed: _isSyncing ? null : () => _syncBatch(batch),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
+                                    backgroundColor: AppColors.successColor,
                                     foregroundColor: Colors.white,
+                                    minimumSize: Size.zero,
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(20),
@@ -527,7 +572,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
                                 ),
                                 const SizedBox(width: 6),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                  icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
                                   onPressed: () => _deleteSingleBatch(batch),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
@@ -539,7 +584,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
                               onPressed: () => _deleteSingleBatch(batch),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -561,9 +606,9 @@ class _BatchesListPageState extends State<BatchesListPage> {
           // Delete all button
           FloatingActionButton.extended(
             onPressed: _isSyncing ? null : _deleteSelectedBatches,
-            icon: const Icon(Icons.delete, size: 20),
+            icon: const Icon(Icons.delete_outline, size: 20),
             label: const Text('Tout supprimer'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.errorColor,
             foregroundColor: Colors.white,
           ),
           const SizedBox(width: 12),
@@ -574,7 +619,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.sync, size: 20),
             label: const Text('Tout synchroniser'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.successColor,
             foregroundColor: Colors.white,
           ),
         ],

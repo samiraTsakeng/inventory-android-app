@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/adjustment_service.dart';
 import 'choice_page.dart';
+import '../utils/constants.dart';
 
 class AdjustmentsListPage extends StatefulWidget {
   const AdjustmentsListPage({Key? key}) : super(key: key);
@@ -47,10 +48,10 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
 
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'draft': return Colors.orange;
-      case 'confirm': return Colors.green;
-      case 'done': return Colors.blue;
-      case 'cancel': return Colors.red;
+      case 'draft': return AppColors.warningColor;
+      case 'confirm': return AppColors.successColor;
+      case 'done': return AppColors.secondaryColor;
+      case 'cancel': return AppColors.errorColor;
       default: return Colors.grey;
     }
   }
@@ -139,10 +140,6 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                 arguments: adj["id"],
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-            ),
             child: const Text("Continuer"),
           ),
         ],
@@ -153,12 +150,9 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: const Text("Ajustements", style: TextStyle(fontSize: 16)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 22),
@@ -183,7 +177,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 40, color: Colors.red),
+            const Icon(Icons.error_outline, size: 40, color: AppColors.errorColor),
             const SizedBox(height: 8),
             Text("Error: $errorMessage", style: const TextStyle(fontSize: 12)),
             const SizedBox(height: 8),
@@ -226,13 +220,15 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                 width: cardWidth,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppColors.surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderColor),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
+                        color: AppColors.primaryColor.withOpacity(0.05),
                         spreadRadius: 1,
-                        blurRadius: 2,
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
@@ -295,20 +291,20 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                             ),
                             const SizedBox(height: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
+                                color: AppColors.secondaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
                                     "Voir",
-                                    style: TextStyle(fontSize: 12, color: Colors.blue),
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.secondaryColor),
                                   ),
                                   SizedBox(width: 2),
-                                  Icon(Icons.arrow_forward, size: 8, color: Colors.blue),
+                                  Icon(Icons.arrow_forward, size: 10, color: AppColors.secondaryColor),
                                 ],
                               ),
                             ),
