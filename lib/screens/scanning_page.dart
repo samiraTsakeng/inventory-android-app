@@ -34,6 +34,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   final MobileScannerController scannerController = MobileScannerController(
     facing: CameraFacing.back,
     torchEnabled: false,
+    // ✅ no returnImage/OCR needed anymore — filtering is done on the
+    // barcode value itself, so scanning stays fast and fully offline.
   );
   List<ScannedItem> scannedItems = [];
   bool isScanning = true;
@@ -44,6 +46,14 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   Timer? _scanDebounceTimer;
   bool _isProcessingScan = false;
 
+  // ✅ Shared scanning session (two team members, same sheet, two phones).
+  // Polls the server for the merged list every few seconds.
+  Timer? _liveSyncTimer;
+  // Quantity for each barcode that we've added/incremented locally but
+  // haven't successfully pushed to the server yet (e.g. no connectivity).
+  // Flushed on every poll tick until it succeeds.
+  final Map<String, int> _pendingDeltas = {};
+
   // For scan flash effect
   bool _showScanZone = true;
 
@@ -53,6 +63,9 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     _isMounted = true;
     WidgetsBinding.instance.addObserver(this);
     _loadSavedItems();
+    // ✅ Poll every 4s for scans made by the other team member on this
+    // same counting sheet, and retry pushing anything we couldn't send.
+    _liveSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) => _syncLiveSession());
   }
 
   @override
@@ -60,15 +73,16 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     _isMounted = false;
     WidgetsBinding.instance.removeObserver(this);
     _scanDebounceTimer?.cancel();
+    _liveSyncTimer?.cancel();
     scannerController.dispose();
     super.dispose();
   }
 
-  // Detect when app comes back from background
+  // ✅ Detect when app comes back from background
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      print("App resumed, reloading scanned items...");
+      print("🔄 App resumed, reloading scanned items...");
       _loadSavedItems();
     }
   }
@@ -90,13 +104,13 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
         // Show count of restored items
         if (savedItems.isNotEmpty) {
-          print("Restored ${savedItems.length} scanned items from local storage");
+          print("✅ Restored ${savedItems.length} scanned items from local storage");
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && scannedItems.isNotEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${scannedItems.length} articles scannés restaurés'),
+                  content: Text('📱 ${scannedItems.length} articles scannés restaurés'),
                   backgroundColor: Colors.blue,
                   duration: const Duration(seconds: 2),
                 ),
@@ -104,11 +118,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
             }
           });
         } else {
-          print(" No saved items found for sheet: ${widget.countingSheetId}");
+          print("📭 No saved items found for sheet: ${widget.countingSheetId}");
         }
       }
     } catch (e) {
-      print("Error loading saved items: $e");
+      print("❌ Error loading saved items: $e");
       if (_isMounted) {
         setState(() {
           scannedItems = [];
@@ -121,7 +135,123 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   Future<void> _saveItems() async {
     if (_isMounted) {
       await LocalStorageService.saveScannedItems(widget.countingSheetId, scannedItems);
-      print("Saved ${scannedItems.length} items to local storage");
+      print("💾 Saved ${scannedItems.length} items to local storage");
+    }
+  }
+
+  // ✅ Runs every 4s: first retries any scan we couldn't push earlier
+  // (offline fallback), then pulls the latest shared list and merges in
+  // whatever the teammate scanned that we don't have yet.
+  Future<void> _syncLiveSession() async {
+    if (!_isMounted) return;
+
+    // 1) Flush anything pending (added/incremented while offline).
+    if (_pendingDeltas.isNotEmpty) {
+      final barcodes = List<String>.from(_pendingDeltas.keys);
+      for (final barcode in barcodes) {
+        final index = scannedItems.indexWhere((it) => it.barcode == barcode);
+        if (index == -1) {
+          // Item got removed locally in the meantime — nothing to push.
+          _pendingDeltas.remove(barcode);
+          continue;
+        }
+        final delta = _pendingDeltas[barcode]!;
+        final item = scannedItems[index];
+        final serverItems = await CountingService.pushLiveScan(
+          countingSheetId: widget.countingSheetId,
+          item: {
+            'barcode': barcode,
+            'quantity': delta,
+            'product_name': item.productName,
+            'product_id': item.productId,
+            'lot_number': item.lotNumber,
+            'lot_id': item.lotId,
+            'tracking': item.tracking,
+          },
+        );
+        if (serverItems != null) {
+          _pendingDeltas.remove(barcode);
+          _mergeServerItems(serverItems);
+        }
+        // If it failed again, it just stays in _pendingDeltas for next tick.
+      }
+      await _saveItems();
+    }
+
+    // 2) Pull the shared list and merge in anything new.
+    final serverItems = await CountingService.getLiveItems(widget.countingSheetId);
+    if (serverItems.isNotEmpty) {
+      _mergeServerItems(serverItems);
+    }
+  }
+
+  // Merges the server's shared list into our local `scannedItems`:
+  // - barcodes we don't have yet (teammate scanned them) are added
+  // - barcodes we DO have, and have nothing pending for, get their
+  //   quantity aligned to the server's (authoritative) value
+  // - barcodes with a pending local delta are left alone for now — the
+  //   server value is stale until our push succeeds, so overwriting here
+  //   would silently drop our teammate-visible quantity.
+  void _mergeServerItems(List<Map<String, dynamic>> serverItems) {
+    if (!_isMounted) return;
+    bool changed = false;
+
+    for (final serverItem in serverItems) {
+      final barcode = serverItem['barcode'];
+      if (barcode == null) continue;
+      if (_pendingDeltas.containsKey(barcode)) continue;
+
+      final index = scannedItems.indexWhere((it) => it.barcode == barcode);
+      final serverQty = (serverItem['quantity'] is int)
+          ? serverItem['quantity'] as int
+          : int.tryParse('${serverItem['quantity']}') ?? 1;
+
+      if (index == -1) {
+        scannedItems.add(ScannedItem(
+          barcode: barcode,
+          productName: serverItem['product_name'] ?? '',
+          productId: serverItem['product_id'] ?? 0,
+          quantity: serverQty,
+          lotNumber: serverItem['lot_number'],
+          lotId: serverItem['lot_id'],
+          tracking: serverItem['tracking'] ?? 'none',
+        ));
+        changed = true;
+      } else if (scannedItems[index].quantity != serverQty) {
+        scannedItems[index].quantity = serverQty;
+        changed = true;
+      }
+    }
+
+    if (changed && _isMounted) {
+      setState(() {});
+      _saveItems();
+    }
+  }
+
+  // ✅ Pushes a scan (new item or extra quantity for an existing one) to
+  // the shared session. On failure (offline), queues it so `_syncLiveSession`
+  // retries automatically — the scan is never lost, it just stays local
+  // until connectivity returns.
+  Future<void> _pushScanOrQueue(ScannedItem item, int addedQuantity) async {
+    final serverItems = await CountingService.pushLiveScan(
+      countingSheetId: widget.countingSheetId,
+      item: {
+        'barcode': item.barcode,
+        'quantity': addedQuantity,
+        'product_name': item.productName,
+        'product_id': item.productId,
+        'lot_number': item.lotNumber,
+        'lot_id': item.lotId,
+        'tracking': item.tracking,
+      },
+    );
+
+    if (serverItems != null) {
+      _mergeServerItems(serverItems);
+    } else {
+      // Offline / server unreachable — retry on the next poll tick.
+      _pendingDeltas[item.barcode] = (_pendingDeltas[item.barcode] ?? 0) + addedQuantity;
     }
   }
 
@@ -171,16 +301,21 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     );
   }
 
-  // Check if barcode already exists in saved batches
+  // Check if barcode already exists in saved batches — scoped to THIS
+  // counting sheet, same as the "Lots sauvegardés" page filters
+  // (batch_list_page.dart: b.countingSheetId == widget.countingSheetId).
+  // Without this scope, a batch saved under a different sheet could block
+  // a scan here while that sheet's own batch list still shows empty.
+  // ✅ Check ALL batches (synced or not) to prevent double-counting
   Future<bool> _isInSavedBatches(String barcode) async {
     try {
       final batches = await BatchStorageService.getBatches();
       for (final batch in batches) {
-        if (!batch.isSynced) {
-          for (final item in batch.items) {
-            if (item.barcode == barcode) {
-              return true;
-            }
+        if (batch.countingSheetId != widget.countingSheetId) continue;
+        // ✅ Check both synced and non-synced batches
+        for (final item in batch.items) {
+          if (item.barcode == barcode) {
+            return true;
           }
         }
       }
@@ -190,32 +325,49 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     }
   }
 
-  //  Process a single barcode
+  // ✅ Process a single barcode
   Future<void> _processBarcode(String barcode) async {
     setState(() {
       isLookingUp = true;
       isScanning = false;
     });
 
-    // Check if already in current list
+    // ✅ Already in the list (scanned by you OR your teammate, synced via
+    // the shared session) — ask how many more to add instead of blocking.
     final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
     if (existingIndex != -1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cet article est déjà dans la liste'), backgroundColor: Colors.orange),
-      );
-      setState(() {
-        isLookingUp = false;
-        isScanning = true;
-      });
+      await _handleDuplicateScan(existingIndex, barcode);
       return;
     }
 
     // Check if already in saved batches
     final inBatch = await _isInSavedBatches(barcode);
     if (inBatch) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cet article est déjà dans un lot sauvegardé'), backgroundColor: Colors.orange),
-      );
+      // ✅ Show strong warning via DialogBox instead of SnackBar
+      if (_isMounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('⚠️ Article déjà compté', style: TextStyle(color: Colors.orange)),
+            content: const Text(
+              'Cet article a déjà été compté dans cette feuille et sauvegardé dans un lot.\n\n'
+              'Si vous le scannez à nouveau, il sera compté deux fois.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    isLookingUp = false;
+                    isScanning = true;
+                  });
+                },
+                child: const Text('OK, annuler'),
+              ),
+            ],
+          ),
+        );
+      }
       setState(() {
         isLookingUp = false;
         isScanning = true;
@@ -227,51 +379,94 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     final result = await CountingService.lookupProduct(barcode);
 
     if (_isMounted) {
-      setState(() {
-        if (result != null && result['id'] != 0 && result['id'] != null) {
-          final tracking = result['tracking'] ?? 'serial';
-          final lotName = result['lot_name'] ?? barcode;
-          final lotIdValue = result['lot_id'] ?? 0;
-          final productIdValue = result['id'];
+      if (result != null && result['id'] != 0 && result['id'] != null) {
+        final tracking = result['tracking'] ?? 'serial';
+        final lotName = result['lot_name'] ?? barcode;
+        final lotIdValue = result['lot_id'] ?? 0;
+        final productIdValue = result['id'];
 
-          if (tracking == 'lot') {
-            _handleLotProduct(result, barcode, tracking, lotName, lotIdValue, productIdValue);
-            return;
-          }
-
-          scannedItems.add(ScannedItem(
-            barcode: barcode,
-            productName: result['name'] ?? 'Unknown',
-            productId: productIdValue,
-            quantity: 1,
-            lotNumber: lotName,
-            lotId: lotIdValue,
-            tracking: tracking,
-          ));
-          _saveItems(); // Save immediately
-          isLookingUp = false;
-          isScanning = true;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(' Ajouté: ${result['name']}'),
-              backgroundColor: Colors.green,
-              duration: const Duration(milliseconds: 800),
-            ),
-          );
-        } else {
-          isLookingUp = false;
-          isScanning = true;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Code non trouvé: $barcode'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+        if (tracking == 'lot') {
+          await _handleLotProduct(result, barcode, tracking, lotName, lotIdValue, productIdValue);
+          return;
         }
+
+        final newItem = ScannedItem(
+          barcode: barcode,
+          productName: result['name'] ?? 'Unknown',
+          productId: productIdValue,
+          quantity: 1,
+          lotNumber: lotName,
+          lotId: lotIdValue,
+          tracking: tracking,
+        );
+
+        setState(() {
+          scannedItems.add(newItem);
+          isLookingUp = false;
+          isScanning = true;
+        });
+        _saveItems(); // ✅ Save immediately (local, offline-safe)
+        _pushScanOrQueue(newItem, 1); // ✅ Share with teammate's phone
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Ajouté: ${result['name']}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(milliseconds: 800),
+          ),
+        );
+      } else {
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Code non trouvé: $barcode'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  // ✅ Barcode already scanned (by this phone or the teammate's) — ask for
+  // an additional quantity, add it locally, and share the update.
+  Future<void> _handleDuplicateScan(int existingIndex, String barcode) async {
+    final existingItem = scannedItems[existingIndex];
+    final addedQty = await _showQuantityDialog(
+      '${existingItem.productName} (déjà scanné — quantité actuelle: ${existingItem.quantity})',
+      barcode,
+    );
+
+    if (addedQty == null) {
+      if (_isMounted) {
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+      }
+      return;
+    }
+
+    if (_isMounted) {
+      setState(() {
+        scannedItems[existingIndex].quantity += addedQty;
+        isLookingUp = false;
+        isScanning = true;
       });
+      _saveItems();
+      _pushScanOrQueue(existingItem, addedQty);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ ${existingItem.productName}: +$addedQty (total ${scannedItems[existingIndex].quantity})'),
+          backgroundColor: Colors.green,
+          duration: const Duration(milliseconds: 900),
+        ),
+      );
     }
   }
 
@@ -288,24 +483,27 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     }
 
     if (_isMounted) {
+      final newItem = ScannedItem(
+        barcode: barcode,
+        productName: result['name'] ?? 'Unknown',
+        productId: productIdValue,
+        quantity: qty,
+        lotNumber: lotName,
+        lotId: lotIdValue,
+        tracking: tracking,
+      );
+
       setState(() {
-        scannedItems.add(ScannedItem(
-          barcode: barcode,
-          productName: result['name'] ?? 'Unknown',
-          productId: productIdValue,
-          quantity: qty,
-          lotNumber: lotName,
-          lotId: lotIdValue,
-          tracking: tracking,
-        ));
-        _saveItems(); // Save immediately
+        scannedItems.add(newItem);
         isScanning = true;
         isLookingUp = false;
       });
+      _saveItems(); // ✅ Save immediately (local, offline-safe)
+      _pushScanOrQueue(newItem, qty); // ✅ Share with teammate's phone
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ajouté: ${result['name']} - Quantité: $qty'),
+          content: Text('✅ Ajouté: ${result['name']} - Quantité: $qty'),
           backgroundColor: Colors.green,
           duration: const Duration(milliseconds: 800),
         ),
@@ -358,33 +556,37 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   void onBarcodeDetected(BarcodeCapture capture) async {
     if (!isScanning || isLookingUp || _isProcessingScan) return;
     if (_scanDebounceTimer?.isActive ?? false) return;
+    if (capture.barcodes.isEmpty) return;
 
     _scanDebounceTimer = Timer(const Duration(milliseconds: 400), () {});
     _isProcessingScan = true;
 
-    final barcode = capture.barcodes.first.rawValue;
-    if (barcode == null || barcode == lastScannedBarcode) {
-      _isProcessingScan = false;
-      return;
-    }
+    try {
+      // ✅ Use the first barcode detected
+      final String? barcode = capture.barcodes.first.rawValue;
 
-    setState(() {
-      _showScanZone = false;
-      isScanning = false;
-      isLookingUp = true;
-      lastScannedBarcode = barcode;
-    });
-
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (_isMounted) {
-        setState(() => _showScanZone = true);
+      if (barcode == null || barcode.isEmpty) {
+        return;
       }
-    });
 
-    await _processBarcode(barcode);
+      if (barcode == lastScannedBarcode) return;
 
-    _isProcessingScan = false;
+      setState(() {
+        _showScanZone = false;
+        isLookingUp = true;
+      });
+
+      lastScannedBarcode = barcode;
+      await _processBarcode(barcode);
+    } finally {
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (_isMounted) setState(() => _showScanZone = true);
+      });
+      _isProcessingScan = false;
+    }
   }
+
+
 
   void _logout() {
     showDialog(
@@ -440,6 +642,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       Navigator.pop(context);
       if (success) {
         await LocalStorageService.clearScannedItems(widget.countingSheetId);
+        await CountingService.clearLiveItems(widget.countingSheetId); // ✅ reset shared session for both phones
         setState(() {
           scannedItems.clear();
           lastScannedBarcode = null;
@@ -447,11 +650,11 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(" Envoyé avec succès !"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("✅ Envoyé avec succès !"), backgroundColor: Colors.green),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('❌ Erreur lors de l\'envoi'), backgroundColor: Colors.red),
         );
       }
     }
@@ -534,6 +737,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 sheetName: widget.sheetName,
               );
               await BatchStorageService.saveBatch(batch);
+              await CountingService.clearLiveItems(widget.countingSheetId); // ✅ reset shared session for both phones
               if (_isMounted) {
                 setState(() {
                   scannedItems.clear();
@@ -557,7 +761,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
 
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('$batchName sauvegardé (${batch.items.length} articles)'),
+                  content: Text('✅ $batchName sauvegardé (${batch.items.length} articles)'),
                   backgroundColor: Colors.green,
                 ),
               );

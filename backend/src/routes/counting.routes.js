@@ -28,4 +28,13 @@ router.post('/cache-products', CountingController.cacheProducts);
 
 // POST /counting/cache-products-by-barcode
 router.post('/cache-products-by-barcode', CountingController.cacheProductsByBarcode);
+
+// ✅ Shared scanning session (two team members, same sheet, different phones)
+// GET /counting/live-items/:sheet_id
+router.get('/live-items/:sheet_id', CountingController.getLiveItems);
+// POST /counting/live-scan
+router.post('/live-scan', CountingController.pushLiveScan);
+// POST /counting/live-items/:sheet_id/clear
+router.post('/live-items/:sheet_id/clear', CountingController.clearLiveItems);
+
 module.exports = router;

@@ -5,18 +5,18 @@ import '../models/scanned_item.dart';
 import 'local_storage_service.dart';
 
 class CountingService {
-  // OFFLINE-FIRST: Check cache, then API
+  // ✅ OFFLINE-FIRST: Check cache, then API
   static Future<Map<String, dynamic>?> lookupProduct(String barcode) async {
     try {
-      // 1️ Check local cache FIRST (instant, no internet needed)
+      // 1️⃣ Check local cache FIRST (instant, no internet needed)
       final cachedProduct = await LocalStorageService.getCachedProduct(barcode);
       if (cachedProduct != null) {
-        print("Product found in OFFLINE cache: ${cachedProduct['name']}");
+        print("✅ Product found in OFFLINE cache: ${cachedProduct['name']}");
         return cachedProduct;
       }
 
-      // 2️ If not in cache, try API (requires internet)
-      print(" Looking up product ONLINE: $barcode");
+      // 2️⃣ If not in cache, try API (requires internet)
+      print("🌐 Looking up product ONLINE: $barcode");
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/lookup-product'),
         headers: {"Content-Type": "application/json"},
@@ -30,16 +30,16 @@ class CountingService {
         final data = jsonDecode(response.body);
         if (data['success'] == true && data['product'] != null) {
           final product = data['product'];
-          // Cache the product for future offline use
+          // ✅ Cache the product for future offline use
           await LocalStorageService.cacheProduct(barcode, product);
-          print(" Product cached for offline use: ${product['name']}");
+          print("✅ Product cached for offline use: ${product['name']}");
           return product;
         }
       }
       return null;
     } catch (e) {
       print("Product lookup error: $e");
-      // If offline, return null (product not in cache)
+      // ✅ If offline, return null (product not in cache)
       return null;
     }
   }
@@ -151,8 +151,73 @@ class CountingService {
     }
   }
 
-  // Get number of cached products
+  // ✅ Get number of cached products
   static Future<int> getCachedProductsCount() async {
     return await LocalStorageService.getCachedProductsCount();
+  }
+
+  // ✅ Shared scanning session — fetch the current merged list of items
+  // scanned by ANY team member on this sheet (polled periodically).
+  static Future<List<Map<String, dynamic>>> getLiveItems(int sheetId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$sheetId'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['items'] ?? []);
+        }
+      }
+      return [];
+    } catch (e) {
+      print("Get live items error: $e");
+      // Offline or server unreachable — caller falls back to local state.
+      return [];
+    }
+  }
+
+  // ✅ Shared scanning session — push a scan (new item, or additional
+  // quantity for one that's already there) and get back the updated
+  // merged list. Returns null if the push failed (e.g. no connectivity),
+  // so the caller can fall back to local-only storage and retry later.
+  static Future<List<Map<String, dynamic>>?> pushLiveScan({
+    required int countingSheetId,
+    required Map<String, dynamic> item,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/live-scan'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          'counting_sheet_id': countingSheetId,
+          ...item,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['items'] ?? []);
+        }
+      }
+      return null;
+    } catch (e) {
+      print("Push live scan error: $e");
+      return null;
+    }
+  }
+
+  // ✅ Called once the shared list has been saved into a batch / sent to
+  // the ERP, so both phones start the next lot from a clean, empty list.
+  static Future<void> clearLiveItems(int sheetId) async {
+    try {
+      await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$sheetId/clear'),
+      );
+    } catch (e) {
+      print("Clear live items error: $e");
+    }
   }
 }

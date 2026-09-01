@@ -1,5 +1,6 @@
 const OdooService = require("../services/odooServices");
 const AuthController = require("./authController");
+const LiveSessionService = require("../services/liveSessionService");
 
 // Helper function to process found lot (moved outside for global access)
 async function processLotFound(session, lot, barcode) {
@@ -785,7 +786,7 @@ class CountingController {
       });
 
       const data = await response.json();
-      console.log(`Found ${data.result?.length || 0} products`);
+      console.log(`📥 Found ${data.result?.length || 0} products`);
 
       if (data.error) {
         throw new Error(data.error.data?.message || data.error.message);
@@ -798,6 +799,75 @@ class CountingController {
 
     } catch (error) {
       console.error("Cache products by barcode error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ✅ GET /counting/live-items/:sheet_id
+  // Returns the current shared, merged list of scanned items for a sheet —
+  // this is what both phones poll periodically to see each other's scans.
+  static async getLiveItems(req, res) {
+    try {
+      const { sheet_id } = req.params;
+      const items = LiveSessionService.getItems(sheet_id);
+      return res.json({
+        success: true,
+        items
+      });
+    } catch (error) {
+      console.error("Get live items error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ✅ POST /counting/live-scan
+  // Body: { counting_sheet_id, barcode, product_name, product_id, quantity,
+  //         lot_number, lot_id, tracking }
+  // Upserts the scan into the shared list for that sheet (adds it, or
+  // increments quantity if the barcode is already there — e.g. the
+  // teammate scanned it first) and returns the updated merged list.
+  static async pushLiveScan(req, res) {
+    try {
+      const { counting_sheet_id, barcode } = req.body;
+
+      if (!counting_sheet_id || !barcode) {
+        return res.status(400).json({
+          success: false,
+          message: "counting_sheet_id and barcode are required"
+        });
+      }
+
+      const items = LiveSessionService.upsertItem(counting_sheet_id, req.body);
+
+      return res.json({
+        success: true,
+        items
+      });
+    } catch (error) {
+      console.error("Push live scan error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ✅ POST /counting/live-items/:sheet_id/clear
+  // Called once the shared list has been saved into a batch / sent to the
+  // ERP, so both phones start the next lot from a clean, empty list.
+  static async clearLiveItems(req, res) {
+    try {
+      const { sheet_id } = req.params;
+      LiveSessionService.clearItems(sheet_id);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Clear live items error:", error);
       return res.status(500).json({
         success: false,
         message: error.message
