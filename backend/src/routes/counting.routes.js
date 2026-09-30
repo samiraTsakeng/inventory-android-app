@@ -36,5 +36,6 @@ router.get('/live-items/:sheet_id', CountingController.getLiveItems);
 router.post('/live-scan', CountingController.pushLiveScan);
 // POST /counting/live-items/:sheet_id/clear
 router.post('/live-items/:sheet_id/clear', CountingController.clearLiveItems);
-
+//remove an item from the shared session
+router.post('/live-items/:sheet_id/remove', CountingController.removeLiveItem);
 module.exports = router;

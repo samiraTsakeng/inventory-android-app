@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/batch_storage_service.dart';
 
 class ScannedItemsListPage extends StatefulWidget {
   final List<ScannedItem> items;
@@ -9,6 +11,10 @@ class ScannedItemsListPage extends StatefulWidget {
   final int countingSheetId;
   final int adjustmentId;
   final Function(List<ScannedItem>) onItemsUpdated;
+  // ✅ When set, this page is showing the contents of an already-SAVED
+  // batch (opened from "Lots sauvegardés"), and edits/deletes must be
+  // persisted into that batch via BatchStorageService.
+  final String? batchId;
 
   const ScannedItemsListPage({
     Key? key,
@@ -17,6 +23,7 @@ class ScannedItemsListPage extends StatefulWidget {
     required this.countingSheetId,
     required this.adjustmentId,
     required this.onItemsUpdated,
+    this.batchId,
   }) : super(key: key);
 
   @override
@@ -45,40 +52,129 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         _filteredItems = List.from(_items);
       } else {
         _filteredItems = _items.where((item) =>
-          item.productName.toLowerCase().contains(_searchQuery) ||
-          item.barcode.contains(_searchQuery)
+        item.productName.toLowerCase().contains(_searchQuery) ||
+            item.barcode.contains(_searchQuery)
         ).toList();
       }
     });
   }
 
-  void _saveItemQuantity(int index) {
+  // ✅ FIX #2: quantity edit now persists correctly.
+  // - Compute the real index in the master list (not the filtered one)
+  // - Update BOTH _items and _filteredItems
+  // - Notify parent + persist to the correct storage
+  void _saveItemQuantity(int filteredIndex) {
     final newQuantity = int.tryParse(_quantityController.text);
-    if (newQuantity != null && newQuantity > 0) {
-      final realIndex = _items.indexOf(_filteredItems[index]);
-      setState(() {
-        _items[realIndex].quantity = newQuantity;
-        _filteredItems[index].quantity = newQuantity;
+    if (newQuantity == null || newQuantity < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Quantité invalide'),
+          backgroundColor: AppColors.errorColor,
+        ),
+      );
+      return;
+    }
+
+    // Find the real index in the master list.
+    final item = _filteredItems[filteredIndex];
+    final realIndex = _items.indexWhere((it) => it.barcode == item.barcode);
+    if (realIndex == -1) return;
+
+    setState(() {
+      _items[realIndex].quantity = newQuantity;
+      item.quantity = newQuantity;
+      _editingIndex = -1;
+      _quantityController.clear();
+    });
+
+    // ✅ Notify parent (in-memory list in scanning_page) AND persist.
+    widget.onItemsUpdated(_items);
+    _persistChanges();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Quantité mise à jour'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // ✅ FIX #5: persistence now also clears the shared live-session entry
+  // for deleted items, so rescanning them later doesn't trigger a
+  // "already scanned" warning.
+  Future<void> _persistChanges() async {
+    if (widget.batchId != null) {
+      await BatchStorageService.updateBatchItems(widget.batchId!, _items);
+    } else {
+      await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
+    }
+  }
+
+  // ✅ FIX #5: on delete — remove from local list, persist, AND notify the
+  // backend so its shared live-session list (used by both phones) also
+  // drops the entry. Otherwise rescanning it triggers "already scanned".
+  Future<void> _deleteItem(ScannedItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Supprimer cet article ?'),
+        content: Text('${item.productName}\nQuantité: ${item.quantity}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.errorColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final realIndex = _items.indexWhere((it) => it.barcode == item.barcode);
+    if (realIndex == -1) return;
+
+    setState(() {
+      _items.removeAt(realIndex);
+      _filteredItems.removeWhere((it) => it.barcode == item.barcode);
+      if (_editingIndex >= _filteredItems.length) {
         _editingIndex = -1;
         _quantityController.clear();
-      });
-      widget.onItemsUpdated(_items);
-      _saveItemsToStorage();
-      _saveToLocalStorage();
+      }
+    });
+
+    widget.onItemsUpdated(_items);
+    await _persistChanges();
+
+    // ✅ Tell the shared live session to drop this barcode too.
+    await CountingService.removeLiveItem(
+      countingSheetId: widget.countingSheetId,
+      barcode: item.barcode,
+    );
+
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quantité mise à jour'), duration: Duration(seconds: 1)),
+        const SnackBar(
+          content: Text('Article supprimé'),
+          backgroundColor: AppColors.successColor,
+          duration: Duration(seconds: 1),
+        ),
       );
     }
   }
 
-  Future<void> _saveToLocalStorage() async {
-    await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
-  }
-
-  void _startEditing(int index) {
+  void _startEditing(int filteredIndex) {
     setState(() {
-      _editingIndex = index;
-      _quantityController.text = _filteredItems[index].quantity.toString();
+      _editingIndex = filteredIndex;
+      _quantityController.text = _filteredItems[filteredIndex].quantity.toString();
     });
   }
 
@@ -93,12 +189,17 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
 
   Color _getTrackingColor(String tracking) {
     switch (tracking) {
-      case 'serial': return Colors.purple;
-      case 'lot': return Colors.orange;
+      case 'serial': return AppColors.secondaryColor;
+      case 'lot': return AppColors.warningColor;
       default: return Colors.grey;
     }
   }
 
+  // ✅ FIX #1 & #6: before sending, verify each barcode against the ERP to
+  // avoid creating duplicates. If ERP says "already there", we skip it.
+  // After a successful send of the *new* items, we clear the list
+  // completely (both locally and on the shared session) so the user
+  // starts fresh and cannot double-submit.
   Future<void> _sendToERP() async {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,7 +209,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     }
 
     final validItems = _items.where((item) => item.productId != 0).toList();
-
     if (validItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Aucun produit valide à envoyer')),
@@ -119,55 +219,109 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     setState(() => _isSending = true);
 
     try {
+      // ✅ FIX #6: pre-flight ERP check — only submit items that aren't
+      // already in the ERP for this sheet.
+      final alreadyInErp = <String>[];
+      final toSubmit = <ScannedItem>[];
+
+      for (final item in validItems) {
+        final exists = await CountingService.isAlreadyInErp(
+          countingSheetId: widget.countingSheetId,
+          barcode: item.barcode,
+        );
+        if (exists) {
+          alreadyInErp.add(item.barcode);
+        } else {
+          toSubmit.add(item);
+        }
+      }
+
+      if (toSubmit.isEmpty) {
+        setState(() => _isSending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Tous les articles (${alreadyInErp.length}) existent déjà dans l\'ERP. Rien à envoyer.',
+            ),
+            backgroundColor: AppColors.warningColor,
+          ),
+        );
+        // ✅ Still clear the local list — those items ARE in the ERP.
+        await _clearAllAfterSubmit();
+        return;
+      }
+
       final success = await CountingService.submitScannedItems(
         countingSheetId: widget.countingSheetId,
         adjustmentId: widget.adjustmentId,
-        items: validItems,
+        items: toSubmit,
       );
 
       if (success && mounted) {
-        await LocalStorageService.clearScannedItems(widget.countingSheetId);
-        setState(() {
-          _items.clear();
-          _filteredItems.clear();
-        });
-        widget.onItemsUpdated([]);
+        if (widget.batchId != null) {
+          await BatchStorageService.markBatchAsSynced(widget.batchId!);
+        } else {
+          // ✅ FIX #1: after a successful ERP send, wipe the list completely
+          // (local storage + shared live session) so nothing can be
+          // re-submitted by accident.
+          await _clearAllAfterSubmit();
+        }
+
+        final msg = alreadyInErp.isEmpty
+            ? 'Envoyé avec succès !'
+            : 'Envoyé : ${toSubmit.length} • Ignorés (déjà dans l\'ERP) : ${alreadyInErp.length}';
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Envoyé avec succès !'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.successColor,
+          ),
         );
         Navigator.pop(context, true);
       } else if (mounted) {
+        setState(() => _isSending = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de l\'envoi'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('Erreur lors de l\'envoi'),
+            backgroundColor: AppColors.errorColor,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) {
         setState(() => _isSending = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: ${e.toString()}'),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
       }
     }
   }
- void _saveItemsToStorage() async {
-    await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
-    print ("saved ${_items.length} items from list page");
- }
+
+  // ✅ FIX #1: clears local list, local storage, and the shared live
+  // session — so the page becomes empty and no duplicates can be sent.
+  Future<void> _clearAllAfterSubmit() async {
+    await LocalStorageService.clearScannedItems(widget.countingSheetId);
+    await CountingService.clearLiveItems(widget.countingSheetId);
+
+    if (mounted) {
+      setState(() {
+        _items.clear();
+        _filteredItems.clear();
+        _isSending = false;
+      });
+      widget.onItemsUpdated([]);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: Text(widget.sheetName, style: const TextStyle(fontSize: 15)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -175,12 +329,28 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         ),
         actions: [
           if (_items.isNotEmpty)
-            TextButton.icon(
-              icon: _isSending
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.send, size: 16),
-              label: Text(_isSending ? 'Envoi...' : 'Envoyer', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-              onPressed: _isSending ? null : _sendToERP,
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: TextButton.icon(
+                    icon: _isSending
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.send, size: 15, color: Colors.white),
+                    label: Text(
+                      _isSending ? 'Envoi...' : 'Envoyer',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
+                    onPressed: _isSending ? null : _sendToERP,
+                  ),
+                ),
+              ),
             ),
         ],
       ),
@@ -189,13 +359,22 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.inventory, size: 48, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text('Aucun article scanné', style: TextStyle(fontSize: 13, color: Colors.grey)),
-            const SizedBox(height: 12),
-            ElevatedButton(
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor.withOpacity(0.06),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.inventory_2_outlined, size: 44, color: AppColors.primaryColor),
+            ),
+            const SizedBox(height: 16),
+            const Text('Aucun article scanné', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Retour au scan', style: TextStyle(fontSize: 12)),
+              icon: const Icon(Icons.qr_code_scanner, size: 18),
+              label: const Text('Retour au scan', style: TextStyle(fontSize: 13)),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 44)),
             ),
           ],
         ),
@@ -204,53 +383,48 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         children: [
           // Search bar
           Container(
-            margin: const EdgeInsets.all(8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
+              color: AppColors.surfaceColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderColor),
             ),
             child: TextField(
-              onChanged: (value) {
-                _filterItems(value);
-              },
+              onChanged: (value) => _filterItems(value),
               decoration: const InputDecoration(
                 hintText: 'Rechercher un article...',
                 border: InputBorder.none,
-                icon: Icon(Icons.search),
+                icon: Icon(Icons.search, color: AppColors.textSecondary, size: 20),
               ),
             ),
           ),
 
           Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.primaryColor.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.qr_code, size: 14, color: Colors.blue),
-                    const SizedBox(width: 4),
-                    Text('${_items.length} articles', style: const TextStyle(fontSize: 12)),
+                    const Icon(Icons.qr_code, size: 15, color: AppColors.primaryColor),
+                    const SizedBox(width: 5),
+                    Text('${_items.length} articles',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
                   ],
                 ),
+                Container(width: 1, height: 14, color: AppColors.primaryColor.withOpacity(0.2)),
                 Row(
                   children: [
-                    const Icon(Icons.inventory, size: 14, color: Colors.blue),
-                    const SizedBox(width: 4),
-                    Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces', style: const TextStyle(fontSize: 12)),
+                    const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.primaryColor),
+                    const SizedBox(width: 5),
+                    Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
                   ],
                 ),
               ],
@@ -267,56 +441,59 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                 final trackingColor = _getTrackingColor(item.tracking);
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   child: Padding(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              width: 32,
-                              height: 32,
+                              width: 34,
+                              height: 34,
                               decoration: BoxDecoration(
-                                color: Colors.blue[100],
-                                borderRadius: BorderRadius.circular(6),
+                                color: AppColors.primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Center(
                                 child: Text(
                                   '${index + 1}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryColor),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     item.productName,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textColor),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 2),
+                                  const SizedBox(height: 4),
                                   Row(
                                     children: [
+                                      Icon(Icons.qr_code_2, size: 11, color: Colors.grey[500]),
+                                      const SizedBox(width: 3),
                                       Text(
                                         item.barcode,
-                                        style: const TextStyle(fontSize: 9, color: Colors.grey),
+                                        style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
                                       ),
                                       const SizedBox(width: 6),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: trackingColor.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(4),
+                                          color: trackingColor.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(5),
                                         ),
                                         child: Text(
                                           trackingText,
-                                          style: TextStyle(fontSize: 8, color: trackingColor, fontWeight: FontWeight.w500),
+                                          style: TextStyle(fontSize: 9, color: trackingColor, fontWeight: FontWeight.w600),
                                         ),
                                       ),
                                     ],
@@ -326,70 +503,63 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
+                        const Divider(height: 1),
+                        const SizedBox(height: 8),
                         Row(
                           children: [
                             Text(
                               isSerial ? 'Quantité fixe: ' : 'Quantité: ',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                             ),
                             if (isSerial)
                               Expanded(
                                 child: Text(
                                   '1 (N° Série)',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.purple),
+                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.secondaryColor),
                                 ),
                               )
                             else if (isEditing)
                               Expanded(
-                                child: TextField(
-                                  controller: _quantityController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: SizedBox(
+                                  height: 34,
+                                  child: TextField(
+                                    controller: _quantityController,
+                                    keyboardType: TextInputType.number,
+                                    autofocus: true,
+                                    decoration: const InputDecoration(
+                                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    ),
+                                    style: const TextStyle(fontSize: 12),
                                   ),
-                                  style: const TextStyle(fontSize: 11),
                                 ),
                               )
                             else
                               Expanded(
                                 child: Text(
                                   '${item.quantity}',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.textColor),
                                 ),
                               ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             if (!isSerial && !isEditing)
                               IconButton(
-                                icon: const Icon(Icons.edit, size: 16, color: Colors.blue),
+                                icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primaryColor),
                                 onPressed: () => _startEditing(index),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
                             if (!isSerial && isEditing)
                               IconButton(
-                                icon: const Icon(Icons.save, size: 16, color: Colors.green),
+                                icon: const Icon(Icons.check_circle, size: 20, color: AppColors.successColor),
                                 onPressed: () => _saveItemQuantity(index),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
+                            const SizedBox(width: 8),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                              onPressed: () {
-                                final realIndex = _items.indexOf(item);
-                                setState(() {
-                                  _items.removeAt(realIndex);
-                                  _filteredItems.removeAt(index);
-                                  if (_editingIndex == index) {
-                                    _editingIndex = -1;
-                                    _quantityController.clear();
-                                  }
-                                });
-                                widget.onItemsUpdated(_items);
-                                _saveToLocalStorage();
-                                _saveToLocalStorage();
-                              },
+                              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
+                              onPressed: () => _deleteItem(item),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),

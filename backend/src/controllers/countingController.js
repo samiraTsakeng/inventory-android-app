@@ -806,75 +806,145 @@ class CountingController {
     }
   }
 
-  // ✅ GET /counting/live-items/:sheet_id
-  // Returns the current shared, merged list of scanned items for a sheet —
-  // this is what both phones poll periodically to see each other's scans.
-  static async getLiveItems(req, res) {
-    try {
-      const { sheet_id } = req.params;
-      const items = LiveSessionService.getItems(sheet_id);
-      return res.json({
-        success: true,
-        items
-      });
-    } catch (error) {
-      console.error("Get live items error:", error);
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
-  // ✅ POST /counting/live-scan
-  // Body: { counting_sheet_id, barcode, product_name, product_id, quantity,
-  //         lot_number, lot_id, tracking }
-  // Upserts the scan into the shared list for that sheet (adds it, or
-  // increments quantity if the barcode is already there — e.g. the
-  // teammate scanned it first) and returns the updated merged list.
-  static async pushLiveScan(req, res) {
-    try {
-      const { counting_sheet_id, barcode } = req.body;
-
-      if (!counting_sheet_id || !barcode) {
-        return res.status(400).json({
+    // ✅ GET /counting/live-items/:sheet_id
+    // Returns the current shared, merged list of scanned items for a sheet.
+    static async getLiveItems(req, res) {
+      try {
+        const { sheet_id } = req.params;
+        const items = LiveSessionService.getItems(sheet_id);
+        return res.json({
+          success: true,
+          items
+        });
+      } catch (error) {
+        console.error("Get live items error:", error);
+        return res.status(500).json({
           success: false,
-          message: "counting_sheet_id and barcode are required"
+          message: error.message
         });
       }
-
-      const items = LiveSessionService.upsertItem(counting_sheet_id, req.body);
-
-      return res.json({
-        success: true,
-        items
-      });
-    } catch (error) {
-      console.error("Push live scan error:", error);
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
     }
-  }
 
-  // ✅ POST /counting/live-items/:sheet_id/clear
-  // Called once the shared list has been saved into a batch / sent to the
-  // ERP, so both phones start the next lot from a clean, empty list.
-  static async clearLiveItems(req, res) {
-    try {
-      const { sheet_id } = req.params;
-      LiveSessionService.clearItems(sheet_id);
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("Clear live items error:", error);
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
+    // ✅ POST /counting/live-scan
+    static async pushLiveScan(req, res) {
+      try {
+        const { counting_sheet_id, barcode } = req.body;
+
+        if (!counting_sheet_id || !barcode) {
+          return res.status(400).json({
+            success: false,
+            message: "counting_sheet_id and barcode are required"
+          });
+        }
+
+        const items = LiveSessionService.upsertItem(counting_sheet_id, req.body);
+
+        return res.json({
+          success: true,
+          items
+        });
+      } catch (error) {
+        console.error("Push live scan error:", error);
+        return res.status(500).json({
+          success: false,
+          message: error.message
+        });
+      }
     }
-  }
 
-}
+    // ✅ POST /counting/live-items/:sheet_id/clear
+    static async clearLiveItems(req, res) {
+      try {
+        const { sheet_id } = req.params;
+        LiveSessionService.clearItems(sheet_id);
+        return res.json({ success: true });
+      } catch (error) {
+        console.error("Clear live items error:", error);
+        return res.status(500).json({
+          success: false,
+          message: error.message
+        });
+      }
+    }
+
+    // ✅ POST /counting/live-items/:sheet_id/remove
+    // FIX #5: remove a single barcode from the shared live session.
+    static async removeLiveItem(req, res) {
+      try {
+        const { sheet_id } = req.params;
+        const { barcode } = req.body;
+
+        if (!sheet_id || !barcode) {
+          return res.status(400).json({
+            success: false,
+            message: "sheet_id and barcode are required"
+          });
+        }
+
+        const items = LiveSessionService.removeItem(sheet_id, barcode);
+
+        return res.json({ success: true, items });
+      } catch (error) {
+        console.error("Remove live item error:", error);
+        return res.status(500).json({
+          success: false,
+          message: error.message
+        });
+      }
+    }
+
+    // ✅ POST /counting/check-erp-scan
+    static async checkAlreadyInErp(req, res) {
+      try {
+        const session = AuthController.getSession();
+        if (!session || !session.host) {
+          return res.status(401).json({
+            success: false,
+            message: "Not authenticated"
+          });
+        }
+
+        const { counting_sheet_id, barcode } = req.body;
+        if (!counting_sheet_id || !barcode) {
+          return res.status(400).json({
+            success: false,
+            message: "counting_sheet_id and barcode are required"
+          });
+        }
+
+        const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": OdooService.sessionCookie
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "call",
+            params: {
+              model: "counting.sheet.line",
+              method: "search_count",
+              args: [[["sheet_id", "=", parseInt(counting_sheet_id)], ["number", "=", barcode]]],
+              kwargs: {}
+            }
+          })
+        });
+
+        const data = await response.json();
+        const count = data.result || 0;
+
+        return res.json({
+          success: true,
+          alreadySent: count > 0
+        });
+      } catch (error) {
+        console.error("Check already in ERP error:", error);
+        return res.json({
+          success: true,
+          alreadySent: false
+        });
+      }
+    }
+    }
 
 module.exports = CountingController;

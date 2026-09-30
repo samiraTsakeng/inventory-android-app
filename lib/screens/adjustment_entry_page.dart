@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../utils/constants.dart';
 
 class AdjustmentEntryPage extends StatefulWidget {
   const AdjustmentEntryPage({super.key});
@@ -40,12 +41,9 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: const Text("Ajustement de stock", style: TextStyle(fontSize: 18)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: Builder(
           builder: (context) => IconButton(
@@ -71,15 +69,32 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue),
-              child: Text(
-                'Wise Inventory',
-                style: TextStyle(color: Colors.white, fontSize: 24),
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
+              decoration: const BoxDecoration(gradient: AppColors.brandGradient),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset(
+                      "assets/images/image266622.png",
+                      height: 42,
+                      width: 42,
+                      errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.inventory, color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Wise Inventory',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.inventory),
+              leading: const Icon(Icons.inventory_2_outlined, color: AppColors.primaryColor),
               title: const Text('Ajustement de stock'),
               onTap: () {
                 Navigator.pop(context);
@@ -87,8 +102,8 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Déconnexion', style: TextStyle(color: Colors.red)),
+              leading: const Icon(Icons.logout, color: AppColors.errorColor),
+              title: const Text('Déconnexion', style: TextStyle(color: AppColors.errorColor)),
               onTap: () {
                 AuthService.clearSession();
                 Navigator.pushReplacementNamed(context, '/');
@@ -108,40 +123,47 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
                 onTap: () {
                   Navigator.pushNamed(context, '/adjustments-list');
                 },
-                child: Transform.scale(
-                  scale: _isHovered ? 1.1 : 1.0,
-                  child: Image.asset(
-                    "assets/images/2037740.png",
-                    height: 140,
-                    errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.inventory, size: 140, color: Colors.blue),
+                child: AnimatedScale(
+                  scale: _isHovered ? 1.06 : 1.0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryColor.withOpacity(0.06),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Image.asset(
+                      "assets/images/2037740.png",
+                      height: 120,
+                      errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.inventory, size: 120, color: AppColors.primaryColor),
+                    ),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             const Text(
               "Inventaire",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textColor),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              "Gérez vos ajustements de stock en quelques taps",
+              style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
             ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(20),
               child: SizedBox(
                 width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                height: 52,
+                child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pushNamed(context, '/adjustments-list');
                   },
-                  child: const Text("Continuer", style: TextStyle(fontSize: 16)),
+                  icon: const Icon(Icons.arrow_forward, size: 20),
+                  label: const Text("Continuer", style: TextStyle(fontSize: 16)),
                 ),
               ),
             ),

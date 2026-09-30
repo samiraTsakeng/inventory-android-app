@@ -49,7 +49,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
     switch (state) {
       case 'draft': return Colors.orange;
       case 'confirm': return Colors.green;
-      case 'done': return Colors.blue;
+      case 'done': return AppColors.primaryColor;
       case 'cancel': return Colors.red;
       default: return Colors.grey;
     }
@@ -140,7 +140,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: AppColors.primaryColor,
               foregroundColor: Colors.white,
             ),
             child: const Text("Continuer"),
@@ -156,7 +156,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: const Text("Ajustements", style: TextStyle(fontSize: 16)),
-        backgroundColor: Colors.blue,
+        backgroundColor: AppColors.primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,

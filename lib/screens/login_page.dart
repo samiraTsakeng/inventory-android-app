@@ -222,7 +222,7 @@ class _LoginPageState extends State<LoginPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: AppColors.primaryColor,
               foregroundColor: Colors.white,
             ),
             child: const Text("Envoyer"),
@@ -288,7 +288,7 @@ class _LoginPageState extends State<LoginPage> {
                         SizedBox(width: 8),
                         Text(
                           "Chargement des produits...",
-                          style: TextStyle(fontSize: 12, color: Colors.blue),
+                          style: TextStyle(fontSize: 12, color: AppColors.primaryColor),
                         ),
                       ],
                     ),
@@ -300,7 +300,7 @@ class _LoginPageState extends State<LoginPage> {
                   child: ElevatedButton(
                     onPressed: isLoading ? null : (onlyPassword ? secondAuthentication : login),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: AppColors.primaryColor,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -331,7 +331,7 @@ class _LoginPageState extends State<LoginPage> {
                     TextButton(
                       onPressed: _showForgotPasswordDialog,
                       style: TextButton.styleFrom(
-                        foregroundColor: Colors.blue,
+                        foregroundColor: AppColors.primaryColor,
                       ),
                       child: const Text(
                         "Mot de passe oublié?",

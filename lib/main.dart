@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'utils/constants.dart';
 import 'screens/login_page.dart';
 import 'screens/adjustment_entry_page.dart';
 import 'screens/adjustment_list_page.dart';
@@ -37,12 +39,117 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseTextTheme = GoogleFonts.interTextTheme();
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Wise Inventory',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        fontFamily: 'Roboto',
+        useMaterial3: true,
+        scaffoldBackgroundColor: AppColors.backgroundColor,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.primaryColor,
+          primary: AppColors.primaryColor,
+          secondary: AppColors.secondaryColor,
+          tertiary: AppColors.tertiaryColor,
+          error: AppColors.errorColor,
+          surface: AppColors.surfaceColor,
+        ),
+        textTheme: baseTextTheme.apply(
+          bodyColor: AppColors.textColor,
+          displayColor: AppColors.textColor,
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppColors.primaryColor,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: false,
+          titleTextStyle: GoogleFonts.inter(
+            fontSize: 19,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+          iconTheme: const IconThemeData(color: Colors.white),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryColor,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(64, 50),
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.primaryColor,
+            side: const BorderSide(color: AppColors.primaryColor),
+            minimumSize: const Size(64, 50),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.secondaryColor,
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: AppColors.surfaceColor,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: AppColors.borderColor),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: AppColors.borderColor),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.primaryColor, width: 2),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.errorColor, width: 1.5),
+          ),
+          labelStyle: const TextStyle(color: AppColors.textSecondary),
+        ),
+        cardTheme: CardThemeData(
+          elevation: 1.5,
+          margin: EdgeInsets.zero,
+          color: AppColors.surfaceColor,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: AppColors.borderColor),
+          ),
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: AppColors.primaryColor.withOpacity(0.08),
+          labelStyle: const TextStyle(color: AppColors.primaryColor, fontWeight: FontWeight.w600),
+          side: BorderSide.none,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: AppColors.secondaryColor,
+          foregroundColor: Colors.white,
+        ),
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        dividerTheme: const DividerThemeData(color: AppColors.borderColor, thickness: 1),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: AppColors.primaryColor,
+        ),
       ),
       initialRoute: initialRoute,
       routes: {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 import 'consolidation_zones_page.dart';
 import 'consolidation_list_page.dart';
@@ -57,7 +58,14 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
     final shouldApply = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Appliquer la consolidation", style: TextStyle(fontSize: 18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.warningColor, size: 22),
+            SizedBox(width: 8),
+            Expanded(child: Text("Appliquer la consolidation", style: TextStyle(fontSize: 18))),
+          ],
+        ),
         content: const Text(
           "Voulez-vous appliquer toutes les consolidations à l'ajustement ?\n\n"
               "Cette action va mettre à jour les quantités réelles dans l'ajustement de stock.\n\n"
@@ -72,7 +80,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: AppColors.errorColor,
               foregroundColor: Colors.white,
             ),
             child: const Text("Appliquer", style: TextStyle(fontSize: 14)),
@@ -94,7 +102,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Consolidation appliquée avec succès!'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.successColor,
           ),
         );
         await fetchStatus();
@@ -102,7 +110,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Erreur lors de l\'application de la consolidation'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
@@ -111,7 +119,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Erreur: ${e.toString()}'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.errorColor,
         ),
       );
     }
@@ -120,12 +128,9 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: Text(widget.adjustmentName, style: const TextStyle(fontSize: 16)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -152,11 +157,11 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 50, color: Colors.red),
+              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
               const SizedBox(height: 16),
               Text(
                 errorMessage!,
-                style: const TextStyle(fontSize: 13, color: Colors.red),
+                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -177,10 +182,10 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isConsolidated ? Colors.green[50] : Colors.blue[50],
+                color: isConsolidated ? AppColors.successColor.withOpacity(0.08) : AppColors.primaryColor.withOpacity(0.06),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isConsolidated ? Colors.green[300]! : Colors.blue[300]!,
+                  color: isConsolidated ? AppColors.successColor.withOpacity(0.35) : AppColors.primaryColor.withOpacity(0.35),
                   width: 1,
                 ),
               ),
@@ -188,7 +193,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
                 children: [
                   Icon(
                     isConsolidated ? Icons.check_circle : Icons.info_outline,
-                    color: isConsolidated ? Colors.green : Colors.blue,
+                    color: isConsolidated ? AppColors.successColor : AppColors.primaryColor,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -201,7 +206,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: isConsolidated ? Colors.green[700] : Colors.blue[700],
+                        color: isConsolidated ? AppColors.successColor : AppColors.primaryColor,
                       ),
                     ),
                   ),
@@ -235,7 +240,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: AppColors.primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -267,7 +272,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey[700],
+                    backgroundColor: AppColors.secondaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -300,7 +305,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppColors.successColor,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -314,13 +319,13 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: AppColors.successColor.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Center(
                   child: Text(
                     'L\'ajustement a été consolidé avec succès.',
-                    style: TextStyle(fontSize: 14),
+                    style: TextStyle(fontSize: 14, color: AppColors.textColor),
                   ),
                 ),
               ),
@@ -345,7 +350,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: AppColors.primaryColor,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),

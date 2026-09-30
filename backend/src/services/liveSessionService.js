@@ -39,6 +39,13 @@ function readItems(sheetId) {
   }
 }
 
+function removeItem(sheetId, barcode) {
+    const items = readItems(String(sheetId));
+    const filtered = items.filter((it) => it.barcode !== barcode);
+    writeItems(String(sheetId), filtered);
+    return filtered;
+}
+
 function writeItems(sheetId, items) {
   ensureDataDir();
   const filePath = filePathFor(sheetId);
