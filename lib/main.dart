@@ -159,9 +159,18 @@ class MyApp extends StatelessWidget {
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/choice-page') {
-          final adjustmentId = settings.arguments as int;
+          final args = settings.arguments;
+          int? adjustmentId;
+          dynamic managerId;
+          if (args is Map) {
+            adjustmentId = args['id'] as int?;
+            managerId = args['managerId'];
+          } else if (args is int) {
+            // Backward-compatible: still support a plain int argument.
+            adjustmentId = args;
+          }
           return MaterialPageRoute(
-            builder: (context) => ChoicePage(adjustmentId: adjustmentId),
+            builder: (context) => ChoicePage(adjustmentId: adjustmentId, managerId: managerId),
           );
         }
         if (settings.name == '/feuilles-list') {

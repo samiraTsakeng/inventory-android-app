@@ -11,6 +11,11 @@ class AuthService {
   static const String _sessionPasswordKey = 'session_password';
   static const String _sessionUidKey = 'session_uid';
   static const String _sessionNameKey = 'session_name';
+  static const String _sessionCreatedAtKey = 'session_created_at';
+  // ✅ Session expiry: after this long since login, autoLogin() requires
+  // the user to sign in again instead of silently reusing stored
+  // credentials indefinitely.
+  static const Duration _sessionValidity = Duration(days: 14);
 
   // ✅ Deterministic session id: same host+email always -> same id.
   // Sanitized so it stays a safe, readable SharedPreferences key fragment.
@@ -116,6 +121,20 @@ class AuthService {
         print ("No saved session found");
         return false;
       }
+
+      // ✅ Session expiry: if it's been more than 14 days since the
+      // session was created/last refreshed, force a real re-login instead
+      // of silently reusing stored credentials forever.
+      final createdAtStr = prefs.getString(_sessionCreatedAtKey);
+      if (createdAtStr != null) {
+        final createdAt = DateTime.tryParse(createdAtStr);
+        if (createdAt != null && DateTime.now().difference(createdAt) > _sessionValidity) {
+          print("Session expired (older than ${_sessionValidity.inDays} days) — clearing, user must log in again");
+          await clearSession();
+          return false;
+        }
+      }
+
       final session = await getFullSession();
       if (session == null) {
         print("session data incomplete");
@@ -229,6 +248,10 @@ class AuthService {
     await prefs.setInt(_sessionUidKey, uid);
     await prefs.setString(_sessionNameKey, name);
     await prefs.setBool('is_logged_in', true);
+    // ✅ Refreshed on every successful login (manual or auto) — this gives
+    // a sliding 14-day window: the session expires 14 days after the LAST
+    // time the app was successfully opened/used, not from a fixed date.
+    await prefs.setString(_sessionCreatedAtKey, DateTime.now().toIso8601String());
   }
 
   static Future<Map<String, String?>?> getSession() async {
@@ -278,6 +301,7 @@ class AuthService {
     await prefs.remove(_sessionPasswordKey);
     await prefs.remove(_sessionUidKey);
     await prefs.remove(_sessionNameKey);
+    await prefs.remove(_sessionCreatedAtKey);
     await prefs.remove('is_logged_in');
 
     // ✅ Clear all local data for this session

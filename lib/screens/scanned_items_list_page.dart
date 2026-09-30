@@ -3,6 +3,7 @@ import '../utils/constants.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/batch_storage_service.dart';
 
 class ScannedItemsListPage extends StatefulWidget {
   final List<ScannedItem> items;
@@ -10,6 +11,12 @@ class ScannedItemsListPage extends StatefulWidget {
   final int countingSheetId;
   final int adjustmentId;
   final Function(List<ScannedItem>) onItemsUpdated;
+  // ✅ When set, this page is showing the contents of an already-SAVED
+  // batch (opened from "Lots sauvegardés"), and edits/deletes must be
+  // persisted into that batch via BatchStorageService — not into the
+  // current scanning session's local storage (which is a different,
+  // unrelated key). Leave null for the normal "in-progress scan" flow.
+  final String? batchId;
 
   const ScannedItemsListPage({
     Key? key,
@@ -18,6 +25,7 @@ class ScannedItemsListPage extends StatefulWidget {
     required this.countingSheetId,
     required this.adjustmentId,
     required this.onItemsUpdated,
+    this.batchId,
   }) : super(key: key);
 
   @override
@@ -46,8 +54,8 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         _filteredItems = List.from(_items);
       } else {
         _filteredItems = _items.where((item) =>
-          item.productName.toLowerCase().contains(_searchQuery) ||
-          item.barcode.contains(_searchQuery)
+        item.productName.toLowerCase().contains(_searchQuery) ||
+            item.barcode.contains(_searchQuery)
         ).toList();
       }
     });
@@ -64,16 +72,23 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         _quantityController.clear();
       });
       widget.onItemsUpdated(_items);
-      _saveItemsToStorage();
-      _saveToLocalStorage();
+      _persistChanges(); // ✅ writes to the right place: batch or scan session
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Quantité mise à jour'), duration: Duration(seconds: 1)),
       );
     }
   }
 
-  Future<void> _saveToLocalStorage() async {
-    await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
+  // ✅ Single source of truth for persisting edits made on this page.
+  // Routes to the batch's own storage when editing a saved lot, or to the
+  // scanning-session local storage otherwise — fixes deletes/edits that
+  // previously only changed in-memory state and reverted on reopen.
+  Future<void> _persistChanges() async {
+    if (widget.batchId != null) {
+      await BatchStorageService.updateBatchItems(widget.batchId!, _items);
+    } else {
+      await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
+    }
   }
 
   void _startEditing(int index) {
@@ -127,12 +142,18 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       );
 
       if (success && mounted) {
-        await LocalStorageService.clearScannedItems(widget.countingSheetId);
-        setState(() {
-          _items.clear();
-          _filteredItems.clear();
-        });
-        widget.onItemsUpdated([]);
+        if (widget.batchId != null) {
+          // ✅ This list is a saved batch's contents — mark IT synced,
+          // keep the items visible (matches "Lots sauvegardés" behavior).
+          await BatchStorageService.markBatchAsSynced(widget.batchId!);
+        } else {
+          await LocalStorageService.clearScannedItems(widget.countingSheetId);
+          setState(() {
+            _items.clear();
+            _filteredItems.clear();
+          });
+          widget.onItemsUpdated([]);
+        }
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Envoyé avec succès !'), backgroundColor: AppColors.successColor),
@@ -155,10 +176,6 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       }
     }
   }
- void _saveItemsToStorage() async {
-    await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
-    print ("saved ${_items.length} items from list page");
- }
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +417,32 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                             const SizedBox(width: 8),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
-                              onPressed: () {
+                              onPressed: () async {
+                                // ✅ Confirm before deleting — irreversible once persisted.
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    title: const Text('Supprimer cet article ?'),
+                                    content: Text('${item.productName}\nQuantité: ${item.quantity}'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: const Text('Annuler'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.errorColor,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('Supprimer'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed != true) return;
+
                                 final realIndex = _items.indexOf(item);
                                 setState(() {
                                   _items.removeAt(realIndex);
@@ -411,8 +453,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                                   }
                                 });
                                 widget.onItemsUpdated(_items);
-                                _saveToLocalStorage();
-                                _saveToLocalStorage();
+                                _persistChanges(); // ✅ writes to the right place: batch or scan session
                               },
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),

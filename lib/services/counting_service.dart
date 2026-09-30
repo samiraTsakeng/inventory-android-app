@@ -155,4 +155,95 @@ class CountingService {
   static Future<int> getCachedProductsCount() async {
     return await LocalStorageService.getCachedProductsCount();
   }
+
+  // ✅ Shared scanning session — fetch the current merged list of items
+  // scanned by ANY team member on this sheet (polled periodically).
+  static Future<List<Map<String, dynamic>>> getLiveItems(int sheetId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$sheetId'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['items'] ?? []);
+        }
+      }
+      return [];
+    } catch (e) {
+      print("Get live items error: $e");
+      return [];
+    }
+  }
+
+  // ✅ Shared scanning session — push a scan (new item, or additional
+  // quantity for one that's already there) and get back the updated
+  // merged list. Returns null if the push failed (offline), so the
+  // caller can fall back to local-only storage and retry later.
+  static Future<List<Map<String, dynamic>>?> pushLiveScan({
+    required int countingSheetId,
+    required Map<String, dynamic> item,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/live-scan'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          'counting_sheet_id': countingSheetId,
+          ...item,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['items'] ?? []);
+        }
+      }
+      return null;
+    } catch (e) {
+      print("Push live scan error: $e");
+      return null;
+    }
+  }
+
+  // ✅ Called once the shared list has been saved into a batch / sent to
+  // the ERP, so both phones start the next lot from a clean, empty list.
+  static Future<void> clearLiveItems(int sheetId) async {
+    try {
+      await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$sheetId/clear'),
+      );
+    } catch (e) {
+      print("Clear live items error: $e");
+    }
+  }
+
+  // ✅ Checks whether this barcode was already submitted to the ERP for
+  // this sheet (not just present locally/in a local batch). Fails "not
+  // found" silently if offline/unreachable, so this never blocks scanning.
+  static Future<bool> isAlreadyInErp({
+    required int countingSheetId,
+    required String barcode,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scan'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          'counting_sheet_id': countingSheetId,
+          'barcode': barcode,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) return data['alreadySent'] == true;
+      }
+      return false;
+    } catch (e) {
+      print("Check already in ERP error: $e");
+      return false;
+    }
+  }
 }

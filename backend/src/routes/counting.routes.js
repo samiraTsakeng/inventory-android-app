@@ -28,4 +28,13 @@ router.post('/cache-products', CountingController.cacheProducts);
 
 // POST /counting/cache-products-by-barcode
 router.post('/cache-products-by-barcode', CountingController.cacheProductsByBarcode);
+
+// ✅ Shared scanning session (two team members, same sheet, different phones)
+router.get('/live-items/:sheet_id', CountingController.getLiveItems);
+router.post('/live-scan', CountingController.pushLiveScan);
+router.post('/live-items/:sheet_id/clear', CountingController.clearLiveItems);
+
+// ✅ Check if a barcode was already submitted to the ERP for this sheet
+router.post('/check-erp-scan', CountingController.checkAlreadyInErp);
+
 module.exports = router;

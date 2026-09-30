@@ -49,7 +49,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
   Color getStatusColor(String? state) {
     switch (state) {
       case 'draft': return AppColors.warningColor;
-      case 'confirm': return AppColors.successColor;
+      case 'in_progress': return AppColors.successColor;
       case 'done': return AppColors.secondaryColor;
       case 'cancel': return AppColors.errorColor;
       default: return Colors.grey;
@@ -58,9 +58,9 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
 
   String getStatusText(String? state) {
     switch (state) {
-      case 'draft': return 'En cours';
-      case 'confirm': return 'Confirmé';
-      case 'done': return 'Terminé';
+      case 'draft': return 'Brouillon';
+      case 'in_progress': return 'en cours';
+      case 'done': return 'fait';
       case 'cancel': return 'Annulé';
       default: return state ?? 'Inconnu';
     }
@@ -137,7 +137,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
               Navigator.pushNamed(
                 context,
                 '/choice-page',
-                arguments: adj["id"],
+                arguments: {'id': adj["id"], 'managerId': adj["manager_id"]},
               );
             },
             child: const Text("Continuer"),

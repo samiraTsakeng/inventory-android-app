@@ -434,250 +434,6 @@ static async getConsolidationSheetDetail(req, res) {
     }
   }
 
-  static async getConsolidationZones(req, res) {
-     try {
-       const session = AuthController.getSession();
-       if (!session || !session.host) {
-         return res.status(401).json({
-           success: false,
-           message: "Not authenticated"
-         });
-       }
-
-       const adjustmentId = parseInt(req.params.adjustment_id);
-       console.log("📥 Getting consolidation zones for adjustment:", adjustmentId);
-
-       // Get all counting sheets for this adjustment that are confirmed and not consolidated
-       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
-         method: "POST",
-         headers: {
-           "Content-Type": "application/json",
-           "Cookie": OdooService.sessionCookie
-         },
-         body: JSON.stringify({
-           jsonrpc: "2.0",
-           method: "call",
-           params: {
-             model: "counting.sheet",
-             method: "search_read",
-             args: [[
-               ["stock_inventory_id", "=", adjustmentId],
-               ["state", "=", "confirm"],
-               ["consolidated", "=", "no"]
-             ]],
-             kwargs: {
-               fields: ["id", "name", "zone_id", "consolidated", "user_id", "stock_inventory_id"]
-             }
-           }
-         })
-       });
-
-       const data = await response.json();
-       if (data.error) {
-         throw new Error(data.error.data?.message || data.error.message);
-       }
-
-       const sheets = data.result || [];
-       console.log("📥 Found", sheets.length, "sheets ready for consolidation");
-
-       // Group by zone_id
-       const zoneMap = {};
-       for (const sheet of sheets) {
-         const zoneId = Array.isArray(sheet.zone_id) ? sheet.zone_id[0] : sheet.zone_id;
-         const zoneName = Array.isArray(sheet.zone_id) ? sheet.zone_id[1] : "Zone " + zoneId;
-
-         if (!zoneMap[zoneId]) {
-           zoneMap[zoneId] = {
-             id: zoneId,
-             name: zoneName,
-             sheets: []
-           };
-         }
-         zoneMap[zoneId].sheets.push({
-           id: sheet.id,
-           name: sheet.name,
-           user_id: sheet.user_id
-         });
-       }
-
-       // Only return zones with exactly 2 sheets (both teams have finished)
-       const readyZones = Object.values(zoneMap).filter(z => z.sheets.length === 2);
-       console.log("✅", readyZones.length, "zones ready for consolidation");
-
-       return res.json({
-         success: true,
-         zones: readyZones
-       });
-
-     } catch (error) {
-       console.error("Get consolidation zones error:", error);
-       return res.status(500).json({
-         success: false,
-         message: error.message
-       });
-     }
-   }
-
-   // ✅ NEW: Create consolidation sheet from mobile
-   static async createConsolidationSheet(req, res) {
-     try {
-       const session = AuthController.getSession();
-       if (!session || !session.host) {
-         return res.status(401).json({
-           success: false,
-           message: "Not authenticated"
-         });
-       }
-
-       const { adjustment_id, zone_id } = req.body;
-       console.log("📥 Creating consolidation for adjustment:", adjustment_id, "zone:", zone_id);
-
-       // Call Odoo's mobile-friendly consolidation method
-       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
-         method: "POST",
-         headers: {
-           "Content-Type": "application/json",
-           "Cookie": OdooService.sessionCookie
-         },
-         body: JSON.stringify({
-           jsonrpc: "2.0",
-           method: "call",
-           params: {
-             model: "adjustment.consolidation",
-             method: "confirm_btn_mobile",
-             args: [[adjustment_id, zone_id]],
-             kwargs: {}
-           }
-         })
-       });
-
-       const data = await response.json();
-       console.log("Create consolidation response:", JSON.stringify(data, null, 2));
-
-       if (data.error) {
-         throw new Error(data.error.data?.message || data.error.message);
-       }
-
-       return res.json({
-         success: true,
-         consolidation_sheet_id: data.result,
-         message: "Consolidation sheet created successfully"
-       });
-
-     } catch (error) {
-       console.error("Create consolidation sheet error:", error);
-       return res.status(500).json({
-         success: false,
-         message: error.message
-       });
-     }
-   }
-
-   // ✅ NEW: Apply consolidation to stock (final step)
-   static async applyConsolidation(req, res) {
-     try {
-       const session = AuthController.getSession();
-       if (!session || !session.host) {
-         return res.status(401).json({
-           success: false,
-           message: "Not authenticated"
-         });
-       }
-
-       const { adjustment_id } = req.body;
-       console.log("📥 Applying consolidation for adjustment:", adjustment_id);
-
-       // Call Odoo's update_adjustement method
-       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
-         method: "POST",
-         headers: {
-           "Content-Type": "application/json",
-           "Cookie": OdooService.sessionCookie
-         },
-         body: JSON.stringify({
-           jsonrpc: "2.0",
-           method: "call",
-           params: {
-             model: "stock.inventory",
-             method: "update_adjustement",
-             args: [[parseInt(adjustment_id)]],
-             kwargs: {}
-           }
-         })
-       });
-
-       const data = await response.json();
-       console.log("Apply consolidation response:", JSON.stringify(data, null, 2));
-
-       if (data.error) {
-         throw new Error(data.error.data?.message || data.error.message);
-       }
-
-       return res.json({
-         success: true,
-         message: "Stock updated successfully with consolidation results"
-       });
-
-     } catch (error) {
-       console.error("Apply consolidation error:", error);
-       return res.status(500).json({
-         success: false,
-         message: error.message
-       });
-     }
-   }
-
-   // ✅ NEW: Get adjustment status (for showing consolidation buttons)
-   static async getAdjustmentStatus(req, res) {
-     try {
-       const session = AuthController.getSession();
-       if (!session || !session.host) {
-         return res.status(401).json({
-           success: false,
-           message: "Not authenticated"
-         });
-       }
-
-       const adjustmentId = parseInt(req.params.adjustment_id);
-       console.log("📥 Getting adjustment status:", adjustmentId);
-
-       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
-         method: "POST",
-         headers: {
-           "Content-Type": "application/json",
-           "Cookie": OdooService.sessionCookie
-         },
-         body: JSON.stringify({
-           jsonrpc: "2.0",
-           method: "call",
-           params: {
-             model: "stock.inventory",
-             method: "read",
-             args: [[adjustmentId], ["id", "name", "state", "consolidated", "display_consolid", "is_general"]],
-             kwargs: {}
-           }
-         })
-       });
-
-       const data = await response.json();
-       if (data.error) {
-         throw new Error(data.error.data?.message || data.error.message);
-       }
-
-       const adjustment = data.result?.[0] || null;
-       return res.json({
-         success: true,
-         adjustment: adjustment
-       });
-
-     } catch (error) {
-       console.error("Get adjustment status error:", error);
-       return res.status(500).json({
-         success: false,
-         message: error.message
-       });
-     }
-   }
      static async getConsolidationZones(req, res) {
        try {
          const session = AuthController.getSession();
@@ -784,6 +540,12 @@ static async getConsolidationSheetDetail(req, res) {
              jsonrpc: "2.0",
              method: "call",
              params: {
+               // ⚠️ TODO Odoo 18 migration: "stock.inventory" no longer
+               // exists as a model from Odoo 17+ — this needs to become
+               // whatever standalone model you land on for "adjustment"
+               // (see our stock.inventory migration checklist). "location_id"
+               // is a custom field the wise_inventory module added onto
+               // stock.inventory, so it moves with it either way.
                model: "stock.inventory",
                method: "read",
                args: [[parseInt(adjustment_id)], ["id", "name", "location_id"]],
@@ -967,6 +729,18 @@ static async getConsolidationSheetDetail(req, res) {
              jsonrpc: "2.0",
              method: "call",
              params: {
+               // ⚠️ TODO Odoo 18 migration: THIS IS THE BIG ONE. "stock.inventory"
+               // and its update_adjustement() method are gone from Odoo 17+.
+               // The core replacement writes inventory_quantity directly on
+               // stock.quant rows (no parent "session" record). Once you've
+               // confirmed the exact apply method name in dev mode (see our
+               // checklist — inspect the "Appliquer" button's technical
+               // action), this whole call needs to become either:
+               //  (a) a custom method your module still exposes under a new
+               //      model name, or
+               //  (b) a set of write() calls on stock.quant using
+               //      counting.sheet.line's product_id/lot_id/counted_qty.
+               // Come back with what you find and we'll rewrite this properly.
                model: "stock.inventory",
                method: "update_adjustement",
                args: [[parseInt(adjustment_id)]],
@@ -1020,6 +794,10 @@ static async getConsolidationSheetDetail(req, res) {
              jsonrpc: "2.0",
              method: "call",
              params: {
+               // ⚠️ TODO Odoo 18 migration: same as above — "stock.inventory"
+               // is gone. "consolidated", "display_consolid", "is_general"
+               // are custom fields the wise_inventory module added onto it,
+               // so they migrate along with wherever this model ends up.
                model: "stock.inventory",
                method: "read",
                args: [[adjustmentId], ["id", "name", "state", "consolidated", "display_consolid", "is_general"]],

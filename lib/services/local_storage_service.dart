@@ -8,6 +8,10 @@ class LocalStorageService {
   static const String _productCacheKey = 'product_cache_';
   static const String _cachedBarcodesKey = 'cached_barcodes_';
   static const String _sessionIdKey = 'session_id';
+  // ✅ Offline cache of counting sheets ("feuilles"), per adjustment — so
+  // the list is still visible/usable without a connection, same as the
+  // product cache.
+  static const String _feuillesCacheKey = 'feuilles_cache_';
 
   // Get session-specific cache key
   static Future<String> _getSessionKey(String baseKey) async {
@@ -153,6 +157,12 @@ class LocalStorageService {
         await prefs.remove(key);
       }
 
+      // Clear cached counting sheets for this session
+      final feuillesKeys = allKeys.where((key) => key.startsWith('${_feuillesCacheKey}${sessionId}_'));
+      for (final key in feuillesKeys) {
+        await prefs.remove(key);
+      }
+
       // Reset session ID for next login
       await prefs.remove(_sessionIdKey);
       await prefs.remove(_sheetIdKey);
@@ -247,6 +257,37 @@ class LocalStorageService {
       print("Cleared all product cache");
     } catch (e) {
       print("Error clearing product cache: $e");
+    }
+  }
+
+  // ✅ Cache the counting sheets ("feuilles") for an adjustment, so the
+  // list page can still show them when there's no connection. Called
+  // every time a fetch from the server succeeds.
+  static Future<void> cacheFeuilles(int adjustmentId, List<dynamic> feuilles) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = await getSessionId();
+      final key = '${_feuillesCacheKey}${sessionId}_$adjustmentId';
+      await prefs.setString(key, jsonEncode(feuilles));
+      print("Cached ${feuilles.length} feuilles for adjustment $adjustmentId");
+    } catch (e) {
+      print("Error caching feuilles: $e");
+    }
+  }
+
+  // ✅ Read the last cached counting sheets for an adjustment — used as a
+  // fallback when the live fetch fails (offline).
+  static Future<List<dynamic>> getCachedFeuilles(int adjustmentId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = await getSessionId();
+      final key = '${_feuillesCacheKey}${sessionId}_$adjustmentId';
+      final cached = prefs.getString(key);
+      if (cached == null) return [];
+      return jsonDecode(cached) as List<dynamic>;
+    } catch (e) {
+      print("Error reading cached feuilles: $e");
+      return [];
     }
   }
 }

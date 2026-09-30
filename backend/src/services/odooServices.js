@@ -23,19 +23,18 @@ class OdooService {
       throw new Error("Authentication failed: wrong credentials");
     }
 
-    // Extract and store the session cookie correctly
     const cookies = response.headers.get("set-cookie");
     if (!cookies) throw new Error("No session cookie received from Odoo");
 
-    // Store the full cookie string
     this.sessionCookie = cookies;
     console.log("Session cookie stored successfully");
 
     return data.result;
   }
 
+  // ✅ Returns EVERY adjustment in state "draft" or "confirm".
+  // No per-user filtering here — any logged-in user can see the full list.
   async fetchAdjustments(host) {
-
     console.log("Has session cookie:", this.sessionCookie ? "Yes" : "No");
 
     const response = await fetch(`${host}/web/dataset/call_kw`, {
@@ -66,40 +65,39 @@ class OdooService {
     return data.result || [];
   }
 
+  // ✅ Returns counting sheets for one adjustment, in state "new" or
+  // "progress", assigned to the given user. Fetches ALL sheets for the
+  // adjustment from Odoo (no user filter at the query level, so Odoo
+  // record rules / array-vs-int quirks can't silently hide everything),
+  // then filters in JS where we can log what's actually happening.
   async fetchFeuilles(host, adjustmentId, userId) {
     console.log("=== FETCHING FEUILLES ===");
     console.log("Adjustment ID:", adjustmentId);
     console.log("User ID:", userId);
     console.log("Has session cookie:", !!this.sessionCookie);
 
-    // Ensure adjustmentId is a number
     const adjId = parseInt(adjustmentId);
     console.log("Parsed adjustment ID:", adjId);
 
-    const requestBody = {
-      jsonrpc: "2.0",
-      method: "call",
-      params: {
-        model: "counting.sheet",
-        method: "search_read",
-        args: [
-          [["stock_inventory_id", "=", adjId], ["user_id", "=", userId]]
-        ],
-        kwargs: {
-          fields: ["id", "name", "state", "stock_inventory_id", "zone_id", "user_id"]
-        }
-      }
-    };
-
-    console.log("Request body:", JSON.stringify(requestBody, null, 2));
-
+    // Step 1: get ALL sheets for this adjustment (no user/state filter).
     const response = await fetch(`${host}/web/dataset/call_kw`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Cookie": this.sessionCookie
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "call",
+        params: {
+          model: "counting.sheet",
+          method: "search_read",
+          args: [[["stock_inventory_id", "=", adjId]]],
+          kwargs: {
+            fields: ["id", "name", "state", "stock_inventory_id", "zone_id", "user_id"]
+          }
+        }
+      })
     });
 
     const data = await response.json();
@@ -110,9 +108,34 @@ class OdooService {
       throw new Error(data.error.data?.message || data.error.message);
     }
 
-    console.log(`Found ${data.result?.length || 0} feuilles for adjustment ${adjId} where user is responsible`);
+    const allSheets = data.result || [];
+    console.log(`Found ${allSheets.length} total sheets for adjustment ${adjId}`);
 
-    return data.result || [];
+    // Step 2: filter in JS — assigned to this user AND state is new/progress.
+    const filtered = allSheets.filter(sheet => {
+      // user_id can come back as an int, [id, name] array, or false/null.
+      let sheetUserId = null;
+      if (Array.isArray(sheet.user_id)) {
+        sheetUserId = sheet.user_id[0];
+      } else if (typeof sheet.user_id === "number") {
+        sheetUserId = sheet.user_id;
+      } else {
+        sheetUserId = null;
+      }
+
+      const isAssignedToUser = sheetUserId === userId;
+      const isRightState = sheet.state === "new" || sheet.state === "progress";
+
+      console.log(
+        `Sheet ${sheet.id} (${sheet.name}): user_id=${sheetUserId}, ` +
+        `state=${sheet.state}, assigned=${isAssignedToUser}, stateOK=${isRightState}`
+      );
+
+      return isAssignedToUser && isRightState;
+    });
+
+    console.log(`Returning ${filtered.length} sheets for user ${userId}`);
+    return filtered;
   }
 }
 

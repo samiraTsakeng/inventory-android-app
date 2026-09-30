@@ -1,5 +1,7 @@
+
 const OdooService = require("../services/odooServices");
 const AuthController = require("./authController");
+const LiveSessionService = require("../services/liveSessionService");
 
 // Helper function to process found lot (moved outside for global access)
 async function processLotFound(session, lot, barcode) {
@@ -16,7 +18,9 @@ async function processLotFound(session, lot, barcode) {
       productId = lot.product_id;
     }
 
-    // Fetch product details including tracking
+    // ✅ Migration Odoo 11 -> 18: tracking lives on product.product, not on
+    // stock.lot (the lot only stores name + product_id). Same fields as
+    // before ("name", "tracking"), just read from the correct model.
     if (productId) {
       const productResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
@@ -151,6 +155,8 @@ class CountingController {
       }
 
       // First, try to find as a lot/serial number in Odoo
+      // "stock.production.lot" to "stock.lot" in Odoo 13+. Same fields
+      // ("id", "name", "product_id"), just the new model name.
       const lotResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
         headers: {
@@ -161,7 +167,7 @@ class CountingController {
           jsonrpc: "2.0",
           method: "call",
           params: {
-            model: "stock.production.lot",
+            model: "stock.lot",
             method: "search_read",
             args: [[["name", "=", barcode]]],
             kwargs: {
@@ -689,6 +695,13 @@ class CountingController {
   }
 
   // Cache all products for offline use
+  // ✅ Sources from stock.lot (the actual scannable barcodes), joined with
+  // product.product for name/tracking — same 2-model pattern as
+  // processLotFound(). Previously this read product.product.barcode
+  // directly, which meant barcodes that only exist on product.product
+  // (and have no matching stock.lot) got cached locally and accepted
+  // offline, even though the online lookup would reject them. Now the
+  // offline cache can never contain something the online path wouldn't.
   static async cacheProducts(req, res) {
     try {
       const session = AuthController.getSession();
@@ -700,10 +713,49 @@ class CountingController {
       }
 
       const { offset = 0, limit = 100 } = req.body;
-      console.log(`📥 Fetching products from offset ${offset}, limit ${limit}`);
+      console.log(`📥 Fetching lots from offset ${offset}, limit ${limit}`);
 
-      // Fetch products with their barcodes and tracking info
-      const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+      const lotResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "stock.lot",
+            method: "search_read",
+            args: [[]],
+            kwargs: {
+              fields: ["id", "name", "product_id"],
+              limit: limit,
+              offset: offset,
+            }
+          }
+        })
+      });
+
+      const lotData = await lotResponse.json();
+      if (lotData.error) {
+        throw new Error(lotData.error.data?.message || lotData.error.message);
+      }
+
+      const lots = lotData.result || [];
+      console.log(`📥 Found ${lots.length} lots`);
+
+      if (lots.length === 0) {
+        return res.json({ success: true, products: [] });
+      }
+
+      // One call to fetch name + tracking for every distinct product these
+      // lots point to, instead of one call per lot.
+      const productIds = [...new Set(
+        lots.filter(l => l.product_id).map(l => Array.isArray(l.product_id) ? l.product_id[0] : l.product_id)
+      )];
+
+      const productResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -714,27 +766,42 @@ class CountingController {
           method: "call",
           params: {
             model: "product.product",
-            method: "search_read",
-            args: [[]],
-            kwargs: {
-              fields: ["id", "name", "barcode", "default_code", "tracking"],
-              limit: limit,
-              offset: offset,
-            }
+            method: "read",
+            args: [productIds, ["name", "tracking"]],
+            kwargs: {}
           }
         })
       });
 
-      const data = await response.json();
-      console.log(`📥 Found ${data.result?.length || 0} products`);
-
-      if (data.error) {
-        throw new Error(data.error.data?.message || data.error.message);
+      const productData = await productResponse.json();
+      if (productData.error) {
+        throw new Error(productData.error.data?.message || productData.error.message);
       }
+
+      const productsById = {};
+      for (const p of (productData.result || [])) {
+        productsById[p.id] = p;
+      }
+
+      // ✅ One cached entry PER LOT — "barcode" is the lot's own name (the
+      // value that actually gets scanned), never product.product's barcode.
+      const products = lots.map(lot => {
+        const productId = Array.isArray(lot.product_id) ? lot.product_id[0] : lot.product_id;
+        const product = productsById[productId] || {};
+        return {
+          id: productId,
+          name: product.name || (Array.isArray(lot.product_id) ? lot.product_id[1] : 'Unknown'),
+          barcode: lot.name,
+          lot_id: lot.id,
+          lot_name: lot.name,
+          tracking: product.tracking || 'serial',
+          default_code: '',
+        };
+      });
 
       return res.json({
         success: true,
-        products: data.result || [],
+        products: products,
       });
 
     } catch (error) {
@@ -747,6 +814,8 @@ class CountingController {
   }
 
   // Cache products by barcode list
+  // ✅ Same migration: "barcodes" are matched against stock.lot.name, not
+  // product.product.barcode.
   static async cacheProductsByBarcode(req, res) {
     try {
       const session = AuthController.getSession();
@@ -762,7 +831,192 @@ class CountingController {
         return res.json({ success: true, products: [] });
       }
 
-      console.log(`📥 Fetching products for ${barcodes.length} barcodes`);
+      console.log(`📥 Fetching lots for ${barcodes.length} barcodes`);
+
+      const lotResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "stock.lot",
+            method: "search_read",
+            args: [[["name", "in", barcodes]]],
+            kwargs: {
+              fields: ["id", "name", "product_id"],
+            }
+          }
+        })
+      });
+
+      const lotData = await lotResponse.json();
+      if (lotData.error) {
+        throw new Error(lotData.error.data?.message || lotData.error.message);
+      }
+
+      const lots = lotData.result || [];
+      console.log(`Found ${lots.length} lots`);
+
+      if (lots.length === 0) {
+        return res.json({ success: true, products: [] });
+      }
+
+      const productIds = [...new Set(
+        lots.filter(l => l.product_id).map(l => Array.isArray(l.product_id) ? l.product_id[0] : l.product_id)
+      )];
+
+      const productResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "product.product",
+            method: "read",
+            args: [productIds, ["name", "tracking"]],
+            kwargs: {}
+          }
+        })
+      });
+
+      const productData = await productResponse.json();
+      if (productData.error) {
+        throw new Error(productData.error.data?.message || productData.error.message);
+      }
+
+      const productsById = {};
+      for (const p of (productData.result || [])) {
+        productsById[p.id] = p;
+      }
+
+      const products = lots.map(lot => {
+        const productId = Array.isArray(lot.product_id) ? lot.product_id[0] : lot.product_id;
+        const product = productsById[productId] || {};
+        return {
+          id: productId,
+          name: product.name || (Array.isArray(lot.product_id) ? lot.product_id[1] : 'Unknown'),
+          barcode: lot.name,
+          lot_id: lot.id,
+          lot_name: lot.name,
+          tracking: product.tracking || 'serial',
+          default_code: '',
+        };
+      });
+
+      return res.json({
+        success: true,
+        products: products,
+      });
+
+    } catch (error) {
+      console.error("Cache products by barcode error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ✅ GET /counting/live-items/:sheet_id
+  // Returns the current shared, merged list of scanned items for a sheet —
+  // this is what both phones poll periodically to see each other's scans.
+  static async getLiveItems(req, res) {
+    try {
+      const { sheet_id } = req.params;
+      const items = LiveSessionService.getItems(sheet_id);
+      return res.json({
+        success: true,
+        items
+      });
+    } catch (error) {
+      console.error("Get live items error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ✅ POST /counting/live-scan
+  // Body: { counting_sheet_id, barcode, product_name, product_id, quantity,
+  //         lot_number, lot_id, tracking }
+  // Upserts the scan into the shared list for that sheet (adds it, or
+  // increments quantity if the barcode is already there — e.g. the
+  // teammate scanned it first) and returns the updated merged list.
+  static async pushLiveScan(req, res) {
+    try {
+      const { counting_sheet_id, barcode } = req.body;
+
+      if (!counting_sheet_id || !barcode) {
+        return res.status(400).json({
+          success: false,
+          message: "counting_sheet_id and barcode are required"
+        });
+      }
+
+      const items = LiveSessionService.upsertItem(counting_sheet_id, req.body);
+
+      return res.json({
+        success: true,
+        items
+      });
+    } catch (error) {
+      console.error("Push live scan error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ✅ POST /counting/live-items/:sheet_id/clear
+  // Called once the shared list has been saved into a batch / sent to the
+  // ERP, so both phones start the next lot from a clean, empty list.
+  static async clearLiveItems(req, res) {
+    try {
+      const { sheet_id } = req.params;
+      LiveSessionService.clearItems(sheet_id);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Clear live items error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ✅ POST /counting/check-erp-scan
+  // Body: { counting_sheet_id, barcode }
+  // Checks whether this barcode has ALREADY been submitted to the ERP for
+  // this sheet (a counting.sheet.line already exists with this exact
+  // number). Prevents double-submission across sessions/devices — not
+  // just within the current local scan/batch list.
+  static async checkAlreadyInErp(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({
+          success: false,
+          message: "Not authenticated"
+        });
+      }
+
+      const { counting_sheet_id, barcode } = req.body;
+      if (!counting_sheet_id || !barcode) {
+        return res.status(400).json({
+          success: false,
+          message: "counting_sheet_id and barcode are required"
+        });
+      }
 
       const response = await fetch(`${session.host}/web/dataset/call_kw`, {
         method: "POST",
@@ -774,33 +1028,28 @@ class CountingController {
           jsonrpc: "2.0",
           method: "call",
           params: {
-            model: "product.product",
-            method: "search_read",
-            args: [[["barcode", "in", barcodes]]],
-            kwargs: {
-              fields: ["id", "name", "barcode", "default_code", "tracking"],
-            }
+            model: "counting.sheet.line",
+            method: "search_count",
+            args: [[["sheet_id", "=", parseInt(counting_sheet_id)], ["number", "=", barcode]]],
+            kwargs: {}
           }
         })
       });
 
       const data = await response.json();
-      console.log(`Found ${data.result?.length || 0} products`);
-
-      if (data.error) {
-        throw new Error(data.error.data?.message || data.error.message);
-      }
+      const count = data.result || 0;
 
       return res.json({
         success: true,
-        products: data.result || [],
+        alreadySent: count > 0
       });
-
     } catch (error) {
-      console.error("Cache products by barcode error:", error);
-      return res.status(500).json({
-        success: false,
-        message: error.message
+      console.error("Check already in ERP error:", error);
+      // ✅ Fail open: if the ERP check itself fails (e.g. offline), don't
+      // block scanning — just report "not found" so the flow continues.
+      return res.json({
+        success: true,
+        alreadySent: false
       });
     }
   }

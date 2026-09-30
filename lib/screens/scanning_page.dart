@@ -45,6 +45,26 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   Timer? _scanDebounceTimer;
   bool _isProcessingScan = false;
 
+  // ✅ Shared scanning session (two team members, same sheet, two phones).
+  // Polls the server for the merged list every few seconds.
+  Timer? _liveSyncTimer;
+  // Quantity for each barcode added/incremented locally but not yet
+  // pushed to the server (e.g. no connectivity). Retried every poll tick.
+  final Map<String, int> _pendingDeltas = {};
+  // ✅ When this device last successfully scanned each barcode — used to
+  // warn when a "duplicate" scan happens moments after the same one
+  // (very likely an accidental re-scan from fatigue, not a new batch).
+  final Map<String, DateTime> _lastScanTime = {};
+
+  // ✅ Hardware barcode scanner support (rugged devices with a built-in
+  // laser/imager engine set to "keyboard wedge" mode: the scanner types
+  // the decoded barcode as keystrokes, ending with Enter — exactly like a
+  // very fast typist). We capture that via a Focus node wrapping the page;
+  // it never steals focus from actual text fields (search, quantity
+  // dialogs) since those consume their own key events first.
+  final FocusNode _hardwareScanFocusNode = FocusNode();
+  String _hardwareScanBuffer = '';
+
   // For scan flash effect
   bool _showScanZone = true;
 
@@ -54,6 +74,9 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     _isMounted = true;
     WidgetsBinding.instance.addObserver(this);
     _loadSavedItems();
+    // ✅ Poll every 4s for scans made by the other team member on this
+    // same counting sheet, and retry pushing anything we couldn't send.
+    _liveSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) => _syncLiveSession());
   }
 
   @override
@@ -61,6 +84,8 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     _isMounted = false;
     WidgetsBinding.instance.removeObserver(this);
     _scanDebounceTimer?.cancel();
+    _liveSyncTimer?.cancel();
+    _hardwareScanFocusNode.dispose();
     scannerController.dispose();
     super.dispose();
   }
@@ -126,10 +151,118 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     }
   }
 
+  // ✅ Runs every 4s: retries any scan we couldn't push earlier (offline
+  // fallback), then pulls the shared list and merges in whatever the
+  // teammate scanned that we don't have yet.
+  Future<void> _syncLiveSession() async {
+    if (!_isMounted) return;
+
+    if (_pendingDeltas.isNotEmpty) {
+      final barcodes = List<String>.from(_pendingDeltas.keys);
+      for (final barcode in barcodes) {
+        final index = scannedItems.indexWhere((it) => it.barcode == barcode);
+        if (index == -1) {
+          _pendingDeltas.remove(barcode);
+          continue;
+        }
+        final delta = _pendingDeltas[barcode]!;
+        final item = scannedItems[index];
+        final serverItems = await CountingService.pushLiveScan(
+          countingSheetId: widget.countingSheetId,
+          item: {
+            'barcode': barcode,
+            'quantity': delta,
+            'product_name': item.productName,
+            'product_id': item.productId,
+            'lot_number': item.lotNumber,
+            'lot_id': item.lotId,
+            'tracking': item.tracking,
+          },
+        );
+        if (serverItems != null) {
+          _pendingDeltas.remove(barcode);
+          _mergeServerItems(serverItems);
+        }
+      }
+      await _saveItems();
+    }
+
+    final serverItems = await CountingService.getLiveItems(widget.countingSheetId);
+    if (serverItems.isNotEmpty) {
+      _mergeServerItems(serverItems);
+    }
+  }
+
+  // Merges the server's shared list into local `scannedItems`: adds
+  // barcodes we don't have yet (teammate scanned them), aligns quantity
+  // for barcodes we do have (unless we have a pending unsynced delta for
+  // it, in which case the server value is stale until our push succeeds).
+  void _mergeServerItems(List<Map<String, dynamic>> serverItems) {
+    if (!_isMounted) return;
+    bool changed = false;
+
+    for (final serverItem in serverItems) {
+      final barcode = serverItem['barcode'];
+      if (barcode == null) continue;
+      if (_pendingDeltas.containsKey(barcode)) continue;
+
+      final index = scannedItems.indexWhere((it) => it.barcode == barcode);
+      final serverQty = (serverItem['quantity'] is int)
+          ? serverItem['quantity'] as int
+          : int.tryParse('${serverItem['quantity']}') ?? 1;
+
+      if (index == -1) {
+        scannedItems.add(ScannedItem(
+          barcode: barcode,
+          productName: serverItem['product_name'] ?? '',
+          productId: serverItem['product_id'] ?? 0,
+          quantity: serverQty,
+          lotNumber: serverItem['lot_number'],
+          lotId: serverItem['lot_id'],
+          tracking: serverItem['tracking'] ?? 'none',
+        ));
+        changed = true;
+      } else if (scannedItems[index].quantity != serverQty) {
+        scannedItems[index].quantity = serverQty;
+        changed = true;
+      }
+    }
+
+    if (changed && _isMounted) {
+      setState(() {});
+      _saveItems();
+    }
+  }
+
+  // ✅ Pushes a scan (new item or extra quantity) to the shared session.
+  // On failure (offline), queues it so `_syncLiveSession` retries
+  // automatically — the scan is never lost, just stays local until
+  // connectivity returns.
+  Future<void> _pushScanOrQueue(ScannedItem item, int addedQuantity) async {
+    final serverItems = await CountingService.pushLiveScan(
+      countingSheetId: widget.countingSheetId,
+      item: {
+        'barcode': item.barcode,
+        'quantity': addedQuantity,
+        'product_name': item.productName,
+        'product_id': item.productId,
+        'lot_number': item.lotNumber,
+        'lot_id': item.lotId,
+        'tracking': item.tracking,
+      },
+    );
+
+    if (serverItems != null) {
+      _mergeServerItems(serverItems);
+    } else {
+      _pendingDeltas[item.barcode] = (_pendingDeltas[item.barcode] ?? 0) + addedQuantity;
+    }
+  }
+
   Future<int?> _showQuantityDialog(String productName, String barcode) async {
     final TextEditingController qtyController = TextEditingController(text: '1');
 
-    return showDialog<int>(
+    final result = await showDialog<int>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
@@ -179,13 +312,19 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         ],
       ),
     );
+    _hardwareScanFocusNode.requestFocus(); // ✅ hardware scanner keeps working after the dialog closes
+    return result;
   }
 
-  // Check if barcode already exists in saved batches
+  // Check if barcode already exists in saved batches — scoped to THIS
+  // counting sheet, same as the "Lots sauvegardés" page filters. Without
+  // this scope, a batch saved under a different sheet could block a scan
+  // here while that sheet's own batch list still shows empty.
   Future<bool> _isInSavedBatches(String barcode) async {
     try {
       final batches = await BatchStorageService.getBatches();
       for (final batch in batches) {
+        if (batch.countingSheetId != widget.countingSheetId) continue;
         if (!batch.isSynced) {
           for (final item in batch.items) {
             if (item.barcode == barcode) {
@@ -207,20 +346,16 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       isScanning = false;
     });
 
-    // Check if already in current list
+    // ✅ Already in the list (scanned by you OR your teammate, synced via
+    // the shared session) — ask for confirmation + quantity instead of
+    // silently blocking (see _handleDuplicateScan).
     final existingIndex = scannedItems.indexWhere((item) => item.barcode == barcode);
     if (existingIndex != -1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cet article est déjà dans la liste'), backgroundColor: AppColors.warningColor),
-      );
-      setState(() {
-        isLookingUp = false;
-        isScanning = true;
-      });
+      await _handleDuplicateScan(existingIndex, barcode);
       return;
     }
 
-    // Check if already in saved batches
+    // Check if already in a saved batch for THIS sheet
     final inBatch = await _isInSavedBatches(barcode);
     if (inBatch) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -233,56 +368,260 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       return;
     }
 
+    // ✅ Check if this exact barcode was already sent to the ERP for this
+    // sheet (covers the case where it was submitted in a previous session
+    // or from a teammate's phone, not just what's stored locally).
+    final alreadyInErp = await CountingService.isAlreadyInErp(
+      countingSheetId: widget.countingSheetId,
+      barcode: barcode,
+    );
+    if (alreadyInErp) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cet article a déjà été envoyé à l\'ERP'), backgroundColor: AppColors.warningColor),
+      );
+      setState(() {
+        isLookingUp = false;
+        isScanning = true;
+      });
+      return;
+    }
+
     // Look up product
     final result = await CountingService.lookupProduct(barcode);
 
     if (_isMounted) {
-      setState(() {
-        if (result != null && result['id'] != 0 && result['id'] != null) {
-          final tracking = result['tracking'] ?? 'serial';
-          final lotName = result['lot_name'] ?? barcode;
-          final lotIdValue = result['lot_id'] ?? 0;
-          final productIdValue = result['id'];
+      if (result != null && result['id'] != 0 && result['id'] != null) {
+        final tracking = result['tracking'] ?? 'serial';
+        final lotName = result['lot_name'] ?? barcode;
+        final lotIdValue = result['lot_id'] ?? 0;
+        final productIdValue = result['id'];
 
-          if (tracking == 'lot') {
-            _handleLotProduct(result, barcode, tracking, lotName, lotIdValue, productIdValue);
-            return;
-          }
-
-          scannedItems.add(ScannedItem(
-            barcode: barcode,
-            productName: result['name'] ?? 'Unknown',
-            productId: productIdValue,
-            quantity: 1,
-            lotNumber: lotName,
-            lotId: lotIdValue,
-            tracking: tracking,
-          ));
-          _saveItems(); // Save immediately
-          isLookingUp = false;
-          isScanning = true;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(' Ajouté: ${result['name']}'),
-              backgroundColor: AppColors.successColor,
-              duration: const Duration(milliseconds: 800),
-            ),
-          );
-        } else {
-          isLookingUp = false;
-          isScanning = true;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Code non trouvé: $barcode'),
-              backgroundColor: AppColors.errorColor,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+        if (tracking == 'lot') {
+          await _handleLotProduct(result, barcode, tracking, lotName, lotIdValue, productIdValue);
+          return;
         }
-      });
+
+        final newItem = ScannedItem(
+          barcode: barcode,
+          productName: result['name'] ?? 'Unknown',
+          productId: productIdValue,
+          quantity: 1,
+          lotNumber: lotName,
+          lotId: lotIdValue,
+          tracking: tracking,
+        );
+
+        setState(() {
+          scannedItems.add(newItem);
+          isLookingUp = false;
+          isScanning = true;
+        });
+        _lastScanTime[barcode] = DateTime.now();
+        _saveItems(); // Save immediately (local, offline-safe)
+        _pushScanOrQueue(newItem, 1); // ✅ Share with teammate's phone
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(' Ajouté: ${result['name']}'),
+            backgroundColor: AppColors.successColor,
+            duration: const Duration(milliseconds: 800),
+          ),
+        );
+      } else {
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Code non trouvé: $barcode'),
+            backgroundColor: AppColors.errorColor,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
+  }
+
+  // ✅ Barcode already scanned (by this phone or the teammate's). Fatigue
+  // during a long count means a member can accidentally re-scan a group
+  // of articles they already did — so instead of jumping straight to a
+  // quantity input, we first make them explicitly confirm this really IS
+  // an extra/new batch of the same article. If it was scanned moments ago
+  // on THIS phone, the warning is much more explicit.
+  Future<void> _handleDuplicateScan(int existingIndex, String barcode) async {
+    final existingItem = scannedItems[existingIndex];
+
+    final shouldAddMore = await _confirmDuplicateScan(existingItem, barcode);
+    if (!shouldAddMore) {
+      if (_isMounted) {
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+      }
+      return;
+    }
+
+    final addedQty = await _showQuantityDialog(
+      '${existingItem.productName} (déjà scanné — quantité actuelle: ${existingItem.quantity})',
+      barcode,
+    );
+
+    if (addedQty == null) {
+      if (_isMounted) {
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+      }
+      return;
+    }
+
+    // ✅ Show the computed result before committing — lets the user catch
+    // a mistyped quantity before it's saved and shared with the teammate.
+    final newTotal = existingItem.quantity + addedQty;
+    final confirmed = await _confirmQuantityResult(existingItem, addedQty, newTotal);
+    if (!confirmed) {
+      if (_isMounted) {
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+      }
+      return;
+    }
+
+    if (_isMounted) {
+      setState(() {
+        scannedItems[existingIndex].quantity += addedQty;
+        isLookingUp = false;
+        isScanning = true;
+      });
+      _lastScanTime[barcode] = DateTime.now();
+      _saveItems();
+      _pushScanOrQueue(existingItem, addedQty);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${existingItem.productName}: +$addedQty (total ${scannedItems[existingIndex].quantity})'),
+          backgroundColor: AppColors.successColor,
+          duration: const Duration(milliseconds: 900),
+        ),
+      );
+    }
+  }
+
+  // Confirms whether a re-scan of an already-listed barcode is really a
+  // new/extra batch to add, or an accidental re-scan. Shows a much more
+  // explicit ⚠️ warning when this exact barcode was scanned on THIS phone
+  // only moments ago.
+  Future<bool> _confirmDuplicateScan(ScannedItem item, String barcode) async {
+    final lastScan = _lastScanTime[barcode];
+    final isVeryRecent = lastScan != null && DateTime.now().difference(lastScan) < const Duration(seconds: 8);
+
+    final String subtitle;
+    if (lastScan != null) {
+      final elapsed = DateTime.now().difference(lastScan);
+      final elapsedText = elapsed.inMinutes >= 1 ? 'il y a ${elapsed.inMinutes} min' : 'il y a ${elapsed.inSeconds} sec';
+      subtitle = 'Dernier scan sur ce téléphone : $elapsedText.';
+    } else {
+      subtitle = 'Déjà présent dans la liste (scanné par vous ou un coéquipier).';
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(isVeryRecent ? '⚠️ Rescanné à l\'instant' : 'Article déjà scanné'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${item.productName}\nQuantité actuelle: ${item.quantity}'),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: isVeryRecent ? AppColors.errorColor : AppColors.textSecondary,
+                fontWeight: isVeryRecent ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+            if (isVeryRecent) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Vous venez de le scanner il y a quelques secondes — s\'agit-il vraiment d\'un nouveau lot du même article, ou d\'une erreur de scan ?',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler (erreur de scan)'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isVeryRecent ? AppColors.warningColor : AppColors.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Oui, ajouter une quantité'),
+          ),
+        ],
+      ),
+    );
+
+    _hardwareScanFocusNode.requestFocus(); // ✅ hardware scanner keeps working after the dialog closes
+    return result ?? false;
+  }
+
+  // ✅ Shows the RESULT of the quantity addition (current + added = new
+  // total) and asks for explicit confirmation before saving/sharing it —
+  // a last chance to catch a mistyped quantity.
+  Future<bool> _confirmQuantityResult(ScannedItem item, int addedQty, int newTotal) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Confirmer la quantité'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text('Quantité actuelle : ${item.quantity}'),
+            Text('Quantité ajoutée : +$addedQty'),
+            const Divider(height: 20),
+            Text(
+              'Nouveau total : $newTotal',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primaryColor),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Non, annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.successColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Oui, enregistrer'),
+          ),
+        ],
+      ),
+    );
+    _hardwareScanFocusNode.requestFocus(); // ✅ hardware scanner keeps working after the dialog closes
+    return result ?? false;
   }
 
   Future<void> _handleLotProduct(Map<String, dynamic> result, String barcode, String tracking, String lotName, int lotIdValue, int productIdValue) async {
@@ -298,20 +637,24 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     }
 
     if (_isMounted) {
+      final newItem = ScannedItem(
+        barcode: barcode,
+        productName: result['name'] ?? 'Unknown',
+        productId: productIdValue,
+        quantity: qty,
+        lotNumber: lotName,
+        lotId: lotIdValue,
+        tracking: tracking,
+      );
+
       setState(() {
-        scannedItems.add(ScannedItem(
-          barcode: barcode,
-          productName: result['name'] ?? 'Unknown',
-          productId: productIdValue,
-          quantity: qty,
-          lotNumber: lotName,
-          lotId: lotIdValue,
-          tracking: tracking,
-        ));
-        _saveItems(); // Save immediately
+        scannedItems.add(newItem);
         isScanning = true;
         isLookingUp = false;
       });
+      _lastScanTime[barcode] = DateTime.now();
+      _saveItems(); // Save immediately (local, offline-safe)
+      _pushScanOrQueue(newItem, qty); // ✅ Share with teammate's phone
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -324,12 +667,29 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
   }
 
   // Manual barcode entry
-  Future<void> _addManualBarcode() async {
-    final TextEditingController barcodeController = TextEditingController();
+  // ✅ prefillValue is set when this dialog is opened because the physical
+  // scanner was used (not tapped open by the user). In that case, the
+  // scanned value is shown in the field for a moment — so it's always
+  // visible where a manual entry would go — then the dialog continues
+  // automatically, exactly as if "Ajouter" had been pressed. Manual typing
+  // still works normally in every case.
+  Future<void> _addManualBarcode({String? prefillValue}) async {
+    final TextEditingController barcodeController = TextEditingController(text: prefillValue ?? '');
+    final bool fromHardwareScan = prefillValue != null && prefillValue.isNotEmpty;
 
     final shouldAdd = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
+        if (fromHardwareScan) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Future.delayed(const Duration(milliseconds: 400), () {
+              if (Navigator.canPop(context)) {
+                Navigator.pop(context, true);
+              }
+            });
+          });
+        }
+
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
@@ -342,9 +702,19 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           content: TextField(
             controller: barcodeController,
             autofocus: true,
+            textInputAction: TextInputAction.done,
+            // ✅ The physical scanner types the barcode as keystrokes (it
+            // has focus via autofocus) then sends Enter — this submits
+            // automatically, exactly like tapping "Ajouter", so scanning
+            // here continues the normal process without an extra tap.
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, true);
+              }
+            },
             decoration: const InputDecoration(
               labelText: "Numéro de série",
-              hintText: "Entrez le code-barres manuellement",
+              hintText: "Entrez le code-barres manuellement ou scannez",
               prefixIcon: Icon(Icons.qr_code, size: 20),
             ),
             style: const TextStyle(fontSize: 14),
@@ -366,6 +736,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
         );
       },
     );
+    _hardwareScanFocusNode.requestFocus(); // ✅ hardware scanner keeps working after the dialog closes
 
     if (shouldAdd == true && barcodeController.text.isNotEmpty) {
       await _processBarcode(barcodeController.text.trim());
@@ -401,6 +772,48 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
     await _processBarcode(barcode);
 
     _isProcessingScan = false;
+  }
+
+  // ✅ Captures keystrokes from a physical scanner in "keyboard wedge" mode.
+  // Printable characters accumulate in a buffer; Enter (sent by the
+  // scanner after each decode) submits the buffer as a scanned barcode
+  // through the exact same pipeline as a camera detection.
+  KeyEventResult _onHardwareKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      final scanned = _hardwareScanBuffer.trim();
+      _hardwareScanBuffer = '';
+      if (scanned.isNotEmpty) {
+        _handleHardwareScan(scanned);
+      }
+      return KeyEventResult.handled;
+    }
+
+    final char = event.character;
+    if (char != null && char.isNotEmpty) {
+      _hardwareScanBuffer += char;
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // Same guard/debounce logic as onBarcodeDetected, just fed a plain
+  // String instead of a mobile_scanner BarcodeCapture. Instead of
+  // processing the barcode silently in the background, it's routed
+  // through the manual entry field (see _addManualBarcode) so the scanned
+  // value is always visible, then the normal search continues on its own.
+  void _handleHardwareScan(String barcode) {
+    if (!isScanning || isLookingUp || _isProcessingScan) return;
+    if (_scanDebounceTimer?.isActive ?? false) return;
+    if (barcode == lastScannedBarcode) return;
+
+    _scanDebounceTimer = Timer(const Duration(milliseconds: 400), () {});
+    lastScannedBarcode = barcode;
+
+    _addManualBarcode(prefillValue: barcode);
   }
 
   void _logout() {
@@ -458,6 +871,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
       Navigator.pop(context);
       if (success) {
         await LocalStorageService.clearScannedItems(widget.countingSheetId);
+        await CountingService.clearLiveItems(widget.countingSheetId); // ✅ reset shared session for both phones
         setState(() {
           scannedItems.clear();
           lastScannedBarcode = null;
@@ -566,6 +980,7 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
                 sheetName: widget.sheetName,
               );
               await BatchStorageService.saveBatch(batch);
+              await CountingService.clearLiveItems(widget.countingSheetId); // ✅ reset shared session for both phones
               if (_isMounted) {
                 setState(() {
                   scannedItems.clear();
@@ -749,134 +1164,139 @@ class _ScanningPageState extends State<ScanningPage> with SingleTickerProviderSt
           ],
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Stack(
-              children: [
-                MobileScanner(
-                  controller: scannerController,
-                  onDetect: onBarcodeDetected,
-                ),
-                // Voile dégradé pour la lisibilité de l'AppBar sur la caméra
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 110,
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.black.withOpacity(0.55), Colors.transparent],
+      body: Focus(
+        focusNode: _hardwareScanFocusNode,
+        autofocus: true,
+        onKeyEvent: _onHardwareKeyEvent,
+        child: Column(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Stack(
+                children: [
+                  MobileScanner(
+                    controller: scannerController,
+                    onDetect: onBarcodeDetected,
+                  ),
+                  // Voile dégradé pour la lisibilité de l'AppBar sur la caméra
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 110,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.black.withOpacity(0.55), Colors.transparent],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                if (_showScanZone)
-                  _buildFocusedScanZone(),
-                _buildCornerIndicators(),
-                if (isLookingUp)
-                  Positioned(
-                    bottom: 20,
-                    left: 20,
-                    right: 20,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.tertiaryColor),
-                          ),
-                          SizedBox(width: 10),
-                          Text('Recherche du produit...', style: TextStyle(color: Colors.white, fontSize: 12.5)),
-                        ],
+                  if (_showScanZone)
+                    _buildFocusedScanZone(),
+                  _buildCornerIndicators(),
+                  if (isLookingUp)
+                    Positioned(
+                      bottom: 20,
+                      left: 20,
+                      right: 20,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.75),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.tertiaryColor),
+                            ),
+                            SizedBox(width: 10),
+                            Text('Recherche du produit...', style: TextStyle(color: Colors.white, fontSize: 12.5)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-          // Panneau d'état
-          Container(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-            decoration: const BoxDecoration(
-              color: AppColors.surfaceColor,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(22),
-                topRight: Radius.circular(22),
+                ],
               ),
-              boxShadow: [
-                BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, -4)),
-              ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.sheetName,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textColor),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryColor.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${scannedItems.length}',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryColor),
-                      ),
-                    ),
-                  ],
+            // Panneau d'état
+            Container(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceColor,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(22),
+                  topRight: Radius.circular(22),
                 ),
-                const SizedBox(height: 10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: (scannedItems.length / 999).clamp(0.0, 1.0),
-                    minHeight: 5,
-                    backgroundColor: AppColors.borderColor,
-                    color: AppColors.tertiaryColor,
+                boxShadow: [
+                  BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, -4)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.sheetName,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textColor),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryColor.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${scannedItems.length}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryColor),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  scannedItems.isEmpty
-                      ? "Scannez le code-barres"
-                      : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 46,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.list_alt, size: 18),
-                    label: Text('Voir la liste (${scannedItems.length})', style: const TextStyle(fontSize: 13)),
-                    onPressed: navigateToSummary,
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: (scannedItems.length / 999).clamp(0.0, 1.0),
+                      minHeight: 5,
+                      backgroundColor: AppColors.borderColor,
+                      color: AppColors.tertiaryColor,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Text(
+                    scannedItems.isEmpty
+                        ? "Scannez le code-barres"
+                        : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 46,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.list_alt, size: 18),
+                      label: Text('Voir la liste (${scannedItems.length})', style: const TextStyle(fontSize: 13)),
+                      onPressed: navigateToSummary,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         mini: true,

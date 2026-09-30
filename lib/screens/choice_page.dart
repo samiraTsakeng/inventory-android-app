@@ -3,15 +3,38 @@ import 'consolidation_list_page.dart';
 import 'consolidation_zones_page.dart';
 import 'adjustment_action_page.dart';
 import '../utils/constants.dart';
+import '../services/auth_service.dart';
 
 class ChoicePage extends StatelessWidget {
   final int? adjustmentId;
+  final dynamic managerId;
 
-  const ChoicePage({super.key, this.adjustmentId});
+  const ChoicePage({super.key, this.adjustmentId, this.managerId});
+
+  // ✅ "Gérer les consolidations" is only meant for whoever is responsible
+  // for this adjustment (its manager_id in Odoo — a many2one, so it comes
+  // back as [id, display_name] or sometimes just an id/false).
+  Future<bool> _isCurrentUserManager(dynamic mgrId) async {
+    if (mgrId == null || mgrId == false) return false;
+    final session = await AuthService.getFullSession();
+    final currentUid = int.tryParse(session?['uid'] ?? '');
+    if (currentUid == null) return false;
+
+    final managerUid = mgrId is List ? mgrId[0] : mgrId;
+    return managerUid == currentUid;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final adjId = ModalRoute.of(context)?.settings.arguments as int? ?? adjustmentId;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    int? adjId = adjustmentId;
+    dynamic mgrId = managerId;
+    if (args is Map) {
+      adjId = args['id'] as int? ?? adjId;
+      mgrId = args['managerId'] ?? mgrId;
+    } else if (args is int) {
+      adjId = args;
+    }
 
     if (adjId == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -44,47 +67,59 @@ class ChoicePage extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Counting Sheet Card
-            _buildChoiceCard(
-              context: context,
-              title: "Feuille de comptage",
-              subtitle: "Scanner les articles pour le comptage",
-              icon: Icons.qr_code_scanner,
-              color: AppColors.primaryColor,
-              onTap: () {
-                Navigator.pushNamed(
-                  context,
-                  '/feuilles-list',
-                  arguments: adjId,
-                );
-              },
-            ),
-            const SizedBox(height: 20),
+        child: FutureBuilder<bool>(
+          future: _isCurrentUserManager(mgrId),
+          builder: (context, snapshot) {
+            final isManager = snapshot.data ?? false;
+            final stillChecking = snapshot.connectionState == ConnectionState.waiting;
 
-            // Consolidation Management Card (combines everything)
-            _buildChoiceCard(
-              context: context,
-              title: "Gestion des consolidations",
-              subtitle: "Consolider les zones et appliquer au stock",
-              icon: Icons.merge_type,
-              color: AppColors.secondaryColor,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AdjustmentActionPage(
-                      adjustmentId: adjId,
-                      adjustmentName: 'Ajustement $adjId',
-                    ),
-                  ),
-                );
-              },
-              enabled: true,
-            ),
-          ],
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Counting Sheet Card
+                _buildChoiceCard(
+                  context: context,
+                  title: "Feuille de comptage",
+                  subtitle: "Scanner les articles pour le comptage",
+                  icon: Icons.qr_code_scanner,
+                  color: AppColors.primaryColor,
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/feuilles-list',
+                      arguments: adjId,
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Consolidation Management Card — disabled for non-managers
+                // so a user can't tap into a screen they'll just get
+                // blocked from once inside.
+                _buildChoiceCard(
+                  context: context,
+                  title: "Gestion des consolidations",
+                  subtitle: isManager || stillChecking
+                      ? "Consolider les zones et appliquer au stock"
+                      : "Réservé au responsable de cet ajustement",
+                  icon: Icons.merge_type,
+                  color: AppColors.secondaryColor,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AdjustmentActionPage(
+                          adjustmentId: adjId!,
+                          adjustmentName: 'Ajustement $adjId',
+                        ),
+                      ),
+                    );
+                  },
+                  enabled: stillChecking || isManager,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

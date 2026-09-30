@@ -314,8 +314,8 @@ class _BatchesListPageState extends State<BatchesListPage> {
     }
   }
 
-  void _viewBatchItems(Batch batch) {
-    Navigator.push(
+  void _viewBatchItems(Batch batch) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ScannedItemsListPage(
@@ -323,6 +323,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
           sheetName: 'Lot: ${batch.name}',
           countingSheetId: batch.countingSheetId,
           adjustmentId: batch.adjustmentId,
+          batchId: batch.id, // ✅ tells the page to persist changes into THIS batch
           onItemsUpdated: (updatedItems) {
             batch.items.clear();
             batch.items.addAll(updatedItems);
@@ -330,6 +331,10 @@ class _BatchesListPageState extends State<BatchesListPage> {
         ),
       ),
     );
+    // ✅ Reload straight from storage so the grid (item counts, synced
+    // status) always reflects what was actually persisted, not stale
+    // in-memory state.
+    await _loadBatches();
   }
 
   @override

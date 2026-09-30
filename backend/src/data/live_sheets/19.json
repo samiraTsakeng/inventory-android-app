@@ -1,0 +1,67 @@
+{
+  "items": [
+    {
+      "barcode": "0000002",
+      "product_name": "Table Leg",
+      "product_id": 92,
+      "quantity": 13,
+      "lot_number": "0000002",
+      "lot_id": 16,
+      "tracking": "lot"
+    },
+    {
+      "barcode": "1000118591600197",
+      "product_name": "Netis wireless N access point",
+      "product_id": 146,
+      "quantity": 1,
+      "lot_number": "1000118591600197",
+      "lot_id": 27,
+      "tracking": "serial"
+    },
+    {
+      "barcode": "262DE00010",
+      "product_name": "manchon jaune",
+      "product_id": 144,
+      "quantity": 12,
+      "lot_number": "262DE00010",
+      "lot_id": null,
+      "tracking": "lot"
+    },
+    {
+      "barcode": "T62AC2142XXY18K0808",
+      "product_name": "rugged mobile 2",
+      "product_id": 78,
+      "quantity": 1,
+      "lot_number": "T62AC2142XXY18K0808",
+      "lot_id": 2,
+      "tracking": "serial"
+    },
+    {
+      "barcode": "6174000037046",
+      "product_name": "vallee d'or",
+      "product_id": 83,
+      "quantity": 7,
+      "lot_number": "6174000037046",
+      "lot_id": 3,
+      "tracking": "lot"
+    },
+    {
+      "barcode": "101120013800",
+      "product_name": "E-port replicator",
+      "product_id": 154,
+      "quantity": 1,
+      "lot_number": "101120013800",
+      "lot_id": 35,
+      "tracking": "serial"
+    },
+    {
+      "barcode": "262DE00006",
+      "product_name": "Dacomex cordon adaptateur",
+      "product_id": 140,
+      "quantity": 1,
+      "lot_number": "262DE00006",
+      "lot_id": null,
+      "tracking": "serial"
+    }
+  ]
+}

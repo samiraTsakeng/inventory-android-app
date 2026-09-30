@@ -54,6 +54,22 @@ class BatchStorageService {
     }
   }
 
+  // ✅ Update the item list of an existing, already-saved batch (used when
+  // deleting or editing an article from inside "Lots sauvegardés"). Without
+  // this, changes only lived in memory and reverted the moment the page
+  // was reopened, since it re-reads from storage via getBatches().
+  static Future<void> updateBatchItems(String batchId, List<ScannedItem> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    final batches = await getBatches();
+    final index = batches.indexWhere((b) => b.id == batchId);
+    if (index != -1) {
+      batches[index].items.clear();
+      batches[index].items.addAll(items);
+      final batchesJson = batches.map((b) => b.toJson()).toList();
+      await prefs.setString(_batchesKey, jsonEncode(batchesJson));
+    }
+  }
+
   // Clear all batches
   static Future<void> clearAllBatches() async {
     final prefs = await SharedPreferences.getInstance();
