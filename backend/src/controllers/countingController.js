@@ -1,7 +1,5 @@
-
 const OdooService = require("../services/odooServices");
 const AuthController = require("./authController");
-const LiveSessionService = require("../services/liveSessionService");
 
 // Helper function to process found lot (moved outside for global access)
 async function processLotFound(session, lot, barcode) {
@@ -498,9 +496,125 @@ class CountingController {
       const failedItems = [];
 
       for (const item of items) {
-        // Each item already has product_id from the scanned lot
+        // ✅ Validate BEFORE touching Odoo at all. This is exactly what
+        // was missing: a line with an empty/false "number" (or a missing
+        // product) was being sent straight to Odoo, which rejected it
+        // with the cryptic "le numéro 'false' ne peut être validé" and no
+        // indication of WHICH item it came from. Now we catch it here,
+        // name the exact barcode, and explain why — instead of letting a
+        // bad record reach Odoo at all.
+        const rawBarcode = (item.barcode || '').toString().trim();
+        const rawLotNumber = (item.lot_number || '').toString().trim();
+        const lineNumber = rawLotNumber || rawBarcode;
+
+        if (!lineNumber) {
+          console.error("Skipping item with no usable number (barcode and lot_number both empty):", JSON.stringify(item));
+          failedItems.push({
+            barcode: rawBarcode || '(code-barres manquant)',
+            reason: "Numéro de série/lot manquant — l'article n'a pas été envoyé pour éviter une erreur de validation dans l'ERP."
+          });
+          continue;
+        }
+
+        if (!item.product_id || item.product_id === 0) {
+          console.error(`Skipping item ${lineNumber}: product_id is missing/0`);
+          failedItems.push({
+            barcode: lineNumber,
+            reason: "Produit non identifié (product_id manquant) — probablement récupéré depuis le mauvais modèle lors du scan."
+          });
+          continue;
+        }
+
+        const qty = Number(item.quantity);
+        if (!qty || qty <= 0 || Number.isNaN(qty)) {
+          console.error(`Skipping item ${lineNumber}: invalid quantity (${item.quantity})`);
+          failedItems.push({
+            barcode: lineNumber,
+            reason: `Quantité invalide (${item.quantity})`
+          });
+          continue;
+        }
+        item.quantity = qty; // normalized for the create/write calls below
+
+        // ✅ Search for an existing line for this exact sheet + number
+        // BEFORE creating anything. Without this, resubmitting (double
+        // tap on "Envoyer", a rescan-to-add-quantity that was already
+        // sent, etc.) created a brand new counting.sheet.line every time,
+        // duplicating the same product in the ERP instead of adding to
+        // its already-recorded quantity.
+        let existingLineId = null;
+        let existingQty = 0;
+        try {
+          const searchResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Cookie": OdooService.sessionCookie
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "call",
+              params: {
+                model: "counting.sheet.line",
+                method: "search_read",
+                args: [[["sheet_id", "=", counting_sheet_id], ["number", "=", lineNumber]]],
+                kwargs: { fields: ["id", "counted_qty"], limit: 1 }
+              }
+            })
+          });
+          const searchData = await searchResponse.json();
+          if (searchData.result && searchData.result.length > 0) {
+            existingLineId = searchData.result[0].id;
+            existingQty = searchData.result[0].counted_qty || 0;
+          }
+        } catch (err) {
+          console.warn("Could not check for existing line, will create a new one:", err.message);
+        }
+
+        if (existingLineId) {
+          // ✅ Line already exists for this sheet+barcode — ADD to its
+          // counted quantity instead of creating a duplicate.
+          const newQty = existingQty + (item.quantity || 0);
+          console.log(`Line already exists (id ${existingLineId}) for ${lineNumber} — updating qty ${existingQty} -> ${newQty}`);
+
+          const updateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Cookie": OdooService.sessionCookie
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "call",
+              params: {
+                model: "counting.sheet.line",
+                method: "write",
+                args: [[existingLineId], { counted_qty: newQty }],
+                kwargs: {}
+              }
+            })
+          });
+
+          const updateResult = await updateResponse.json();
+          if (updateResult.error) {
+            console.error("Error updating existing line:", updateResult.error);
+            failedItems.push({
+              barcode: lineNumber,
+              reason: updateResult.error.data?.message || updateResult.error.message || "Erreur Odoo lors de la mise à jour"
+            });
+          } else {
+            createdLineIds.push(existingLineId);
+            console.log("Updated existing line ID: " + existingLineId);
+          }
+          continue;
+        }
+
+        // ✅ Exactly the 3 fields Odoo actually needs for a new line:
+        // number, product_id, counted_qty — plus sheet_id/lot_id to link
+        // it correctly. lineNumber is guaranteed non-empty here (checked
+        // above), product_id is guaranteed non-zero too.
         const lineData = {
-          number: item.lot_number || item.barcode,
+          number: lineNumber,
           product_id: item.product_id,
           counted_qty: item.quantity,
           sheet_id: counting_sheet_id,
@@ -534,13 +648,19 @@ class CountingController {
           lineResult = JSON.parse(responseText);
         } catch (e) {
           console.error("Failed to parse response:", responseText);
-          failedItems.push(item.barcode);
+          failedItems.push({
+            barcode: lineNumber,
+            reason: "Réponse invalide du serveur Odoo"
+          });
           continue;
         }
 
         if (lineResult.error) {
           console.error("Error creating line:", lineResult.error);
-          failedItems.push(item.barcode);
+          failedItems.push({
+            barcode: lineNumber,
+            reason: lineResult.error.data?.message || lineResult.error.message || "Erreur Odoo lors de la création"
+          });
         } else {
           createdLineIds.push(lineResult.result);
           console.log("Created line with ID: " + lineResult.result);
@@ -600,6 +720,111 @@ class CountingController {
         success: false,
         message: error.message || "Failed to submit scans"
       });
+    }
+  }
+
+  static async lookupProductsBatch(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({ success: false, message: "Not authenticated" });
+      }
+
+      const { barcodes } = req.body;
+      if (!Array.isArray(barcodes) || barcodes.length === 0) {
+        return res.status(400).json({ success: false, message: "barcodes array required" });
+      }
+
+      console.log("Batch lookup for barcodes:", barcodes);
+
+      // One search_read for ALL barcodes at once.
+      const lotResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Cookie": OdooService.sessionCookie
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            model: "stock.lot",
+            method: "search_read",
+            args: [[["name", "in", barcodes]]],
+            kwargs: { fields: ["id", "name", "product_id"] }
+          }
+        })
+      });
+
+      const lotData = await lotResponse.json();
+      if (lotData.error) {
+        throw new Error(lotData.error.data?.message || lotData.error.message);
+      }
+
+      const lots = lotData.result || [];
+      if (lots.length === 0) {
+        return res.json({
+          success: false,
+          message: "Aucun des codes-barres fournis ne correspond à un article dans le système.",
+          tried_barcodes: barcodes
+        });
+      }
+
+      // Prefer the first matching barcode in the order given by the app.
+      let chosenLot = null;
+      let chosenBarcode = null;
+      for (const requested of barcodes) {
+        const match = lots.find((l) => l.name === requested);
+        if (match) {
+          chosenLot = match;
+          chosenBarcode = requested;
+          break;
+        }
+      }
+
+      if (!chosenLot) {
+        return res.json({
+          success: false,
+          message: "Aucun des codes-barres fournis ne correspond à un article dans le système.",
+          tried_barcodes: barcodes
+        });
+      }
+
+      const result = await processLotFound(session, chosenLot, chosenBarcode);
+
+      // Do the ERP duplicate check as part of this SAME batch API request.
+      // The phone therefore waits for one response for the physical article,
+      // instead of making another request after the barcode lookup.
+      let alreadySent = false;
+      if (req.body.counting_sheet_id) {
+        const erpResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Cookie": OdooService.sessionCookie
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "call",
+            params: {
+              model: "counting.sheet.line",
+              method: "search_count",
+              args: [[
+                ["sheet_id", "=", parseInt(req.body.counting_sheet_id)],
+                ["number", "=", chosenBarcode]
+              ]],
+              kwargs: {}
+            }
+          })
+        });
+        const erpData = await erpResponse.json();
+        if (!erpData.error) alreadySent = (erpData.result || 0) > 0;
+      }
+
+      return res.json({ ...result, alreadySent });
+    } catch (error) {
+      console.error("Batch lookup error:", error);
+      return res.status(500).json({ success: false, message: error.message });
     }
   }
 
@@ -918,75 +1143,6 @@ class CountingController {
 
     } catch (error) {
       console.error("Cache products by barcode error:", error);
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
-  // ✅ GET /counting/live-items/:sheet_id
-  // Returns the current shared, merged list of scanned items for a sheet —
-  // this is what both phones poll periodically to see each other's scans.
-  static async getLiveItems(req, res) {
-    try {
-      const { sheet_id } = req.params;
-      const items = LiveSessionService.getItems(sheet_id);
-      return res.json({
-        success: true,
-        items
-      });
-    } catch (error) {
-      console.error("Get live items error:", error);
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
-  // ✅ POST /counting/live-scan
-  // Body: { counting_sheet_id, barcode, product_name, product_id, quantity,
-  //         lot_number, lot_id, tracking }
-  // Upserts the scan into the shared list for that sheet (adds it, or
-  // increments quantity if the barcode is already there — e.g. the
-  // teammate scanned it first) and returns the updated merged list.
-  static async pushLiveScan(req, res) {
-    try {
-      const { counting_sheet_id, barcode } = req.body;
-
-      if (!counting_sheet_id || !barcode) {
-        return res.status(400).json({
-          success: false,
-          message: "counting_sheet_id and barcode are required"
-        });
-      }
-
-      const items = LiveSessionService.upsertItem(counting_sheet_id, req.body);
-
-      return res.json({
-        success: true,
-        items
-      });
-    } catch (error) {
-      console.error("Push live scan error:", error);
-      return res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
-  // ✅ POST /counting/live-items/:sheet_id/clear
-  // Called once the shared list has been saved into a batch / sent to the
-  // ERP, so both phones start the next lot from a clean, empty list.
-  static async clearLiveItems(req, res) {
-    try {
-      const { sheet_id } = req.params;
-      LiveSessionService.clearItems(sheet_id);
-      return res.json({ success: true });
-    } catch (error) {
-      console.error("Clear live items error:", error);
       return res.status(500).json({
         success: false,
         message: error.message

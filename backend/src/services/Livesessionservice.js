@@ -87,7 +87,18 @@ const LiveSessionService = {
   clearItems(sheetId) {
     writeItems(String(sheetId), []);
   },
+
+  // ✅ Remove a single barcode from the shared list — called when an item
+  // is deleted from the scanned list. Without this, the next poll would
+  // re-add the deleted item from the server's copy (since the server
+  // never learned it was removed), making the delete look like it
+  // "undoes itself" and making a rescan wrongly report "already scanned".
+  removeItem(sheetId, barcode) {
+    const items = readItems(String(sheetId));
+    const filtered = items.filter((it) => it.barcode !== barcode);
+    writeItems(String(sheetId), filtered);
+    return filtered;
+  },
 };
 
 module.exports = LiveSessionService;
- 

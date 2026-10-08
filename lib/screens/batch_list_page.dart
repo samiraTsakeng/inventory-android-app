@@ -228,13 +228,13 @@ class _BatchesListPageState extends State<BatchesListPage> {
     setState(() => _isSyncing = true);
 
     try {
-      final success = await CountingService.submitScannedItems(
+      final result = await CountingService.submitScannedItems(
         countingSheetId: batch.countingSheetId,
         adjustmentId: batch.adjustmentId,
         items: batch.items,
       );
 
-      if (success) {
+      if (result.success) {
         await BatchStorageService.markBatchAsSynced(batch.id);
 
         if (mounted) {
@@ -284,13 +284,13 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
     for (final batch in unsyncedBatches) {
       try {
-        final success = await CountingService.submitScannedItems(
+        final result = await CountingService.submitScannedItems(
           countingSheetId: batch.countingSheetId,
           adjustmentId: batch.adjustmentId,
           items: batch.items,
         );
 
-        if (success) {
+        if (result.success) {
           await BatchStorageService.markBatchAsSynced(batch.id);
           successCount++;
         } else {

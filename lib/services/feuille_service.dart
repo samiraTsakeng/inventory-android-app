@@ -8,7 +8,7 @@ class FeuilleService {
     http.Response response;
     try {
       response = await http
-          .get(Uri.parse(ApiConfig.feuilles(adjustmentId)))
+          .get(Uri.parse(ApiConfig.feuilles(adjustmentId)), headers: await ApiConfig.authHeaders())
           .timeout(const Duration(seconds: 10));
     } catch (e) {
       // ✅ True network failure (offline, timeout, DNS, unreachable host…)

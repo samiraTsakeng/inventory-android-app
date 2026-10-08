@@ -55,7 +55,7 @@ class LocalStorageService {
       })).toList();
 
       await prefs.setStringList(key, itemsJson);
-      await prefs.setInt(_sheetIdKey, sheetId);
+      await prefs.setInt('${_sheetIdKey}_${sessionId}', sheetId);
 
       //  Force save to disk
       await prefs.reload();
@@ -129,7 +129,8 @@ class LocalStorageService {
   static Future<int?> getCurrentSheetId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getInt(_sheetIdKey);
+      final sessionId = await getSessionId();
+      return prefs.getInt('${_sheetIdKey}_${sessionId}');
     } catch (e) {
       print(" Error getting current sheet ID: $e");
       return null;
@@ -165,7 +166,7 @@ class LocalStorageService {
 
       // Reset session ID for next login
       await prefs.remove(_sessionIdKey);
-      await prefs.remove(_sheetIdKey);
+      await prefs.remove('${_sheetIdKey}_${sessionId}');
 
       print("Cleared ALL session data for: $sessionId");
     } catch (e) {

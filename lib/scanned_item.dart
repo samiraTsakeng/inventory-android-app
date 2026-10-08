@@ -30,12 +30,14 @@ class ScannedItem {
   };
 
   factory ScannedItem.fromJson(Map<String, dynamic> json) => ScannedItem(
-    barcode: json['barcode'],
-    productName: json['product_name'] ?? '',
-    productId: json['product_id'] ?? 0,
-    quantity: json['quantity'] ?? 1,
-    lotNumber: json['lot_number'],
-    lotId: json['lot_id'],
-    tracking: json['tracking'] ?? 'none',
+    barcode: json['barcode']?.toString() ?? '',
+    productName: json['product_name']?.toString() ?? '',
+    productId: int.tryParse(json['product_id']?.toString() ?? '') ?? 0,
+    quantity: int.tryParse(json['quantity']?.toString() ?? '') ?? 1,
+    lotNumber: json['lot_number']?.toString(),
+    lotId: json['lot_id'] != null
+        ? int.tryParse(json['lot_id'].toString())
+        : null,
+    tracking: json['tracking']?.toString() ?? 'none',
   );
 }

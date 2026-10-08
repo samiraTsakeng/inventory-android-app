@@ -8,6 +8,7 @@ class AdjustmentService {
   static Future<List<dynamic>> getAdjustments() async {
     final response = await http.get(
       Uri.parse(ApiConfig.adjustments),
+      headers: await ApiConfig.authHeaders(),
     );
 
     print("status: ${response.statusCode}");

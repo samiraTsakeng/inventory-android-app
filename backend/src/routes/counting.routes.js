@@ -1,40 +1,39 @@
 const express = require('express');
 const router = express.Router();
 const CountingController = require('../controllers/countingController');
+const sessionMiddleware = require("../middleware/sessionMiddleware");
 
 // POST /counting/lookup-product
-router.post('/lookup-product', CountingController.lookupProduct);
+router.post('/lookup-product', sessionMiddleware, CountingController.lookupProduct);
+
+// POST /counting/lookup-products-batch
+router.post('/lookup-products-batch', sessionMiddleware, CountingController.lookupProductsBatch);
 
 // POST /counting/submit-scans
-router.post('/submit-scans', CountingController.submitScans);
+router.post('/submit-scans', sessionMiddleware, CountingController.submitScans);
 
 // GET /counting/sheet-state/:sheet_id
-router.get('/sheet-state/:sheet_id', CountingController.getSheetState);
+router.get('/sheet-state/:sheet_id', sessionMiddleware, CountingController.getSheetState);
 
 // POST /counting/start-sheet
-router.post('/start-sheet', CountingController.startSheet);
+router.post('/start-sheet', sessionMiddleware, CountingController.startSheet);
 
 // POST /counting/validate-sheet
-router.post('/validate-sheet', CountingController.validateSheet);
+router.post('/validate-sheet', sessionMiddleware, CountingController.validateSheet);
 
 // GET /counting/check-sheet/:sheet_id
-router.get('/check-sheet/:sheet_id', CountingController.checkSheetLines);
+router.get('/check-sheet/:sheet_id', sessionMiddleware, CountingController.checkSheetLines);
 
 // GET /counting/check-sheet-state/:sheet_id
-router.get('/check-sheet-state/:sheet_id', CountingController.checkSheetState);
+router.get('/check-sheet-state/:sheet_id', sessionMiddleware, CountingController.checkSheetState);
 
 // POST /counting/cache-products
-router.post('/cache-products', CountingController.cacheProducts);
+router.post('/cache-products', sessionMiddleware, CountingController.cacheProducts);
 
 // POST /counting/cache-products-by-barcode
-router.post('/cache-products-by-barcode', CountingController.cacheProductsByBarcode);
-
-// ✅ Shared scanning session (two team members, same sheet, different phones)
-router.get('/live-items/:sheet_id', CountingController.getLiveItems);
-router.post('/live-scan', CountingController.pushLiveScan);
-router.post('/live-items/:sheet_id/clear', CountingController.clearLiveItems);
+router.post('/cache-products-by-barcode', sessionMiddleware, CountingController.cacheProductsByBarcode);
 
 // ✅ Check if a barcode was already submitted to the ERP for this sheet
-router.post('/check-erp-scan', CountingController.checkAlreadyInErp);
+router.post('/check-erp-scan', sessionMiddleware, CountingController.checkAlreadyInErp);
 
 module.exports = router;

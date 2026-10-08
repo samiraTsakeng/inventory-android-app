@@ -86,7 +86,7 @@ class AuthService {
         // so their unsaved scanned items are recovered automatically.
         final sessionId = _generateSessionId(host, email);
 
-        // ✅ Save session
+        // Save session
         await _saveSession(
           host: host,
           db: dbName,
@@ -95,6 +95,7 @@ class AuthService {
           uid: data["uid"],
           name: data["name"],
           sessionId: sessionId,
+          appToken: data["token"],
         );
 
         // ✅ Set session ID in local storage for cache
@@ -239,6 +240,7 @@ class AuthService {
     required int uid,
     required String name,
     required String sessionId,
+    required String? appToken,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sessionHostKey, host);
@@ -247,6 +249,9 @@ class AuthService {
     await prefs.setString(_sessionPasswordKey, password);
     await prefs.setInt(_sessionUidKey, uid);
     await prefs.setString(_sessionNameKey, name);
+    if (appToken != null && appToken.isNotEmpty) {
+      await prefs.setString('app_session_token', appToken);
+    }
     await prefs.setBool('is_logged_in', true);
     // ✅ Refreshed on every successful login (manual or auto) — this gives
     // a sliding 14-day window: the session expires 14 days after the LAST
@@ -267,6 +272,22 @@ class AuthService {
         'email': email,
       };
     }
+    return null;
+  }
+
+  static Future<Map<String, String>?> getSavedConnection() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final host = prefs.getString(_sessionHostKey);
+    final db = prefs.getString(_sessionDbKey);
+
+    if (host != null && host.trim().isNotEmpty) {
+      return {
+        'host': host,
+        'db': db ?? '',
+      };
+    }
+
     return null;
   }
 
@@ -303,6 +324,7 @@ class AuthService {
     await prefs.remove(_sessionNameKey);
     await prefs.remove(_sessionCreatedAtKey);
     await prefs.remove('is_logged_in');
+    await prefs.remove('app_session_token');
 
     // ✅ Clear all local data for this session
     await LocalStorageService.clearAllSessionData();

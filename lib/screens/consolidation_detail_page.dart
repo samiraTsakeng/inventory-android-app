@@ -76,6 +76,25 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     return field.toString();
   }
 
+  String _initials(dynamic userField) {
+    // userField is either null, an int, or [id, name]
+    if (userField == null) return '';
+    String name = '';
+    if (userField is List && userField.length > 1) {
+      name = userField[1]?.toString() ?? '';
+    } else if (userField is Map && userField.containsKey('name')) {
+      name = userField['name']?.toString() ?? '';
+    } else {
+      name = userField.toString();
+    }
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '';
+    if (parts.length == 1) {
+      return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
+
   Color getStatusColor(String? state) {
     switch (state) {
       case 'confirm': return AppColors.successColor;
@@ -133,6 +152,44 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
         ),
       );
     }
+  }
+
+  Future<void> _removeContradictoryLine(int lineId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Retirer la ligne contradictoire ?'),
+        content: const Text(
+          'Cette ligne sera retirée de la liste dans l\'application uniquement. '
+              'Aucune modification ne sera faite dans l\'ERP.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Non'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.errorColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Oui'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      final lines = sheetData!['counting_contradictory_line_ids'] as List;
+      lines.removeWhere((l) => l['id'] == lineId);
+      _quantityControllers[lineId]?.dispose();
+      _quantityControllers.remove(lineId);
+    });
   }
 
   Future<void> _validateConsolidation() async {
@@ -320,7 +377,8 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                         ),
                         child: Center(
                           child: Text(
-                            " Équipe 1",
+                            //show initials of the counter in charge of sheet 1
+                            " Équipe 1 ${_initials(sheetData!['counting_sheet_1']?['user_id'])}",
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
@@ -342,7 +400,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                         ),
                         child: Center(
                           child: Text(
-                            " Équipe 2",
+                            " Équipe 2 ${_initials(sheetData!['counting_sheet_2']?['user_id'])}",
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
@@ -376,7 +434,8 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                         children: [
                           const Icon(Icons.check_circle, size: 16, color: AppColors.successColor),
                           const SizedBox(width: 8),
-                          Text(
+                          Expanded(
+                          child: Text(
                             " Lignes correspondantes (${countingLines.length})",
                             style: const TextStyle(
                               fontSize: 12,
@@ -384,29 +443,12 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                               color: AppColors.successColor,
                             ),
                           ),
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    ...countingLines.map((line) => Card(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      child: ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.check, size: 16, color: AppColors.successColor),
-                        title: Text(
-                          getName(line['lot_id']),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: Text(
-                          getName(line['product_id']),
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                        ),
-                        trailing: Text(
-                          "Qté: ${line['counted_qty']}",
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    )),
+                    //const SizedBox(height: 8),
+
                     const SizedBox(height: 12),
                   ],
                   // Contradictory lines (teams disagree)
@@ -505,6 +547,15 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                   ),
                                   if (isVerified)
                                     const Icon(Icons.check_circle, size: 20, color: AppColors.successColor),
+                                  // delete button
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size:18, color: AppColors.errorColor),
+                                    onPressed: () => _removeContradictoryLine(lineId),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'retirer cette ligne',
+
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 8),

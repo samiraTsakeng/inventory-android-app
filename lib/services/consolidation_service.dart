@@ -10,6 +10,7 @@ class ConsolidationService {
 
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId'),
+        headers: await ApiConfig.authHeaders(),
       );
 
       print(" Response status: ${response.statusCode}");
@@ -47,6 +48,7 @@ class ConsolidationService {
 
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheet/$sheetId'),
+        headers: await ApiConfig.authHeaders(),
       );
 
       print(" Detail status: ${response.statusCode}");
@@ -69,7 +71,7 @@ class ConsolidationService {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/update-contradictory-line'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({
           'line_id': lineId,
           'verified_qty': verifiedQty,
@@ -95,7 +97,7 @@ class ConsolidationService {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/validate-sheet'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({
           'sheet_id': sheetId,
         }),
@@ -120,6 +122,7 @@ class ConsolidationService {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/zones/$adjustmentId'),
+        headers: await ApiConfig.authHeaders(),
       );
 
       print(" Get zones status: ${response.statusCode}");
@@ -147,7 +150,7 @@ class ConsolidationService {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/create'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({
           'adjustment_id': adjustmentId,
           'zone_id': zoneId,
@@ -176,7 +179,7 @@ class ConsolidationService {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/apply'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({
           'adjustment_id': adjustmentId,
         }),
@@ -201,6 +204,7 @@ class ConsolidationService {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/adjustment-status/$adjustmentId'),
+        headers: await ApiConfig.authHeaders(),
       );
 
       print("Adjustment status: ${response.statusCode}");

@@ -18,7 +18,7 @@ class ProductCacheService {
         // Fetch products in batches
         final response = await http.post(
           Uri.parse('${ApiConfig.baseUrl}/counting/cache-products'),
-          headers: {"Content-Type": "application/json"},
+          headers: await ApiConfig.authHeaders(json: true),
           body: jsonEncode({
             'offset': offset,
             'limit': _batchSize,
@@ -75,7 +75,7 @@ class ProductCacheService {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/cache-products-by-barcode'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({'barcodes': barcodes}),
       );
 

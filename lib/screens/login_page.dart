@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/product_cache_service.dart';
-import '../utils/storage.dart';
 import '../utils/constants.dart';
 
 class LoginPage extends StatefulWidget {
@@ -13,37 +11,30 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final hostController = TextEditingController();
-  final dbController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
-  bool onlyPassword = false;
+  String _host = '';
+  String _db = '';
+  bool _hasSavedConnection = false;
   bool isLoading = false;
   bool _isCaching = false;
 
   @override
   void initState() {
     super.initState();
-    _checkSession();
+    _loadSavedConnection();
   }
 
-  Future<void> _checkSession() async {
-    final session = await AuthService.getFullSession();
-    if (session != null && session['host'] != null && session['email'] != null) {
-      setState(() {
-        hostController.text = session['host'] ?? '';
-        emailController.text = session['email'] ?? '';
-        dbController.text = session['db'] ?? '';
-        onlyPassword = true;
-      });
-    }
-  }
+  Future<void> _loadSavedConnection() async {
+    final connection = await AuthService.getSavedConnection();
 
-  void _resetToFullLogin() {
+    if (!mounted) return;
+
     setState(() {
-      onlyPassword = false;
-      passwordController.clear();
+      _host = connection?['host'] ?? '';
+      _db = connection?['db'] ?? '';
+      _hasSavedConnection = _host.isNotEmpty;
     });
   }
 
@@ -79,11 +70,22 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => isLoading = true);
 
     try {
+      if (!_hasSavedConnection || _host.isEmpty) {
+        throw Exception("Aucune configuration serveur enregistrée. Utilisez le lien de première connexion.");
+      }
+
+      final email = emailController.text.trim();
+      final password = passwordController.text;
+
+      if (email.isEmpty || password.isEmpty) {
+        throw Exception("Veuillez renseigner votre email et votre mot de passe.");
+      }
+
       final success = await AuthService.login(
-        host: hostController.text.trim(),
-        db: dbController.text.trim(),
-        email: emailController.text.trim(),
-        password: passwordController.text,
+        host: _host,
+        db: _db,
+        email: email,
+        password: password,
       );
 
       if (success && mounted) {
@@ -97,36 +99,6 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Login failed: ${e.toString()}"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
-    }
-  }
-
-  void secondAuthentication() async {
-    setState(() => isLoading = true);
-
-    try {
-      final success = await AuthService.secondAuthentication(passwordController.text);
-
-      if (success && mounted) {
-        // Cache products in the background
-        _cacheProductsAfterLogin();
-
-        Navigator.pushReplacementNamed(context, '/adjustment-entry');
-      } else {
-        throw Exception("Invalid password");
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(" Authentication failed: ${e.toString()}"),
             backgroundColor: Colors.red,
           ),
         );
@@ -280,9 +252,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      onlyPassword
-                          ? "Ravi de vous revoir"
-                          : "Connectez-vous pour continuer",
+                      "Connectez-vous pour continuer",
                       style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 14),
                     ),
                   ],
@@ -298,49 +268,34 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (onlyPassword) ...[
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundColor: AppColors.primaryColor.withOpacity(0.1),
-                                child: const Icon(Icons.person, color: AppColors.primaryColor, size: 20),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      emailController.text,
-                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text(
-                                      hostController.text,
-                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                        ] else ...[
-                          _buildTextField(hostController, "URL du serveur", "http://your-odoo-server:8069",
-                              icon: Icons.dns_outlined),
-                          const SizedBox(height: 14),
-                          _buildTextField(dbController, "Nom de la base (optionnel)", "Nom de la base",
-                              icon: Icons.storage_outlined),
-                          const SizedBox(height: 14),
-                          _buildTextField(emailController, "Email", "admin@example.com",
-                              isEmail: true, icon: Icons.email_outlined),
-                          const SizedBox(height: 14),
-                        ],
-
+                        _buildTextField(
+                          emailController,
+                          "Email",
+                          "admin@example.com",
+                          isEmail: true,
+                          icon: Icons.email_outlined,
+                        ),
+                        const SizedBox(height: 14),
                         _buildTextField(passwordController, "Mot de passe", "",
                             isPassword: true, icon: Icons.lock_outline),
+
+                        if (!_hasSavedConnection) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.warningColor.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppColors.warningColor.withOpacity(0.25),
+                              ),
+                            ),
+                            child: const Text(
+                              "Pour une première connexion, configurez d'abord le serveur et la base de données via le lien ci-dessous.",
+                              style: TextStyle(fontSize: 12.5),
+                            ),
+                          ),
+                        ],
 
                         const SizedBox(height: 22),
 
@@ -368,7 +323,7 @@ class _LoginPageState extends State<LoginPage> {
                         SizedBox(
                           height: 52,
                           child: ElevatedButton(
-                            onPressed: isLoading ? null : (onlyPassword ? secondAuthentication : login),
+                            onPressed: isLoading ? null : login,
                             child: isLoading
                                 ? const SizedBox(
                               width: 20,
@@ -392,16 +347,17 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
 
-                        if (onlyPassword)
-                          Center(
-                            child: TextButton(
-                              onPressed: _resetToFullLogin,
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.textSecondary,
-                              ),
-                              child: const Text("Changer de compte"),
-                            ),
+                        Center(
+                          child: TextButton.icon(
+                            onPressed: () async {
+                              await Navigator.pushNamed(context, '/register');
+                              await _loadSavedConnection();
+                            },
+                            icon: const Icon(Icons.person_add_outlined, size: 18),
+                            label: const Text("Première connexion / Créer un compte"),
                           ),
+                        ),
+
                       ],
                     ),
                   ),

@@ -31,13 +31,13 @@ class SyncService {
         int syncedCount = 0;
 
         for (final batch in unsyncedBatches) {
-          final success = await CountingService.submitScannedItems(
+          final result = await CountingService.submitScannedItems(
             countingSheetId: batch.countingSheetId,
             adjustmentId: batch.adjustmentId,
             items: batch.items,
           );
 
-          if (success) {
+          if (result.success) {
             await BatchStorageService.markBatchAsSynced(batch.id);
             syncedCount++;
           }

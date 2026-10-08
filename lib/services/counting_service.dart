@@ -4,56 +4,111 @@ import 'api_config.dart';
 import '../models/scanned_item.dart';
 import 'local_storage_service.dart';
 
+/// ✅ Returned by submitScannedItems so the UI knows which barcodes failed.
+class SubmitResult {
+  final bool success;
+  final int submittedCount;
+  final List<String> failedBarcodes;
+  final List<Map<String, String>> failedDetails;
+  final String? message;
+
+  SubmitResult({
+    required this.success,
+    this.submittedCount = 0,
+    this.failedBarcodes = const [],
+    this.failedDetails = const [],
+    this.message,
+  });
+}
+
 class CountingService {
-  // OFFLINE-FIRST: Check cache, then API
+
+  // PRODUCT LOOKUP
+  // Single-barcode lookup (kept for manual entry + legacy callers).
   static Future<Map<String, dynamic>?> lookupProduct(String barcode) async {
     try {
-      // 1️ Check local cache FIRST (instant, no internet needed)
       final cachedProduct = await LocalStorageService.getCachedProduct(barcode);
       if (cachedProduct != null) {
         print("Product found in OFFLINE cache: ${cachedProduct['name']}");
         return cachedProduct;
       }
 
-      // 2️ If not in cache, try API (requires internet)
-      print(" Looking up product ONLINE: $barcode");
+      print("Looking up product ONLINE: $barcode");
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/lookup-product'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({'barcode': barcode}),
       );
-
-      print("Product lookup status: ${response.statusCode}");
-      print("Product lookup body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true && data['product'] != null) {
           final product = data['product'];
-          // Cache the product for future offline use
           await LocalStorageService.cacheProduct(barcode, product);
-          print(" Product cached for offline use: ${product['name']}");
           return product;
         }
       }
       return null;
     } catch (e) {
       print("Product lookup error: $e");
-      // If offline, return null (product not in cache)
       return null;
     }
   }
 
-  // Get counting sheet state
+  // Batch lookup — send all barcodes on the article in ONE request.
+  static Future<Map<String, dynamic>?> lookupProductsBatch(
+      List<String> barcodes, {int? countingSheetId}) async {
+    if (barcodes.isEmpty) return null;
+    try {
+      //Offline-first: if ANY barcode is cached, return that product.
+      for (final b in barcodes) {
+        final cached = await LocalStorageService.getCachedProduct(b);
+        if (cached != null) {
+          print("Batch: found in OFFLINE cache: ${cached['name']}");
+          return cached;
+        }
+      }
+
+      // One HTTP call for all barcodes.
+      print("Batch lookup ONLINE for ${barcodes.length} barcodes");
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/lookup-products-batch'),
+        headers: await ApiConfig.authHeaders(json: true),
+        body: jsonEncode({
+          'barcodes': barcodes,
+          if (countingSheetId != null) 'counting_sheet_id': countingSheetId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['product'] != null) {
+          final product = data['product'];
+          // Cache only the barcode that is actually registered in Odoo.
+          // Do not cache the other detected barcodes, otherwise an
+          // unregistered alternate barcode could appear valid offline.
+          final matchedBarcode = product['barcode']?.toString();
+          if (matchedBarcode != null && matchedBarcode.isNotEmpty) {
+            await LocalStorageService.cacheProduct(matchedBarcode, product);
+          }
+          return product;
+        }
+      }
+      return null;
+    } catch (e) {
+      print("Batch lookup error: $e");
+      return null;
+    }
+  }
+
+  // COUNTING SHEET LIFECYCLE
+
   static Future<Map<String, dynamic>?> getSheetState(int sheetId) async {
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/counting/sheet-state/$sheetId'),
+        headers: await ApiConfig.authHeaders(),
       );
-
-      print("Sheet state status: ${response.statusCode}");
-      print("Sheet state body: ${response.body}");
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['sheet'];
@@ -65,18 +120,13 @@ class CountingService {
     }
   }
 
-  // Start a counting sheet
   static Future<bool> startSheet(int sheetId) async {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/start-sheet'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({'sheet_id': sheetId}),
       );
-
-      print("Start sheet status: ${response.statusCode}");
-      print("Start sheet body: ${response.body}");
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['success'] == true;
@@ -88,18 +138,13 @@ class CountingService {
     }
   }
 
-  // Validate a counting sheet (finish counting)
   static Future<bool> validateSheet(int sheetId) async {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/validate-sheet'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({'sheet_id': sheetId}),
       );
-
-      print("Validate sheet status: ${response.statusCode}");
-      print("Validate sheet body: ${response.body}");
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['success'] == true;
@@ -110,24 +155,21 @@ class CountingService {
       return false;
     }
   }
-
-  // Submit scanned items to backend
-  static Future<bool> submitScannedItems({
+  // SUBMIT TO ERP
+  // Rich result: success flag, count, and failed barcodes + reasons.
+  static Future<SubmitResult> submitScannedItems({
     required int countingSheetId,
     required int adjustmentId,
     required List<ScannedItem> items,
   }) async {
     try {
       if (items.isEmpty) {
-        print("No items to submit");
-        return false;
+        return SubmitResult(success: false, message: 'No items to submit');
       }
-
-      print("Submitting ${items.length} items");
 
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/submit-scans'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({
           'counting_sheet_id': countingSheetId,
           'adjustment_id': adjustmentId,
@@ -135,94 +177,47 @@ class CountingService {
         }),
       );
 
-      print("Submit status: ${response.statusCode}");
-      print("Submit body: ${response.body}");
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['success'] == true;
-      } else {
-        print("Server returned error status: ${response.statusCode}");
-        return false;
+
+        final rawFailed = data['failed_items'] as List? ?? [];
+        final failedBarcodes = <String>[];
+        final failedDetails = <Map<String, String>>[];
+
+        for (final f in rawFailed) {
+          if (f is String) {
+            failedBarcodes.add(f);
+            failedDetails.add({'barcode': f, 'reason': 'Erreur inconnue'});
+          } else if (f is Map) {
+            final bc = f['barcode']?.toString() ?? '';
+            final reason = f['reason']?.toString() ?? 'Erreur inconnue';
+            failedBarcodes.add(bc);
+            failedDetails.add({'barcode': bc, 'reason': reason});
+          }
+        }
+
+        return SubmitResult(
+          success: data['success'] == true,
+          submittedCount: data['submitted_count'] ?? 0,
+          failedBarcodes: failedBarcodes,
+          failedDetails: failedDetails,
+          message: data['message'],
+        );
       }
+      return SubmitResult(
+        success: false,
+        message: 'Erreur serveur (${response.statusCode})',
+      );
     } catch (e) {
       print("Submit error: $e");
-      return false;
+      return SubmitResult(success: false, message: e.toString());
     }
   }
 
-  // Get number of cached products
   static Future<int> getCachedProductsCount() async {
     return await LocalStorageService.getCachedProductsCount();
   }
 
-  // ✅ Shared scanning session — fetch the current merged list of items
-  // scanned by ANY team member on this sheet (polled periodically).
-  static Future<List<Map<String, dynamic>>> getLiveItems(int sheetId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$sheetId'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          return List<Map<String, dynamic>>.from(data['items'] ?? []);
-        }
-      }
-      return [];
-    } catch (e) {
-      print("Get live items error: $e");
-      return [];
-    }
-  }
-
-  // ✅ Shared scanning session — push a scan (new item, or additional
-  // quantity for one that's already there) and get back the updated
-  // merged list. Returns null if the push failed (offline), so the
-  // caller can fall back to local-only storage and retry later.
-  static Future<List<Map<String, dynamic>>?> pushLiveScan({
-    required int countingSheetId,
-    required Map<String, dynamic> item,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-scan'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'counting_sheet_id': countingSheetId,
-          ...item,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          return List<Map<String, dynamic>>.from(data['items'] ?? []);
-        }
-      }
-      return null;
-    } catch (e) {
-      print("Push live scan error: $e");
-      return null;
-    }
-  }
-
-  // ✅ Called once the shared list has been saved into a batch / sent to
-  // the ERP, so both phones start the next lot from a clean, empty list.
-  static Future<void> clearLiveItems(int sheetId) async {
-    try {
-      await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$sheetId/clear'),
-      );
-    } catch (e) {
-      print("Clear live items error: $e");
-    }
-  }
-
-  // ✅ Checks whether this barcode was already submitted to the ERP for
-  // this sheet (not just present locally/in a local batch). Fails "not
-  // found" silently if offline/unreachable, so this never blocks scanning.
   static Future<bool> isAlreadyInErp({
     required int countingSheetId,
     required String barcode,
@@ -230,7 +225,7 @@ class CountingService {
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scan'),
-        headers: {"Content-Type": "application/json"},
+        headers: await ApiConfig.authHeaders(json: true),
         body: jsonEncode({
           'counting_sheet_id': countingSheetId,
           'barcode': barcode,

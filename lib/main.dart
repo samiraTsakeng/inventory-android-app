@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'utils/constants.dart';
 import 'screens/login_page.dart';
+import 'screens/first_connection_page.dart';
 import 'screens/adjustment_entry_page.dart';
 import 'screens/adjustment_list_page.dart';
 import 'screens/choice_page.dart';
@@ -10,27 +11,15 @@ import 'screens/scanning_page.dart';
 import 'screens/scanned_items_list_page.dart';
 import 'screens/batch_list_page.dart';
 import 'screens/consolidation_list_page.dart';
-import 'services/auth_service.dart';
 import 'screens/adjustment_action_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Try auto-login on app start
-  bool autoLoginSuccess = false;
-  try {
-    autoLoginSuccess = await AuthService.autoLogin();
-    print("Auto-login result: $autoLoginSuccess");
-  } catch (e) {
-    print("Auto-login error: $e");
-  }
-
-  // If auto-login fails, clear session to force login
-  if (!autoLoginSuccess) {
-    await AuthService.clearSession();
-  }
-
-  runApp(MyApp(initialRoute: autoLoginSuccess ? '/adjustment-entry' : '/'));
+  // Always start on the login page. The user must enter their email and
+  // password after every logout/reconnection. The saved server URL and
+  // database are loaded by LoginPage.
+  runApp(const MyApp(initialRoute: '/'));
 }
 
 class MyApp extends StatelessWidget {
@@ -153,7 +142,8 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: initialRoute,
       routes: {
-        '/': (context) => LoginPage(),
+        '/': (context) => const LoginPage(),
+        '/register': (context) => const FirstConnectionPage(),
         '/adjustment-entry': (context) => AdjustmentEntryPage(),
         '/adjustments-list': (context) => AdjustmentsListPage(),
       },

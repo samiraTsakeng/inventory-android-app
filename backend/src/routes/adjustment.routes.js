@@ -1,8 +1,11 @@
-const express = require('express');
+
+const express = require("express");
 const router = express.Router();
-const AdjustmentController = require('../controllers/adjustment.controller');
+
+const AdjustmentController = require("../controllers/adjustment.controller");
+const sessionMiddleware = require("../middleware/sessionMiddleware");
 
 // GET /adjustments
-router.get('/', AdjustmentController.getAdjustments);
+router.get("/", sessionMiddleware, AdjustmentController.getAdjustments);
 
 module.exports = router;
