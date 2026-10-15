@@ -536,7 +536,7 @@ class CountingController {
         }
         item.quantity = qty; // normalized for the create/write calls below
 
-        // ✅ Search for an existing line for this exact sheet + number
+        //  Search for an existing line for this exact sheet + number
         // BEFORE creating anything. Without this, resubmitting (double
         // tap on "Envoyer", a rescan-to-add-quantity that was already
         // sent, etc.) created a brand new counting.sheet.line every time,
@@ -609,7 +609,7 @@ class CountingController {
           continue;
         }
 
-        // ✅ Exactly the 3 fields Odoo actually needs for a new line:
+        // the 3 fields Odoo actually needs for a new line:
         // number, product_id, counted_qty — plus sheet_id/lot_id to link
         // it correctly. lineNumber is guaranteed non-empty here (checked
         // above), product_id is guaranteed non-zero too.

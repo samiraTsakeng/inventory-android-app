@@ -1,10 +1,11 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiConfig {
-  static const String baseUrl = "http://192.168.10.111:3001";
+  static const String baseUrl = "http://192.168.10.108:3001";
 
   static String get adjustments => "$baseUrl/adjustments";
   static String get login => "$baseUrl/auth/login";
+  static String get firstConnection => "$baseUrl/auth/first-connection";
   static String feuilles(int adjustmentId) => "$baseUrl/feuilles/$adjustmentId";
 
   static Future<Map<String, String>> authHeaders({bool json = false}) async {

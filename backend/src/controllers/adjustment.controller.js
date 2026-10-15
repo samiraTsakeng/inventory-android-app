@@ -4,7 +4,7 @@ const AuthController = require("./authController");
 class AdjustmentController {
   static async getAdjustments(req, res) {
     try {
-      const session = AuthController.getSession();
+      const session = AuthController.getSession(req);
 
       if (!session || !session.host) {
         return res.status(401).json({

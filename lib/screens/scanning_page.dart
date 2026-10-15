@@ -726,10 +726,15 @@ class _ScanningPageState extends State<ScanningPage>
     if (normalized == lastScannedBarcode) return;
     if (barcode == lastScannedBarcode) return;
 
-    _scanDebounceTimer= Timer(const Duration(milliseconds: 400), () {});
+    _scanDebounceTimer?.cancel();
+    _scanDebounceTimer = Timer(const Duration(milliseconds: 450), () {});
     lastScannedBarcode = normalized;
 
-    _addManualBarcode(prefillValue: normalized);
+    // Rugged-device scanners work as keyboard wedges. Once Enter terminates
+    // the barcode, send it straight through the same lookup/add flow used by
+    // manual entry. Do not open the manual-entry dialog here: its timed close
+    // can clear the field before the product lookup/add operation completes.
+    _processBarcodes([normalized]);
   }
 
   void _logout() {

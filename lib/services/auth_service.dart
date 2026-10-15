@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
@@ -24,6 +26,9 @@ class AuthService {
     return raw.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
   }
 
+  // Backend worst case is ~15s (db list 5s + parallel auth 10s); leave headroom.
+  static const Duration _loginTimeout = Duration(seconds: 30);
+
   static Future<bool> login({
     required String host,
     required String db,
@@ -31,65 +36,51 @@ class AuthService {
     required String password,
   }) async {
     try {
-      // First, get available databases
-      List<String> databases = await _getDatabases(host);
-      print("Available databases: $databases");
+      // The database name is optional: when empty, the backend detects it from
+      // the Odoo URL and authenticates in the same call. The phone never talks
+      // to Odoo directly (no extra round-trips from the device).
+      final cleanHost = host.trim().replaceAll(RegExp(r'/+$'), '');
 
-      String dbName = db.trim();
-
-      // If no database provided, use the first available
-      if (dbName.isEmpty && databases.isNotEmpty) {
-        dbName = databases.first;
-        print("Auto-selected database: $dbName");
-      }
-
-      // If still no database, try to detect
-      if (dbName.isEmpty) {
-        dbName = await _detectDatabase(host, email, password);
-        if (dbName.isEmpty) {
-          throw Exception("No database found. Please check your connection.");
-        }
-      }
-
-      final response = await http.post(
+      final response = await http
+          .post(
         Uri.parse(ApiConfig.login),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "host": host,
-          "db": dbName,
+          "host": cleanHost,
+          "db": db.trim(),
           "email": email,
           "password": password,
         }),
-      );
+      )
+          .timeout(_loginTimeout);
 
       print("STATUS: ${response.statusCode}");
-      print("BODY: ${response.body}");
 
       if (response.statusCode != 200) {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData["message"] ?? "Server error");
+        String message = "Server error (${response.statusCode})";
+        try {
+          final errorData = jsonDecode(response.body);
+          message = errorData["message"] ?? message;
+        } catch (_) {}
+        throw Exception(message);
       }
 
       final data = jsonDecode(response.body);
 
       if (data["success"] == true) {
         // ✅ Generate a STABLE session ID based on host + email only.
-        // IMPORTANT: this must NOT include a timestamp. Every app restart
-        // (including the silent autoLogin() call in main.dart) calls this
-        // same login() method. If the session ID changes on every login,
-        // it changes the SharedPreferences key namespace used to persist
-        // not-yet-saved scanned items (see LocalStorageService), which
-        // orphans and effectively "deletes" any scanned articles that
-        // hadn't been saved into a batch yet (e.g. after a battery death
-        // or app crash mid-scan). Keeping it deterministic per account
-        // means the same user always maps back to the same storage keys,
-        // so their unsaved scanned items are recovered automatically.
-        final sessionId = _generateSessionId(host, email);
+        // IMPORTANT: this must NOT include a timestamp (see LocalStorageService:
+        // a changing ID would orphan unsaved scanned items).
+        final sessionId = _generateSessionId(cleanHost, email);
 
-        // Save session
+        // Use the database the backend actually detected/used.
+        final detectedDb = (data["db"] as String?)?.trim().isNotEmpty == true
+            ? data["db"] as String
+            : db.trim();
+
         await _saveSession(
-          host: host,
-          db: dbName,
+          host: cleanHost,
+          db: detectedDb,
           email: email,
           password: password,
           uid: data["uid"],
@@ -98,14 +89,19 @@ class AuthService {
           appToken: data["token"],
         );
 
-        // ✅ Set session ID in local storage for cache
         await LocalStorageService.setSessionId(sessionId);
-
         return true;
       }
 
       return false;
-
+    } on TimeoutException {
+      print("AUTH ERROR: timeout");
+      throw Exception(
+          "Le serveur ne répond pas. Vérifiez votre connexion et l'adresse du serveur.");
+    } on SocketException {
+      print("AUTH ERROR: socket");
+      throw Exception(
+          "Impossible de joindre le serveur de l'application. Vérifiez le réseau Wi-Fi.");
     } catch (e) {
       print("AUTH ERROR: $e");
       rethrow;
@@ -174,61 +170,6 @@ class AuthService {
       print("Auto-login error: $e");
       await clearSession();
       return false;
-    }
-  }
-
-  static Future<List<String>> _getDatabases(String host) async {
-    try {
-      final response = await http.post(
-        Uri.parse("$host/web/database/list"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['result'] != null && data['result'] is List) {
-          return List<String>.from(data['result']);
-        }
-      }
-      return [];
-    } catch (e) {
-      print("Get databases error: $e");
-      return [];
-    }
-  }
-
-  static Future<String> _detectDatabase(String host, String email, String password) async {
-    try {
-      final commonDbs = ['odoo_db', 'odoo', 'postgres', 'default'];
-
-      for (String dbName in commonDbs) {
-        try {
-          final response = await http.post(
-            Uri.parse(ApiConfig.login),
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode({
-              "host": host,
-              "db": dbName,
-              "email": email,
-              "password": password,
-            }),
-          );
-
-          if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            if (data["success"] == true) {
-              return dbName;
-            }
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-      return '';
-    } catch (e) {
-      print("Detect database error: $e");
-      return '';
     }
   }
 

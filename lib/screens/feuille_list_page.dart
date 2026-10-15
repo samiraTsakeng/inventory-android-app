@@ -158,17 +158,126 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     }
   }
 
-  Future<void> _validateCurrentSheet() async {
-    final sheetId = getCurrentProgressSheetId();
-    final sheetName = getCurrentProgressSheetName();
+  // All sheets currently in progress (a user can have more than one).
+  List<Map<String, dynamic>> _progressSheets() {
+    return feuilles
+        .where((s) => s['state'] == 'progress')
+        .map((s) => Map<String, dynamic>.from(s as Map))
+        .toList();
+  }
 
-    if (sheetId == null) {
+  // Step 1 (only when several sheets are in progress): let the user choose
+  // which one to terminate. Returns the chosen sheet, or null if cancelled.
+  Future<Map<String, dynamic>?> _pickSheetToTerminate(
+      List<Map<String, dynamic>> sheets) async {
+    int? selectedId;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.checklist, color: AppColors.primaryColor, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text("Choisir la feuille à terminer",
+                        style: TextStyle(fontSize: 17)),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: sheets.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final sheet = sheets[i];
+                    final id = sheet['id'] as int;
+                    final isSelected = selectedId == id;
+                    final pending = _pendingCounts[id] ?? 0;
+                    final zone = getName(sheet['zone_id']);
+
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      selected: isSelected,
+                      selectedTileColor: AppColors.primaryColor.withOpacity(0.08),
+                      leading: Icon(
+                        isSelected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: isSelected
+                            ? AppColors.primaryColor
+                            : AppColors.textSecondary,
+                      ),
+                      title: Text(
+                        sheet['name']?.toString() ?? 'Feuille $id',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        [
+                          if (zone.isNotEmpty) zone,
+                          if (pending > 0) '$pending en attente',
+                        ].join(' • '),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      onTap: () => setDialogState(() => selectedId = id),
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text("Annuler", style: TextStyle(fontSize: 14)),
+                ),
+                ElevatedButton(
+                  onPressed: selectedId == null
+                      ? null
+                      : () => Navigator.pop(
+                    dialogContext,
+                    sheets.firstWhere((s) => s['id'] == selectedId),
+                  ),
+                  child: const Text("Continuer", style: TextStyle(fontSize: 14)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _validateCurrentSheet() async {
+    if (_validatingSheetId != null) return; // a validation is already running
+
+    final progressSheets = _progressSheets();
+
+    if (progressSheets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: AppColors.warningColor),
       );
       return;
     }
 
+    // One sheet in progress -> no choice needed. Several -> user picks one.
+    final Map<String, dynamic>? selected = progressSheets.length == 1
+        ? progressSheets.first
+        : await _pickSheetToTerminate(progressSheets);
+
+    if (selected == null || !mounted) return; // cancelled
+
+    final int sheetId = selected['id'] as int;
+    final String sheetName = selected['name']?.toString() ?? 'Feuille $sheetId';
+    final int pending = _pendingCounts[sheetId] ?? 0;
+
+    // Step 2: Yes / No confirmation for the selected sheet.
     final shouldValidate = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -182,7 +291,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             ],
           ),
           content: Text(
-            "Voulez-vous terminer le comptage \"$sheetName\" ?\n\nCette action est irréversible.",
+            "Voulez-vous vraiment terminer le comptage \"$sheetName\" ?"
+                "${pending > 0 ? "\n\n⚠ $pending article(s) scanné(s) n'ont pas encore été envoyés pour cette feuille." : ""}"
+                "\n\nCette action est irréversible.",
             style: const TextStyle(fontSize: 14),
           ),
           actions: [
@@ -258,7 +369,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                   children: [
                     Icon(Icons.check_circle, size: 18, color: AppColors.successColor),
                     SizedBox(width: 8),
-                    Text('Terminer le comptage en cours'),
+                    Text('Terminer un comptage'),
                   ],
                 ),
               ),
