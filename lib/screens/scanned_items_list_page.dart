@@ -224,12 +224,12 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       final alreadyInErp = <String>[];
       final toSubmit = <ScannedItem>[];
 
+      final existing = await CountingService.alreadyInErp(
+        countingSheetId: widget.countingSheetId,
+        barcodes: validItems.map((item) => item.barcode).toList(),
+      );
       for (final item in validItems) {
-        final exists = await CountingService.isAlreadyInErp(
-          countingSheetId: widget.countingSheetId,
-          barcode: item.barcode,
-        );
-        if (exists) {
+        if (existing.contains(item.barcode)) {
           alreadyInErp.add(item.barcode);
         } else {
           toSubmit.add(item);

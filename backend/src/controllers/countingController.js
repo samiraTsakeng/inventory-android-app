@@ -2,6 +2,56 @@ const OdooService = require("../services/odooServices");
 const AuthController = require("./authController");
 const LiveSessionService = require("../services/liveSessionService");
 
+// Single JSON-RPC call to Odoo. Throws on transport or Odoo error.
+async function odooCall(session, model, method, args, kwargs = {}) {
+  const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": OdooService.sessionCookie
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "call",
+      params: { model, method, args, kwargs }
+    })
+  });
+  const data = await response.json();
+  if (data.error) {
+    const err = new Error(data.error.data?.message || data.error.message);
+    err.odooError = data.error;
+    throw err;
+  }
+  return data.result;
+}
+
+// Line "number" values already present on a sheet, among the given ones.
+async function findExistingNumbers(session, sheetId, numbers) {
+  if (numbers.length === 0) return new Set();
+  const lines = await odooCall(session, "counting.sheet.line", "search_read",
+    [[["sheet_id", "=", sheetId], ["number", "in", numbers]]],
+    { fields: ["number"] });
+  return new Set((lines || []).map((l) => l.number));
+}
+
+// Serializes submissions per sheet so a double tap / retry can't run two
+// submits in parallel and create the same lines twice.
+const sheetLocks = new Map();
+async function withSheetLock(sheetId, fn) {
+  const previous = sheetLocks.get(sheetId) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  const chained = previous.then(() => current);
+  sheetLocks.set(sheetId, chained);
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (sheetLocks.get(sheetId) === chained) sheetLocks.delete(sheetId);
+  }
+}
+
 // Helper function to process found lot (moved outside for global access)
 async function processLotFound(session, lot, barcode) {
   let productId = null;
@@ -409,12 +459,13 @@ class CountingController {
         });
       }
 
-      const { counting_sheet_id, adjustment_id, items } = req.body;
+      const { adjustment_id, items } = req.body;
+      const counting_sheet_id = parseInt(req.body.counting_sheet_id);
 
       console.log("=== SUBMITTING SCANS ===");
       console.log("Counting Sheet ID:", counting_sheet_id);
       console.log("Adjustment ID:", adjustment_id);
-      console.log("Items count:", items.length);
+      console.log("Items count:", items?.length);
 
       if (!items || items.length === 0) {
         return res.status(400).json({
@@ -488,66 +539,62 @@ class CountingController {
         }
       }
 
-      // Create counting sheet lines
-      const createdLineIds = [];
-      const failedItems = [];
-
-      for (const item of items) {
-        // Each item already has product_id from the scanned lot
-        const lineData = {
+      const result = await withSheetLock(counting_sheet_id, async () => {
+        const toLine = (item) => ({
           number: item.lot_number || item.barcode,
           product_id: item.product_id,
           counted_qty: item.quantity,
           sheet_id: counting_sheet_id,
           lot_id: item.lot_id
-        };
-
-        console.log("Creating line:", JSON.stringify(lineData, null, 2));
-
-        const createResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cookie": OdooService.sessionCookie
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "call",
-            params: {
-              model: "counting.sheet.line",
-              method: "create",
-              args: [lineData],
-              kwargs: {}
-            }
-          })
         });
 
-        const responseText = await createResponse.text();
-        let lineResult;
+        // Idempotency: skip lines already in the ERP (e.g. a previous send
+        // that succeeded but whose response was lost), so a retry of the
+        // whole batch never creates duplicates.
+        const existing = await findExistingNumbers(
+          session, counting_sheet_id, items.map((i) => toLine(i).number));
+        const pending = items.filter((i) => !existing.has(toLine(i).number));
+        const skippedCount = items.length - pending.length;
 
-        try {
-          lineResult = JSON.parse(responseText);
-        } catch (e) {
-          console.error("Failed to parse response:", responseText);
-          failedItems.push(item.barcode);
-          continue;
+        const createdLineIds = [];
+        const failedItems = [];
+
+        if (pending.length > 0) {
+          try {
+            // One RPC for the whole batch (Odoo create accepts a list).
+            const ids = await odooCall(session, "counting.sheet.line", "create",
+              [pending.map(toLine)]);
+            createdLineIds.push(...(Array.isArray(ids) ? ids : [ids]));
+          } catch (err) {
+            // Batch create is atomic in Odoo: nothing was written. Fall back
+            // to per-line creation to isolate the faulty items.
+            console.warn("Batch create failed, retrying line by line:", err.message);
+            for (const item of pending) {
+              try {
+                createdLineIds.push(await odooCall(session, "counting.sheet.line", "create",
+                  [toLine(item)]));
+              } catch (lineErr) {
+                console.error("Error creating line for", item.barcode, lineErr.message);
+                failedItems.push(item.barcode);
+              }
+            }
+          }
         }
 
-        if (lineResult.error) {
-          console.error("Error creating line:", lineResult.error);
-          failedItems.push(item.barcode);
-        } else {
-          createdLineIds.push(lineResult.result);
-          console.log("Created line with ID: " + lineResult.result);
-        }
-      }
+        return { createdLineIds, failedItems, skippedCount };
+      });
 
-      console.log("Successfully created " + createdLineIds.length + " lines, failed: " + failedItems.length);
+      const { createdLineIds, failedItems, skippedCount } = result;
+      console.log(`Created ${createdLineIds.length} lines, skipped ${skippedCount} (already in ERP), failed ${failedItems.length}`);
 
-      if (createdLineIds.length === 0) {
+      // Partial failure is a failure: the client keeps the batch unsynced and
+      // can resend it; already-created lines will be skipped on retry.
+      if (failedItems.length > 0) {
         return res.status(400).json({
           success: false,
-          message: "Failed to create any counting lines",
+          message: `${failedItems.length} article(s) non envoyé(s)`,
+          submitted_count: createdLineIds.length,
+          skipped_count: skippedCount,
           failed_items: failedItems
         });
       }
@@ -555,29 +602,12 @@ class CountingController {
       // Update counting sheet state if max items reached (50)
       if (items.length >= 50) {
         console.log("Reached 50 items limit, updating counting sheet state to confirm");
-        const updateResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cookie": OdooService.sessionCookie
-          },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            method: "call",
-            params: {
-              model: "counting.sheet",
-              method: "write",
-              args: [[counting_sheet_id], { state: "confirm" }],
-              kwargs: {}
-            }
-          })
-        });
-
-        const updateData = await updateResponse.json();
-        if (!updateData.error) {
+        try {
+          await odooCall(session, "counting.sheet", "write",
+            [[counting_sheet_id], { state: "confirm" }]);
           console.log("Sheet confirmed successfully!");
-        } else {
-          console.warn("Failed to update sheet state:", updateData.error);
+        } catch (err) {
+          console.warn("Failed to update sheet state:", err.message);
         }
       }
 
@@ -585,7 +615,8 @@ class CountingController {
         success: true,
         message: createdLineIds.length + " items submitted successfully",
         submitted_count: createdLineIds.length,
-        failed_items: failedItems
+        skipped_count: skippedCount,
+        failed_items: []
       });
 
     } catch (error) {
@@ -942,6 +973,42 @@ class CountingController {
         return res.json({
           success: true,
           alreadySent: false
+        });
+      }
+    }
+
+    // ✅ POST /counting/check-erp-scans — same check for many barcodes in
+    // one round trip. Returns the subset already present on the sheet.
+    static async checkAlreadyInErpBatch(req, res) {
+      try {
+        const session = AuthController.getSession();
+        if (!session || !session.host) {
+          return res.status(401).json({
+            success: false,
+            message: "Not authenticated"
+          });
+        }
+
+        const { counting_sheet_id, barcodes } = req.body;
+        if (!counting_sheet_id || !Array.isArray(barcodes)) {
+          return res.status(400).json({
+            success: false,
+            message: "counting_sheet_id and barcodes[] are required"
+          });
+        }
+
+        const existing = await findExistingNumbers(
+          session, parseInt(counting_sheet_id), barcodes);
+
+        return res.json({
+          success: true,
+          alreadySent: barcodes.filter((b) => existing.has(b))
+        });
+      } catch (error) {
+        console.error("Check already in ERP (batch) error:", error);
+        return res.json({
+          success: true,
+          alreadySent: []
         });
       }
     }

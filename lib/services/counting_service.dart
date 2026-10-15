@@ -226,4 +226,33 @@ class CountingService {
       return false; // fail-open: don't block scanning if check fails
     }
   }
+
+  // Same check as isAlreadyInErp for many barcodes in one request.
+  // Returns the barcodes already present in the ERP for this sheet.
+  static Future<Set<String>> alreadyInErp({
+    required int countingSheetId,
+    required List<String> barcodes,
+  }) async {
+    if (barcodes.isEmpty) return {};
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scans'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          'counting_sheet_id': countingSheetId,
+          'barcodes': barcodes,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['alreadySent'] is List) {
+          return Set<String>.from(data['alreadySent']);
+        }
+      }
+      return {};
+    } catch (e) {
+      print("Check ERP scans error: $e");
+      return {}; // fail-open: the server also skips duplicates on submit
+    }
+  }
 }

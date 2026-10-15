@@ -38,4 +38,9 @@ router.post('/live-scan', CountingController.pushLiveScan);
 router.post('/live-items/:sheet_id/clear', CountingController.clearLiveItems);
 //remove an item from the shared session
 router.post('/live-items/:sheet_id/remove', CountingController.removeLiveItem);
+
+// POST /counting/check-erp-scan — is this barcode already on the sheet in the ERP?
+router.post('/check-erp-scan', CountingController.checkAlreadyInErp);
+// POST /counting/check-erp-scans — same check for a list of barcodes
+router.post('/check-erp-scans', CountingController.checkAlreadyInErpBatch);
 module.exports = router;
