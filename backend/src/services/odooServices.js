@@ -34,10 +34,7 @@ class OdooService {
     return data.result;
   }
 
-  async fetchAdjustments(host) {
-
-    console.log("Has session cookie:", this.sessionCookie ? "Yes" : "No");
-
+  async _call(host, model, method, args, kwargs = {}) {
     const response = await fetch(`${host}/web/dataset/call_kw`, {
       method: "POST",
       headers: {
@@ -47,23 +44,31 @@ class OdooService {
       body: JSON.stringify({
         jsonrpc: "2.0",
         method: "call",
-        params: {
-          model: "stock.inventory",
-          method: "search_read",
-          args: [[["state", "in", ["draft", "in_progress"]]]],
-          kwargs: {
-            fields: ["id", "name", "state", "date", "manager_id"]
-          }
-        }
+        params: { model, method, args, kwargs }
       })
     });
-
     const data = await response.json();
-    console.log("Adjustments response status:", response.status);
-    console.log("Adjustment found:", data.result?.length || 0);
-
     if (data.error) throw new Error(data.error.data?.message || data.error.message);
-    return data.result || [];
+    return data.result;
+  }
+
+  // Draft / in progress adjustments the user works on: the ones they are
+  // responsible for (Resp. Ajustement) and the ones where they have a
+  // counting sheet (Resp. Comptage).
+  async fetchAdjustments(host, userId) {
+    const sheets = await this._call(host, "counting.sheet", "search_read",
+      [[["user_id", "=", userId]]], { fields: ["stock_inventory_id"] });
+    const countedIds = [...new Set((sheets || [])
+      .map((s) => Array.isArray(s.stock_inventory_id) ? s.stock_inventory_id[0] : s.stock_inventory_id)
+      .filter(Boolean))];
+
+    const adjustments = await this._call(host, "stock.inventory", "search_read", [[
+      ["state", "in", ["draft", "in_progress"]],
+      "|", ["manager_id", "=", userId], ["id", "in", countedIds]
+    ]], { fields: ["id", "name", "state", "date", "manager_id"] });
+
+    console.log(`Adjustments for user ${userId}: ${adjustments?.length || 0}`);
+    return adjustments || [];
   }
 
   async fetchFeuilles(host, adjustmentId, userId) {

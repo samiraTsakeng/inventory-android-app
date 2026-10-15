@@ -13,7 +13,7 @@ class AdjustmentController {
         });
       }
 
-      const adjustments = await OdooService.fetchAdjustments(session.host);
+      const adjustments = await OdooService.fetchAdjustments(session.host, session.uid);
 
       // Sort: "en cours" (draft/in progress) first
       adjustments.sort((a, b) => {
