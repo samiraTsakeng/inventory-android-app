@@ -251,13 +251,13 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         return;
       }
 
-      final success = await CountingService.submitScannedItems(
+      final result = await CountingService.submitScannedItems(
         countingSheetId: widget.countingSheetId,
         adjustmentId: widget.adjustmentId,
         items: toSubmit,
       );
 
-      if (success && mounted) {
+      if (result.success && mounted) {
         if (widget.batchId != null) {
           await BatchStorageService.markBatchAsSynced(widget.batchId!);
         } else {
@@ -281,9 +281,10 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       } else if (mounted) {
         setState(() => _isSending = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erreur lors de l\'envoi'),
+          SnackBar(
+            content: Text(result.message ?? 'Erreur lors de l\'envoi'),
             backgroundColor: AppColors.errorColor,
+            duration: const Duration(seconds: 6),
           ),
         );
       }

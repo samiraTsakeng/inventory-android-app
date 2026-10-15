@@ -213,13 +213,13 @@ class _BatchesListPageState extends State<BatchesListPage> {
     setState(() => _isSyncing = true);
 
     try {
-      final success = await CountingService.submitScannedItems(
+      final result = await CountingService.submitScannedItems(
         countingSheetId: batch.countingSheetId,
         adjustmentId: batch.adjustmentId,
         items: batch.items,
       );
 
-      if (success) {
+      if (result.success) {
         await BatchStorageService.markBatchAsSynced(batch.id);
 
         if (mounted) {
@@ -231,8 +231,14 @@ class _BatchesListPageState extends State<BatchesListPage> {
           );
           await _loadBatches();
         }
-      } else {
-        throw Exception('Échec de la synchronisation');
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message ?? 'Échec de la synchronisation'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 6),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -266,20 +272,22 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
     int successCount = 0;
     int failCount = 0;
+    String? firstError;
 
     for (final batch in unsyncedBatches) {
       try {
-        final success = await CountingService.submitScannedItems(
+        final result = await CountingService.submitScannedItems(
           countingSheetId: batch.countingSheetId,
           adjustmentId: batch.adjustmentId,
           items: batch.items,
         );
 
-        if (success) {
+        if (result.success) {
           await BatchStorageService.markBatchAsSynced(batch.id);
           successCount++;
         } else {
           failCount++;
+          firstError ??= '${batch.name} : ${result.message}';
         }
       } catch (e) {
         failCount++;
@@ -292,8 +300,11 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(' $successCount lots synchronisés, $failCount échoués'),
+          content: Text(firstError == null
+              ? ' $successCount lots synchronisés, $failCount échoués'
+              : ' $successCount lots synchronisés, $failCount échoués\n$firstError'),
           backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
+          duration: Duration(seconds: failCount > 0 ? 6 : 4),
         ),
       );
     }

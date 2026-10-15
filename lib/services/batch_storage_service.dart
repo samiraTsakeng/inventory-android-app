@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/batch.dart';
 import '../models/scanned_item.dart';
+import 'local_storage_service.dart';
 
 class BatchStorageService {
+  // Batches are stored per account (same session id as the scanned items),
+  // so another user on the same phone neither sees nor sends them.
   static const String _batchesKey = 'saved_batches';
 
   // Synced batches are already in the ERP; they're kept this long for the
@@ -13,6 +16,25 @@ class BatchStorageService {
   // countingSheetId -> barcodes present in saved batches. Built on first
   // use and reset on every write, so a scan doesn't decode every batch.
   static Map<int, Set<String>>? _barcodeIndex;
+  // Storage key the index was built from (it changes with the account).
+  static String? _indexKey;
+
+  static Future<String> _key() async {
+    final sessionId = await LocalStorageService.getSessionId();
+    return '${_batchesKey}_$sessionId';
+  }
+
+  // Before batches were per account they lived under one shared key. The
+  // first account to open the batches after the update takes them over, so
+  // no saved (possibly unsynced) batch is lost.
+  static Future<void> _migrateLegacy(SharedPreferences prefs, String key) async {
+    final legacy = prefs.getString(_batchesKey);
+    if (legacy == null) return;
+    if (!prefs.containsKey(key)) {
+      await prefs.setString(key, legacy);
+    }
+    await prefs.remove(_batchesKey);
+  }
 
   static Future<void> saveBatch(Batch batch) async {
     final cutoff = DateTime.now().subtract(_syncedRetention);
@@ -24,7 +46,9 @@ class BatchStorageService {
 
   static Future<List<Batch>> getBatches() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? batchesJson = prefs.getString(_batchesKey);
+    final key = await _key();
+    await _migrateLegacy(prefs, key);
+    final String? batchesJson = prefs.getString(key);
     if (batchesJson == null) return [];
     final List<dynamic> decoded = jsonDecode(batchesJson);
     return decoded.map((e) => Batch.fromJson(e)).toList();
@@ -32,7 +56,8 @@ class BatchStorageService {
 
   // Whether this barcode is already in a saved batch of the sheet.
   static Future<bool> isBarcodeInBatches(int countingSheetId, String barcode) async {
-    if (_barcodeIndex == null) {
+    final key = await _key();
+    if (_barcodeIndex == null || _indexKey != key) {
       final index = <int, Set<String>>{};
       for (final batch in await getBatches()) {
         index
@@ -40,6 +65,7 @@ class BatchStorageService {
             .addAll(batch.items.map((item) => item.barcode));
       }
       _barcodeIndex = index;
+      _indexKey = key;
     }
     return _barcodeIndex![countingSheetId]?.contains(barcode) ?? false;
   }
@@ -81,14 +107,14 @@ class BatchStorageService {
 
   static Future<void> clearAllBatches() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_batchesKey);
+    await prefs.remove(await _key());
     _barcodeIndex = null;
   }
 
   static Future<void> _write(List<Batch> batches) async {
     final prefs = await SharedPreferences.getInstance();
     final batchesJson = batches.map((b) => b.toJson()).toList();
-    await prefs.setString(_batchesKey, jsonEncode(batchesJson));
+    await prefs.setString(await _key(), jsonEncode(batchesJson));
     _barcodeIndex = null;
   }
 }

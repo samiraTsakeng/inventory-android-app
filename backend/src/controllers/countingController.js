@@ -559,6 +559,7 @@ class CountingController {
 
         const createdLineIds = [];
         const failedItems = [];
+        const errors = [];
 
         if (pending.length > 0) {
           try {
@@ -567,6 +568,10 @@ class CountingController {
               [pending.map(toLine)]);
             createdLineIds.push(...(Array.isArray(ids) ? ids : [ids]));
           } catch (err) {
+            // Odoo unreachable: retrying line by line would only multiply
+            // the timeouts. Report the batch as failed.
+            if (!err.odooError) throw err;
+
             // Batch create is atomic in Odoo: nothing was written. Fall back
             // to per-line creation to isolate the faulty items.
             console.warn("Batch create failed, retrying line by line:", err.message);
@@ -577,15 +582,16 @@ class CountingController {
               } catch (lineErr) {
                 console.error("Error creating line for", item.barcode, lineErr.message);
                 failedItems.push(item.barcode);
+                errors.push(lineErr.message);
               }
             }
           }
         }
 
-        return { createdLineIds, failedItems, skippedCount };
+        return { createdLineIds, failedItems, skippedCount, errors };
       });
 
-      const { createdLineIds, failedItems, skippedCount } = result;
+      const { createdLineIds, failedItems, skippedCount, errors } = result;
       console.log(`Created ${createdLineIds.length} lines, skipped ${skippedCount} (already in ERP), failed ${failedItems.length}`);
 
       // Partial failure is a failure: the client keeps the batch unsynced and
@@ -593,22 +599,25 @@ class CountingController {
       if (failedItems.length > 0) {
         return res.status(400).json({
           success: false,
-          message: `${failedItems.length} article(s) non envoyé(s)`,
+          // Odoo's own reason (first distinct ones) so the user can act on it.
+          message: `${failedItems.length} article(s) non envoyé(s) : ` +
+            [...new Set(errors)].slice(0, 3).join(" / "),
           submitted_count: createdLineIds.length,
           skipped_count: skippedCount,
           failed_items: failedItems
         });
       }
 
-      // Update counting sheet state if max items reached (50)
+      // Validate the counting sheet if max items reached (50). Goes through
+      // action_validate so Odoo's own checks (responsible user, at least one
+      // line) apply, exactly as with the "Terminer" button.
       if (items.length >= 50) {
-        console.log("Reached 50 items limit, updating counting sheet state to confirm");
+        console.log("Reached 50 items limit, validating counting sheet");
         try {
-          await odooCall(session, "counting.sheet", "write",
-            [[counting_sheet_id], { state: "confirm" }]);
-          console.log("Sheet confirmed successfully!");
+          await odooCall(session, "counting.sheet", "action_validate", [[counting_sheet_id]]);
+          console.log("Sheet validated successfully!");
         } catch (err) {
-          console.warn("Failed to update sheet state:", err.message);
+          console.warn("Failed to validate sheet:", err.message);
         }
       }
 
@@ -622,10 +631,11 @@ class CountingController {
 
     } catch (error) {
       console.error("Submit error:", error);
-      console.error("Error stack:", error.stack);
       return res.status(500).json({
         success: false,
-        message: error.message || "Failed to submit scans"
+        message: error.odooError
+          ? error.message
+          : `Odoo injoignable, rien n'a été envoyé (${error.message})`
       });
     }
   }

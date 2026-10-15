@@ -137,15 +137,18 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   Future<void> _startSheet(int sheetId) async {
     setState(() => _startingSheetId = sheetId);
     try {
-      final success = await CountingService.startSheet(sheetId);
-      if (success) {
+      final result = await CountingService.startSheet(sheetId);
+      if (result.success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Comptage commencé'), backgroundColor: Colors.green),
         );
         fetchFeuilles();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors du démarrage'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(result.message ?? 'Erreur lors du démarrage'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
@@ -203,15 +206,18 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   Future<void> _validateSheet(int sheetId) async {
     setState(() => _validatingSheetId = sheetId);
     try {
-      final success = await CountingService.validateSheet(sheetId);
-      if (success) {
+      final result = await CountingService.validateSheet(sheetId);
+      if (result.success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Comptage terminé'), backgroundColor: Colors.green),
         );
         fetchFeuilles();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erreur lors de la validation'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(result.message ?? 'Erreur lors de la validation'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {

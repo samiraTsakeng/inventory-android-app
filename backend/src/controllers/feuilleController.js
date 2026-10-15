@@ -29,12 +29,14 @@ class FeuilleController {
       let cleanMessage = error.message;
 
       //check if it is an access error and format nicely
-      if (error.message.includes("Désolé, vous n'êtes pas autorisé")) {
+      // ("Désolé, vous n'êtes pas autorisé à accéder..." before v17,
+      // "Vous n'êtes pas autorisé à accéder aux enregistrements..." in v18)
+      if (/n'êtes pas autorisé à accéder/i.test(error.message)) {
       cleanMessage = "Désolé, vous n'êtes pas autorisé à accéder à ce document. Seuls les utilisateurs avec les niveaux d'accès suivants sont actuellement autorisés à faire cela:\n- Ajustement Général/Resp. Comptage\n- Ajustement Général/Resp. Ajustement";
       }
       return res.status(500).json({
         success: false,
-        message: error.message
+        message: cleanMessage
       });
     }
   }

@@ -62,49 +62,43 @@ class CountingService {
     }
   }
 
-  static Future<bool> startSheet(int sheetId) async {
+  static Future<ApiResult> startSheet(int sheetId) async {
     try {
       final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/start-sheet'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'sheet_id': sheetId}),
       );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
-      }
-      return false;
+      return ApiResult.fromResponse(response);
     } catch (e) {
       print("Start sheet error: $e");
-      return false;
+      return ApiResult.fromException(e);
     }
   }
 
-  static Future<bool> validateSheet(int sheetId) async {
+  static Future<ApiResult> validateSheet(int sheetId) async {
     try {
       final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/validate-sheet'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'sheet_id': sheetId}),
       );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
-      }
-      return false;
+      return ApiResult.fromResponse(response);
     } catch (e) {
       print("Validate sheet error: $e");
-      return false;
+      return ApiResult.fromException(e);
     }
   }
 
-  static Future<bool> submitScannedItems({
+  static Future<ApiResult> submitScannedItems({
     required int countingSheetId,
     required int adjustmentId,
     required List<ScannedItem> items,
   }) async {
     try {
-      if (items.isEmpty) return false;
+      if (items.isEmpty) {
+        return const ApiResult.error('Aucun article à envoyer');
+      }
 
       final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/submit-scans'),
@@ -116,15 +110,10 @@ class CountingService {
         }),
         timeout: ApiConfig.submitTimeout,
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
-      }
-      return false;
+      return ApiResult.fromResponse(response);
     } catch (e) {
       print("Submit error: $e");
-      return false;
+      return ApiResult.fromException(e);
     }
   }
 
