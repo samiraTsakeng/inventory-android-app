@@ -70,6 +70,80 @@ async function findLot(session, barcode) {
   }
 }
 
+// Call to a JSON route of the wise_inventory module. Throws like odooCall;
+// err.routeMissing is set when the module on the server doesn't have the
+// route yet (not updated), so callers can fall back to call_kw.
+async function odooRoute(session, path, params) {
+  const response = await fetch(`${session.host}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": OdooService.sessionCookie
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", method: "call", params }),
+    signal: AbortSignal.timeout(ODOO_TIMEOUT_MS)
+  });
+  if (response.status === 404) {
+    const err = new Error(`Route ${path} absente`);
+    err.routeMissing = true;
+    throw err;
+  }
+  const data = await response.json();
+  if (data.error) {
+    const err = new Error(data.error.data?.message || data.error.message);
+    err.odooError = data.error;
+    throw err;
+  }
+  return data.result;
+}
+
+// Sends a batch through /wise_inventory/api/sheet/submit. Returns the HTTP
+// answer for the app ({status, body}), or null when the route is missing.
+// The 50-items validation rule is kept (validate=true), Odoo only applies
+// it when no line was refused.
+async function submitViaModule(session, sheetId, items) {
+  let result;
+  try {
+    result = await odooRoute(session, "/wise_inventory/api/sheet/submit", {
+      sheet_id: sheetId,
+      items: items.map((i) => ({ barcode: i.barcode, lot_number: i.lot_number, quantity: i.quantity })),
+      validate: items.length >= 50
+    });
+  } catch (err) {
+    if (err.routeMissing) return null;
+    if (!err.odooError) throw err; // Odoo unreachable: handled by the caller.
+    // Refused as a whole (sheet can't be started, not allowed...): nothing written.
+    return { status: 400, body: { success: false, message: err.message, requires_attention: true } };
+  }
+
+  if (!result.success) {
+    const failed = result.failed || [];
+    return {
+      status: 400,
+      body: {
+        success: false,
+        message: result.message || `${failed.length} article(s) non envoyé(s) : ` +
+          [...new Set(failed.map((f) => f.message))].slice(0, 3).join(" / "),
+        submitted_count: result.created || 0,
+        skipped_count: result.skipped || 0,
+        failed_items: failed.map((f) => f.number)
+      }
+    };
+  }
+
+  console.log(`Sheet ${sheetId} via module: created ${result.created}, skipped ${result.skipped}`);
+  return {
+    status: 200,
+    body: {
+      success: true,
+      message: `${result.created} items submitted successfully`,
+      submitted_count: result.created,
+      skipped_count: result.skipped,
+      failed_items: []
+    }
+  };
+}
+
 // Every lot/serial number in stock under a location, with its product
 // (one entry per number: a lot can sit in several quants).
 async function fetchLocationLots(session, locationId) {
@@ -632,6 +706,15 @@ class CountingController {
         });
       }
 
+      // Preferred path: the wise_inventory module does it all in one Odoo
+      // transaction (start, duplicates skipped, lines, validation).
+      const viaModule = await withSheetLock(counting_sheet_id, () =>
+        submitViaModule(session, counting_sheet_id, items));
+      if (viaModule) {
+        return res.status(viaModule.status).json(viaModule.body);
+      }
+
+      // Module not updated yet (route missing): previous path below.
       // Check the current state of the counting sheet
       let sheetState = null;
       try {
