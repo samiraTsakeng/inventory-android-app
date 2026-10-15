@@ -3,6 +3,7 @@ import '../models/batch.dart';
 import '../services/batch_storage_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/offline_actions_service.dart';
 import '../services/sync_service.dart';
 import '../models/scanned_item.dart';
 import 'scanned_items_list_page.dart';
@@ -47,6 +48,22 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
   // Batches sent automatically when the connection came back: show their
   // new state, unless the user is busy on this page.
+  // After a manual send: if this sheet was started / finished offline,
+  // those actions are now done in Odoo (finish once all batches are sent).
+  Future<void> _replaySheetActions() async {
+    final pending = await OfflineActionsService.pendingBySheet();
+    if (!pending.containsKey(widget.countingSheetId)) return;
+    final result = await SyncService.syncSheet(widget.countingSheetId);
+    if (!mounted || !result.didSomething) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.describe()),
+        backgroundColor: result.error == null ? Colors.green : Colors.orange,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
   void _onBatchesChanged() {
     if (mounted && !_isSyncing && !_isSelectionMode) _loadBatches();
   }
@@ -236,7 +253,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
       if (result.success) {
         await BatchStorageService.markBatchAsSynced(batch.id);
-        SyncService.replaySheetActions();
+        _replaySheetActions();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -310,7 +327,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
       }
     }
 
-    if (successCount > 0) SyncService.replaySheetActions();
+    if (successCount > 0) _replaySheetActions();
 
     if (mounted) {
       setState(() => _isSyncing = false);

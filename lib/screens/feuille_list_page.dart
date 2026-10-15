@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/batch_storage_service.dart';
 import '../services/offline_actions_service.dart';
 import '../services/sheet_cache_service.dart';
 import '../services/sync_service.dart';
@@ -26,6 +27,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
   // saved into a batch / sent to the ERP for that sheet.
   Map<int, int> _pendingCounts = {};
+  // Saved batches not sent to the ERP yet, per sheet.
+  Map<int, int> _unsyncedBatches = {};
+  int? _sendingSheetId;
 
   @override
   void initState() {
@@ -115,6 +119,32 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     await SheetCacheService.prepareAdjustment(widget.adjustmentId);
   }
 
+  // Manual send of one sheet: its offline start, its batches, then its
+  // offline finish — the same as the automatic sync, for this sheet only.
+  Future<void> _sendSheet(int sheetId) async {
+    if (!SyncService.online.value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Hors ligne : la feuille sera envoyée au retour du réseau'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    setState(() => _sendingSheetId = sheetId);
+    final result = await SyncService.syncSheet(sheetId);
+    if (!mounted) return;
+    setState(() => _sendingSheetId = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.describe()),
+        backgroundColor: result.error == null && !result.offline ? Colors.green : Colors.orange,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+    // The sheet list reloads through SyncService.revision.
+  }
+
   Future<void> _loadPendingCounts() async {
     final Map<int, int> counts = {};
     for (final f in feuilles) {
@@ -129,9 +159,21 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         // Ignore lookup errors for a single sheet, don't block the rest.
       }
     }
+
+    final Map<int, int> unsynced = {};
+    try {
+      for (final batch in await BatchStorageService.getBatches()) {
+        if (batch.isSynced) continue;
+        unsynced[batch.countingSheetId] = (unsynced[batch.countingSheetId] ?? 0) + 1;
+      }
+    } catch (e) {
+      // Counts only; the list works without them.
+    }
+
     if (mounted) {
       setState(() {
         _pendingCounts = counts;
+        _unsyncedBatches = unsynced;
       });
     }
   }
@@ -234,6 +276,24 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     if (sheetId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    await _confirmAndValidate(sheetId, sheetName);
+  }
+
+  // "Terminer" of one sheet (menu or the sheet's own button).
+  Future<void> _confirmAndValidate(int sheetId, String? sheetName) async {
+    // Online, Odoo would validate the sheet without the batches still on
+    // the phone. (Offline the finish already waits for them.)
+    final unsynced = _unsyncedBatches[sheetId] ?? 0;
+    if (unsynced > 0 && SyncService.online.value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Envoyez d\'abord les $unsynced lot(s) de cette feuille (bouton Envoyer)'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -433,6 +493,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             final pendingCount = _pendingCounts[countingSheetId] ?? 0;
             // Started / finished offline, not confirmed by Odoo yet.
             final waitingSync = f is Map && f['_pending'] != null;
+            final unsyncedBatches = _unsyncedBatches[countingSheetId] ?? 0;
+            final hasWorkToSend = waitingSync || unsyncedBatches > 0;
+            final isSending = _sendingSheetId == countingSheetId;
 
 
             // Teams can start counting at the same time - that's the whole point of having 2 teams!
@@ -554,6 +617,19 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               ),
                             ],
                           ),
+                          if (unsyncedBatches > 0) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(Icons.inventory_2, size: 9, color: Colors.blue[600]),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$unsyncedBatches lot(s) à envoyer',
+                                  style: TextStyle(fontSize: 9, color: Colors.blue[700], fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ],
                           const SizedBox(height: 6),
 
                           if (isNew)
@@ -603,6 +679,24 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                 child: const Text('Scanner'),
                               ),
                             ),
+                          // Finish this sheet (works offline: done in Odoo
+                          // at the sync, after its batches).
+                          if (isProgress)
+                            SizedBox(
+                              width: double.infinity,
+                              height: 24,
+                              child: TextButton(
+                                onPressed: _validatingSheetId == countingSheetId
+                                    ? null
+                                    : () => _confirmAndValidate(countingSheetId, sheetName),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.red[700],
+                                  padding: EdgeInsets.zero,
+                                  textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
+                                ),
+                                child: const Text('Terminer'),
+                              ),
+                            ),
                           if (isConfirm)
                             SizedBox(
                               width: double.infinity,
@@ -616,6 +710,26 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                 ),
                               ),
                             ),
+                          // Manual send of this sheet: start, batches, finish.
+                          if (hasWorkToSend) ...[
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: isSending ? null : () => _sendSheet(countingSheetId),
+                                icon: isSending
+                                    ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5))
+                                    : const Icon(Icons.cloud_upload, size: 12),
+                                label: Text(isSending ? 'Envoi…' : 'Envoyer'),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 26),
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  textStyle: const TextStyle(fontSize: 9),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

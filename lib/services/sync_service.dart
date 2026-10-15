@@ -9,7 +9,8 @@ import 'offline_actions_service.dart';
 
 // Offline mode: knows whether the backend is reachable (from every API
 // call), checks again periodically while it isn't, and when it comes back
-// sends the batches saved in the meantime.
+// sends what was done offline, sheet by sheet. A sheet can also be sent
+// by hand (syncSheet).
 class SyncService {
   // false while the backend can't be reached.
   static final ValueNotifier<bool> online = ValueNotifier(true);
@@ -25,7 +26,6 @@ class SyncService {
 
   static const Duration _probeInterval = Duration(seconds: 15);
   static Timer? _probeTimer;
-  static bool _isSyncing = false;
   static Future<void>? _flushing;
 
   // Called once at startup, before runApp.
@@ -72,95 +72,121 @@ class SyncService {
 
   static Future<void> _onReconnected() => flush();
 
-  // After a manual send from the batch list: a sheet finished offline
-  // may now have all its batches in the ERP and can be validated.
-  static Future<void> replaySheetActions() async {
-    if (!await OfflineActionsService.hasPending()) return;
-    final errors = [
-      ...await OfflineActionsService.replayStarts(),
-      ...await OfflineActionsService.replayValidations(),
-    ];
-    revision.value++;
-    if (errors.isEmpty) return;
-    messengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(errors.take(2).join('\n')),
-        backgroundColor: Colors.orange,
-        duration: const Duration(seconds: 8),
-      ),
-    );
-  }
-
-  // Replays everything done offline, in the order Odoo needs it: shared
-  // lists cleared, sheets started, batches sent, then sheets finished.
-  // Concurrent calls share one run.
-  static Future<void> flush() {
-    return _flushing ??= _doFlush().whenComplete(() => _flushing = null);
-  }
-
-  static Future<void> _doFlush() async {
-    await CountingService.replayPendingClears();
-    final startErrors = await OfflineActionsService.replayStarts();
-    final batches = pendingBatches.value > 0
-        ? await syncPendingData()
-        : (synced: 0, failed: 0);
-    final validateErrors = await OfflineActionsService.replayValidations();
-    revision.value++;
-
-    final errors = [...startErrors, ...validateErrors];
-    if (batches.synced == 0 && batches.failed == 0 && errors.isEmpty) return;
-
-    final lines = <String>[
-      if (batches.synced > 0 || batches.failed > 0)
-        batches.failed == 0
-            ? '${batches.synced} lot(s) envoyé(s)'
-            : '${batches.synced} lot(s) envoyé(s), ${batches.failed} en échec (voir la liste des lots)',
-      ...errors.take(2),
-    ];
-    final ok = batches.failed == 0 && errors.isEmpty;
-    messengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text('Synchronisation : ${lines.join('\n')}'),
-        backgroundColor: ok ? Colors.green : Colors.orange,
-        duration: Duration(seconds: ok ? 4 : 8),
-      ),
-    );
-  }
-
-  // Sends every saved batch not synced yet. Safe to run alongside a manual
-  // send: the backend skips lines already in the ERP.
-  static Future<({int synced, int failed})> syncPendingData() async {
-    if (_isSyncing) return (synced: 0, failed: 0);
-    _isSyncing = true;
-    int synced = 0;
-    int failed = 0;
-
-    try {
-      final batches = await BatchStorageService.getBatches();
-      for (final batch in batches.where((b) => !b.isSynced)) {
-        final result = await CountingService.submitScannedItems(
-          countingSheetId: batch.countingSheetId,
-          adjustmentId: batch.adjustmentId,
-          items: batch.items,
-        );
-
-        if (result.success) {
-          await BatchStorageService.markBatchAsSynced(batch.id);
-          synced++;
-        } else {
-          failed++;
-          print("Auto-sync failed for ${batch.name}: ${result.message}");
-          // Connection lost again: the next reconnection retries.
-          if (!online.value) break;
-        }
-      }
-    } catch (e) {
-      print("Sync error: $e");
-    } finally {
-      _isSyncing = false;
-      await refreshPendingCount();
+  // Sheets with work to send, in the order Odoo must see it: first the
+  // sheets with offline actions, in the order they were done (finish F1
+  // before starting F2 of the same zone), then the sheets that only have
+  // batches waiting, oldest batch first.
+  static Future<List<int>> sheetsToSync() async {
+    final order = await OfflineActionsService.sheetsInOrder();
+    final batches = (await BatchStorageService.getBatches())
+        .where((b) => !b.isSynced)
+        .toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    for (final batch in batches) {
+      if (!order.contains(batch.countingSheetId)) order.add(batch.countingSheetId);
     }
-    return (synced: synced, failed: failed);
+    return order;
+  }
+
+  // Automatic: sends everything done offline, one sheet after the other
+  // (start, batches, finish), and shows a summary. Concurrent calls share
+  // one run.
+  static Future<void> flush() {
+    return _flushing ??= _exclusive(() async {
+      final results = await _syncSheets(await sheetsToSync());
+      _showSummary(results);
+    }).whenComplete(() => _flushing = null);
+  }
+
+  // Manual: sends one sheet ("Envoyer" on the sheet, or after sending a
+  // batch from the batch list). Returns what was done.
+  static Future<SheetSyncResult> syncSheet(int sheetId) {
+    return _exclusive(() async => (await _syncSheets([sheetId])).first);
+  }
+
+  // One sync at a time (automatic and manual), so a start or a finish is
+  // never replayed twice in parallel.
+  static Future<void> _queue = Future.value();
+
+  static Future<T> _exclusive<T>(Future<T> Function() task) {
+    final previous = _queue;
+    final done = Completer<void>();
+    _queue = done.future;
+    return previous.then((_) => task()).whenComplete(done.complete);
+  }
+
+  static Future<List<SheetSyncResult>> _syncSheets(List<int> sheetIds) async {
+    await CountingService.replayPendingClears();
+    final results = <SheetSyncResult>[];
+    for (final sheetId in sheetIds) {
+      final result = await _syncOneSheet(sheetId);
+      results.add(result);
+      if (result.offline) break; // Connection lost: retried later.
+    }
+    revision.value++;
+    await refreshPendingCount();
+    return results;
+  }
+
+  // Start (if done offline) -> its batches, oldest first -> finish (if
+  // done offline, and only once every batch reached the ERP). Stops at the
+  // first refusal: what follows would be refused too.
+  static Future<SheetSyncResult> _syncOneSheet(int sheetId) async {
+    final allBatches = await BatchStorageService.getBatches();
+    final sheetBatches = allBatches.where((b) => b.countingSheetId == sheetId).toList();
+    final result = SheetSyncResult(
+      sheetId,
+      sheetBatches.isNotEmpty ? sheetBatches.first.sheetName : 'Feuille $sheetId',
+    );
+
+    final start = await OfflineActionsService.replayStart(sheetId);
+    if (start.isOffline) return result..offline = true;
+    if (start.isRefused) return result..error = start.message;
+    result.started = start.isDone;
+
+    final pending = sheetBatches.where((b) => !b.isSynced).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    for (final batch in pending) {
+      final sent = await CountingService.submitScannedItems(
+        countingSheetId: batch.countingSheetId,
+        adjustmentId: batch.adjustmentId,
+        items: batch.items,
+      );
+      if (sent.success) {
+        await BatchStorageService.markBatchAsSynced(batch.id);
+        result.batchesSent++;
+      } else if (!online.value) {
+        return result..offline = true;
+      } else {
+        return result..error = '${batch.name} : ${sent.message}';
+      }
+    }
+
+    final finish = await OfflineActionsService.replayValidate(sheetId);
+    if (finish.isOffline) return result..offline = true;
+    if (finish.isRefused) return result..error = finish.message;
+    result.finished = finish.isDone;
+    return result;
+  }
+
+  static void _showSummary(List<SheetSyncResult> results) {
+    final lines = [
+      for (final r in results)
+        if (r.didSomething) r.describe(),
+    ];
+    if (lines.isEmpty) return;
+    final ok = results.every((r) => r.error == null && !r.offline);
+    messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text([
+          'Synchronisation',
+          ...lines.take(4),
+          if (lines.length > 4) '…',
+        ].join('\n')),
+        backgroundColor: ok ? Colors.green : Colors.orange,
+        duration: Duration(seconds: ok ? 5 : 10),
+      ),
+    );
   }
 
   static Future<void> refreshPendingCount() async {
@@ -174,5 +200,37 @@ class SyncService {
   static Future<bool> hasPendingData() async {
     final batches = await BatchStorageService.getBatches();
     return batches.any((b) => !b.isSynced);
+  }
+}
+
+
+// What a sheet sync did, for the messages shown to the user.
+class SheetSyncResult {
+  final int sheetId;
+  final String sheetName;
+  bool started = false;
+  int batchesSent = 0;
+  bool finished = false;
+  bool offline = false;
+  String? error;
+
+  SheetSyncResult(this.sheetId, this.sheetName);
+
+  bool get didSomething =>
+      started || batchesSent > 0 || finished || error != null || offline;
+
+  String describe() {
+    final done = [
+      if (started) 'commencée',
+      if (batchesSent > 0) '$batchesSent lot(s) envoyé(s)',
+      if (finished) 'terminée',
+    ];
+    final problem = error != null
+        ? 'refusé : $error'
+        : offline
+            ? 'connexion perdue, reprise plus tard'
+            : null;
+    if (done.isEmpty && problem == null) return '$sheetName : rien à envoyer';
+    return '$sheetName : ${[...done, if (problem != null) problem].join(', ')}';
   }
 }

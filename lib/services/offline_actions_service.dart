@@ -1,5 +1,4 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import 'batch_storage_service.dart';
 import 'counting_service.dart';
 import 'local_storage_service.dart';
 import 'sync_service.dart';
@@ -56,72 +55,88 @@ class OfflineActionsService {
     return result;
   }
 
-  static Future<List<int>> _sheetsWith(String type) async => [
-        for (final entry in await _entries())
-          if (entry.startsWith('$type:')) int.tryParse(entry.split(':').last),
-      ].whereType<int>().toList();
-
-  // Starts the sheets started offline. Returns Odoo's refusals.
-  static Future<List<String>> replayStarts() async {
-    final errors = <String>[];
-    for (final sheetId in await _sheetsWith(start)) {
-      // Already started (by a batch sent meanwhile, or the other phone):
-      // action_begin would refuse it as "comptage en cours".
-      final sheet = await CountingService.getSheetState(sheetId);
-      if (sheet == null) {
-        if (!SyncService.online.value) break;
-        continue;
-      }
-      if (sheet['state'] != 'new') {
-        await _remove(start, sheetId);
-        continue;
-      }
-
-      final result = await CountingService.startSheet(sheetId);
-      if (result.success) {
-        await _remove(start, sheetId);
-      } else if (!SyncService.online.value) {
-        break; // Connection lost again: retried at the next reconnection.
-      } else {
-        await _remove(start, sheetId);
-        errors.add('${sheet['name'] ?? 'Feuille $sheetId'} : ${result.message}');
-      }
+  // Sheets with a pending action, in the order the actions were done on
+  // the phone (the order Odoo must see them: finish F1 before starting F2
+  // of the same zone).
+  static Future<List<int>> sheetsInOrder() async {
+    final order = <int>[];
+    for (final entry in await _entries()) {
+      final sheetId = int.tryParse(entry.split(':').last);
+      if (sheetId != null && !order.contains(sheetId)) order.add(sheetId);
     }
-    return errors;
+    return order;
   }
 
-  // Validates the sheets finished offline whose batches are all sent.
-  // Returns Odoo's refusals.
-  static Future<List<String>> replayValidations() async {
-    final errors = <String>[];
-    final batches = await BatchStorageService.getBatches();
+  static Future<bool> _has(String type, int sheetId) async =>
+      (await _entries()).contains('$type:$sheetId');
 
-    for (final sheetId in await _sheetsWith(validate)) {
-      final waiting = batches.any((b) => b.countingSheetId == sheetId && !b.isSynced);
-      if (waiting) continue; // Validated once its batches are in the ERP.
+  // Starts the sheet in Odoo if it was started offline.
+  static Future<ReplayOutcome> replayStart(int sheetId) async {
+    if (!await _has(start, sheetId)) return ReplayOutcome.nothing;
 
-      final sheet = await CountingService.getSheetState(sheetId);
-      if (sheet == null) {
-        if (!SyncService.online.value) break;
-        continue;
-      }
-      if (sheet['state'] == 'confirm') {
-        await _remove(validate, sheetId);
-        continue;
-      }
-
-      final result = await CountingService.validateSheet(sheetId);
-      if (result.success) {
-        await _remove(validate, sheetId);
-      } else if (!SyncService.online.value) {
-        break;
-      } else {
-        await _remove(validate, sheetId);
-        errors.add('${sheet['name'] ?? 'Feuille $sheetId'} : ${result.message}');
-      }
+    final sheet = await CountingService.getSheetState(sheetId);
+    if (sheet == null) {
+      return SyncService.online.value ? ReplayOutcome.nothing : ReplayOutcome.offline;
     }
-    return errors;
+    // Already started (by a batch sent meanwhile, or in Odoo): action_begin
+    // would refuse it as "comptage en cours".
+    if (sheet['state'] != 'new') {
+      await _remove(start, sheetId);
+      return ReplayOutcome.done;
+    }
+
+    final result = await CountingService.startSheet(sheetId);
+    if (result.success) {
+      await _remove(start, sheetId);
+      return ReplayOutcome.done;
+    }
+    if (!SyncService.online.value) return ReplayOutcome.offline;
+    // Refused by Odoo: dropped, the message is reported.
+    await _remove(start, sheetId);
+    return ReplayOutcome.refused(result.message);
+  }
+
+  // Validates the sheet in Odoo if it was finished offline. The caller only
+  // calls it once all the sheet's batches are in the ERP.
+  static Future<ReplayOutcome> replayValidate(int sheetId) async {
+    if (!await _has(validate, sheetId)) return ReplayOutcome.nothing;
+
+    final sheet = await CountingService.getSheetState(sheetId);
+    if (sheet == null) {
+      return SyncService.online.value ? ReplayOutcome.nothing : ReplayOutcome.offline;
+    }
+    if (sheet['state'] == 'confirm') {
+      await _remove(validate, sheetId);
+      return ReplayOutcome.done;
+    }
+
+    final result = await CountingService.validateSheet(sheetId);
+    if (result.success) {
+      await _remove(validate, sheetId);
+      return ReplayOutcome.done;
+    }
+    if (!SyncService.online.value) return ReplayOutcome.offline;
+    await _remove(validate, sheetId);
+    return ReplayOutcome.refused(result.message);
   }
 
   static Future<bool> hasPending() async => (await _entries()).isNotEmpty;
+}
+
+class ReplayOutcome {
+  // nothing: no pending action; done: replayed (or already true in Odoo);
+  // offline: connection lost, kept for later; refused: Odoo said no.
+  final String kind;
+  final String? message;
+
+  const ReplayOutcome._(this.kind, [this.message]);
+
+  static const nothing = ReplayOutcome._('nothing');
+  static const done = ReplayOutcome._('done');
+  static const offline = ReplayOutcome._('offline');
+  static ReplayOutcome refused(String? message) => ReplayOutcome._('refused', message);
+
+  bool get isRefused => kind == 'refused';
+  bool get isOffline => kind == 'offline';
+  bool get isDone => kind == 'done';
 }
