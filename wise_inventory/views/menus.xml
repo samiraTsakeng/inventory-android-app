@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <menuitem id="menu_adjustment"
-        name="Ajustements"
-        parent="stock.menu_action_inventory_form"
-        action="stock.action_inventory_form"
-        sequence="2" />
-
     <menuitem id="menu_general_adjustment"
         name="Ajustement de Stock Général"
-        parent="stock.menu_action_inventory_form"
+        parent="stock_inventory_ajustement.menu_action_inventory_tree"
         sequence="3" />
 </odoo>

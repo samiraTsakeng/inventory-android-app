@@ -25,7 +25,6 @@
     <record id="action_general_adjustment" model="ir.actions.act_window">
         <field name="name">Démarrer un ajustement général</field>
         <field name="res_model">general.adjustment</field>
-        <field name="view_type">form</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
     </record>

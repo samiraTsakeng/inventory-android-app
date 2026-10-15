@@ -1,3 +1,9 @@
-id                    ,name           ,model_id:id          ,group_id:id                         ,perm_read ,perm_create ,perm_unlink ,perm_write
-                      ,               ,                     ,                                    ,          ,            ,            ,          
-access_counting_sheet ,counting.sheet ,model_counting_sheet ,wise_inventory.group_counting_sheet ,        1 ,          1 ,          0 ,         1
+id,name,model_id:id,group_id:id,perm_read,perm_create,perm_unlink,perm_write
+access_zone_rangement_counting,zone.rangement.counting,model_zone_rangement,wise_inventory.counting_group,1,0,0,0
+access_counting_sheet_line_counting,counting.sheet.line.counting,model_counting_sheet_line,wise_inventory.counting_group,1,1,1,1
+access_counting_sheet_line_resp,counting.sheet.line.resp,model_counting_sheet_line,wise_inventory.resp_inventory,1,1,1,1
+access_counting_sheet_contradictory_line_resp,counting.sheet.contradictory.line.resp,model_counting_sheet_contradictory_line,wise_inventory.resp_inventory,1,1,1,1
+access_consolidation_sheet_resp,consolidation.sheet.resp,model_consolidation_sheet,wise_inventory.resp_inventory,1,1,1,1
+access_consolidation_sheet_counting,consolidation.sheet.counting,model_consolidation_sheet,wise_inventory.counting_group,1,0,0,0
+access_general_adjustment_resp,general.adjustment.resp,model_general_adjustment,wise_inventory.resp_inventory,1,1,1,1
+access_adjustment_consolidation_resp,adjustment.consolidation.resp,model_adjustment_consolidation,wise_inventory.resp_inventory,1,1,1,1

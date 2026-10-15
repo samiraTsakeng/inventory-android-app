@@ -9,8 +9,8 @@
                 <field name="stock_inventory_id" required="1"/>
                 <field name="location_id" />
                 <field name="zone_v_ids" invisible="1" />
-                <field name="zone_id" required="1" attrs="{'invisible': [('stock_inventory_id', '=', False)]}"/>
-            </group>           
+                <field name="zone_id" required="1" invisible="not stock_inventory_id"/>
+            </group>
             <footer>
                 <button string="Confirmer" class="btn btn-success" type="object"  name="confirm_btn"/>
                 <button string="Annuler" class="btn btn-danger" special="cancel" />
@@ -22,12 +22,11 @@
     <record id="action_adjustment_consolidation" model="ir.actions.act_window">
         <field name="name">Effectuer une Contradiction</field>
         <field name="res_model">adjustment.consolidation</field>
-        <field name="view_type">form</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
     </record>
 
-    
+
     <menuitem id="adjustment_consolidation"
             name="Effectuer une contradiction"
             parent="wise_inventory.menu_general_adjustment"

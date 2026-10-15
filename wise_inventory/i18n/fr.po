@@ -1,0 +1,561 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* wise_inventory
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 18.0-20260217\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 10:38+0000\n"
+"PO-Revision-Date: 2026-07-21 10:38+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: \n"
+
+#. module: wise_inventory
+#: model:ir.module.category,name:wise_inventory.module_category_inventory
+msgid "Ajustement Général"
+msgstr "Ajustement Général"
+
+#. module: wise_inventory
+#: model:ir.ui.menu,name:wise_inventory.menu_general_adjustment
+msgid "Ajustement de Stock Général"
+msgstr "Ajustement de Stock Général"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__stock_inventory_id
+msgid "Ajustement en cours"
+msgstr "Ajustement en cours"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__stock_inventory_id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__stock_inventory_id
+msgid "Ajustement lié"
+msgstr "Ajustement lié"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.adjustment_consolidation_view
+#: model_terms:ir.ui.view,arch_db:wise_inventory.general_adjustment_view
+msgid "Annuler"
+msgstr "Annuler"
+
+#. module: wise_inventory
+#: model:ir.model.fields.selection,name:wise_inventory.selection__consolidation_sheet__state__cancel
+#: model:ir.model.fields.selection,name:wise_inventory.selection__counting_sheet__state__cancel
+msgid "Annulé"
+msgstr "Annulé"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__product_id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__product_id
+msgid "Article"
+msgstr "Article"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__name
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__name
+msgid "Code"
+msgstr "Code"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.counting_sheet_view_form
+msgid "Commencer le Comptage"
+msgstr "Commencer le Comptage"
+
+#. module: wise_inventory
+#: model:res.groups,name:wise_inventory.can_view_counting_1
+msgid "Comptage 1"
+msgstr "Comptage 1"
+
+#. module: wise_inventory
+#: model:res.groups,name:wise_inventory.can_view_counting_2
+msgid "Comptage 2"
+msgstr "Comptage 2"
+
+#. module: wise_inventory
+#: model:res.groups,name:wise_inventory.audit_only
+msgid "Comptage Unique (Audit)"
+msgstr "Comptage Unique (Audit)"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.adjustment_consolidation_view
+#: model_terms:ir.ui.view,arch_db:wise_inventory.general_adjustment_view
+msgid "Confirmer"
+msgstr "Confirmer"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__consolidated
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__consolidated
+msgid "Consolidated"
+msgstr "Consolidé"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__consolidation_sheet_id
+msgid "Consolidation Sheet"
+msgstr "Feuille de consolidation"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_inventory__consolidated
+msgid "Consolidé ?"
+msgstr "Consolidé ?"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__counting_contradictory_line_ids
+msgid "Counting Contradictory Line"
+msgstr "Ligne de comptage contradictoire"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__counting_line_ids
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__counting_line_ids
+msgid "Counting Line"
+msgstr "Ligne de comptage"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__create_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__create_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__create_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__create_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__create_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__create_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__create_uid
+msgid "Created by"
+msgstr "Créé par"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__create_date
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__create_date
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__create_date
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__create_date
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__create_date
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__create_date
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__create_date
+msgid "Created on"
+msgstr "Créé le"
+
+#. module: wise_inventory
+#: model_terms:ir.actions.act_window,help:wise_inventory.counting_sheet_action
+msgid "Créer vos feuilles de comptage ici."
+msgstr "Créer vos feuilles de comptage ici."
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__date
+msgid "Date de comptage"
+msgstr "Date de comptage"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__display_name
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__display_name
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__display_name
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__display_name
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__display_name
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__display_name
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__display_name
+msgid "Display Name"
+msgstr "Nom affiché"
+
+#. module: wise_inventory
+#: model:ir.actions.act_window,name:wise_inventory.action_general_adjustment
+#: model:ir.ui.menu,name:wise_inventory.general_adjustment
+#: model_terms:ir.ui.view,arch_db:wise_inventory.general_adjustment_view
+msgid "Démarrer un ajustement général"
+msgstr "Démarrer un ajustement général"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.adjustment_consolidation_view
+msgid "Effectuer une Consolidationl"
+msgstr "Effectuer une Consolidation"
+
+#. module: wise_inventory
+#: model:ir.actions.act_window,name:wise_inventory.action_adjustment_consolidation
+msgid "Effectuer une Contradiction"
+msgstr "Effectuer une Contradiction"
+
+#. module: wise_inventory
+#: model:ir.ui.menu,name:wise_inventory.adjustment_consolidation
+msgid "Effectuer une contradiction"
+msgstr "Effectuer une contradiction"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__location_id
+msgid "Emplacement"
+msgstr "Emplacement"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__location_id
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__location_id
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_inventory__location_id
+msgid "Emplacement Inventorié"
+msgstr "Emplacement Inventorié"
+
+#. module: wise_inventory
+#: model:ir.model.fields.selection,name:wise_inventory.selection__consolidation_sheet__consolidated__progress
+#: model:ir.model.fields.selection,name:wise_inventory.selection__consolidation_sheet__state__progress
+#: model:ir.model.fields.selection,name:wise_inventory.selection__counting_sheet__consolidated__progress
+#: model:ir.model.fields.selection,name:wise_inventory.selection__counting_sheet__state__progress
+msgid "En cours"
+msgstr "En cours"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__warehouse_id
+msgid "Entrepôt"
+msgstr "Entrepôt"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_inventory__is_general
+msgid "Est Général ?"
+msgstr "Est Général ?"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__state
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__state
+msgid "Etat"
+msgstr "Etat"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_consolidation_sheet
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_form
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_tree
+msgid "Feuille de Consolidation"
+msgstr "Feuille de Consolidation"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_counting_sheet
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_form
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_search
+#: model_terms:ir.ui.view,arch_db:wise_inventory.counting_sheet_view_form
+#: model_terms:ir.ui.view,arch_db:wise_inventory.counting_sheet_view_search
+#: model_terms:ir.ui.view,arch_db:wise_inventory.counting_sheet_view_tree
+msgid "Feuille de comptage"
+msgstr "Feuille de comptage"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_inventory__consolidated_sheet_ids
+msgid "Feuilles consolidées"
+msgstr "Feuilles consolidées"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.wise_view_inventory_form
+msgid "Feuilles de Comptage"
+msgstr "Feuilles de Comptage"
+
+#. module: wise_inventory
+#: model:ir.actions.act_window,name:wise_inventory.consolidation_sheet_action
+#: model:ir.ui.menu,name:wise_inventory.menu_consolidation_sheet
+#: model_terms:ir.ui.view,arch_db:wise_inventory.wise_view_inventory_form
+msgid "Feuilles de Consolidation"
+msgstr "Feuilles de Consolidation"
+
+#. module: wise_inventory
+#: model:ir.actions.act_window,name:wise_inventory.counting_sheet_action
+#: model:ir.ui.menu,name:wise_inventory.menu_counting_sheet
+msgid "Feuilles de comptage"
+msgstr "Feuilles de comptage"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__id
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__id
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__id
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__id
+msgid "ID"
+msgstr "ID"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.zone_rangement_view_form
+msgid "Informations Complémentaires"
+msgstr "Informations Complémentaires"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.wise_view_inventory_form
+msgid "Intégrer les consolidations"
+msgstr "Intégrer les consolidations"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_stock_inventory
+msgid "Inventory Adjustment Group"
+msgstr "Groupe d'Ajustement d'Inventaire"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_stock_inventory_line
+msgid "Inventory Line"
+msgstr "Ligne d'inventaire"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_stock_location
+msgid "Inventory Locations"
+msgstr "Emplacements de l'inventaire"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__write_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__write_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__write_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__write_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__write_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__write_uid
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__write_uid
+msgid "Last Updated by"
+msgstr "Dernière mise à jour par"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__write_date
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__write_date
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__write_date
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__write_date
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__write_date
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__write_date
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__write_date
+msgid "Last Updated on"
+msgstr "Dernière mise à jour le"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_form
+msgid "Lignes Contradictoires"
+msgstr "Lignes Contradictoires"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_counting_sheet_contradictory_line
+msgid "Lignes contracdictoire de feuille de comptage"
+msgstr "Lignes contradictoires de feuille de comptage"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_form
+msgid "Lignes de Comptage"
+msgstr "Lignes de Comptage"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.counting_sheet_view_form
+msgid "Lignes de comptage"
+msgstr "Lignes de comptage"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_counting_sheet_line
+msgid "Lignes de feuille de comptage"
+msgstr "Lignes de feuille de comptage"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__lines_to_consolidate
+msgid "Lines To Consolidate"
+msgstr "Lignes à consolider"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.wise_view_stock_location
+msgid "Liste des zones de rangement"
+msgstr "Liste des zones de rangement"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_mrp_production
+msgid "Manufacturing Order"
+msgstr "Ordre de fabrication"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_zone_rangement__name
+#: model_terms:ir.ui.view,arch_db:wise_inventory.zone_rangement_view_form
+msgid "Nom"
+msgstr "Nom"
+
+#. module: wise_inventory
+#: model:ir.model.fields.selection,name:wise_inventory.selection__consolidation_sheet__consolidated__no
+#: model:ir.model.fields.selection,name:wise_inventory.selection__counting_sheet__consolidated__no
+msgid "Non"
+msgstr "Non"
+
+#. module: wise_inventory
+#: model:ir.model.fields.selection,name:wise_inventory.selection__consolidation_sheet__state__new
+#: model:ir.model.fields.selection,name:wise_inventory.selection__counting_sheet__state__new
+msgid "Nouveau"
+msgstr "Nouveau"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__number
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__number
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__lot_id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__lot_id
+msgid "Numero de Série/Lot"
+msgstr "Numero de Série/Lot"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__number
+msgid "Numéro"
+msgstr "Numéro"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_inventory_line__number
+msgid "Numéro Lot/Série"
+msgstr "Numéro Lot/Série"
+
+#. module: wise_inventory
+#: model:ir.model.fields.selection,name:wise_inventory.selection__consolidation_sheet__consolidated__yes
+#: model:ir.model.fields.selection,name:wise_inventory.selection__counting_sheet__consolidated__yes
+msgid "Oui"
+msgstr "Oui"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_adjustment_consolidation
+msgid "Permet de de consolider deux feuilles de comptage"
+msgstr "Permet de consolider deux feuilles de comptage"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_general_adjustment
+msgid "Permet de démarrer un inventaire général"
+msgstr "Permet de démarrer un inventaire général"
+
+#. module: wise_inventory
+#: model:ir.model.fields,help:wise_inventory.field_stock_inventory__consolidated
+msgid ""
+"Permet de savoir si les feuilles de consolidation ont été intégrées ou pas."
+msgstr ""
+"Permet de savoir si les feuilles de consolidation ont été intégrées ou pas."
+
+#. module: wise_inventory
+#: model:ir.model.fields,help:wise_inventory.field_stock_inventory__display_consolid
+msgid ""
+"Permet de savoir si les feuilles de consolidation sont validées ou pas, afin"
+" d'afficher le bouton d'intégration de ces feuilles."
+msgstr ""
+"Permet de savoir si les feuilles de consolidation sont validées ou pas, afin"
+" d'afficher le bouton d'intégration de ces feuilles."
+
+#. module: wise_inventory
+#: model:ir.model.fields,help:wise_inventory.field_stock_inventory__is_general
+msgid "Permet de savoir si un ajustement est général ou pas."
+msgstr "Permet de savoir si un ajustement est général ou pas."
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__verified_qty
+msgid "Quantité Vérifiée"
+msgstr "Quantité Vérifiée"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__counted_qty
+msgid "Quantité comptée"
+msgstr "Quantité comptée"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_form
+#: model_terms:ir.ui.view,arch_db:wise_inventory.wise_view_inventory_form
+msgid "Rapport Excel"
+msgstr "Rapport Excel"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__manager_id
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_inventory__manager_id
+#: model:res.groups,name:wise_inventory.resp_inventory
+msgid "Resp. Ajustement"
+msgstr "Resp. Ajustement"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__user_id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__user_id
+#: model:res.groups,name:wise_inventory.counting_group
+msgid "Resp. Comptage"
+msgstr "Resp. Comptage"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__user_ids
+msgid "Resp. Equipes"
+msgstr "Resp. Equipes"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__reference
+msgid "Référence de l'ajustement"
+msgstr "Référence de l'ajustement"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_contradictory_line__sheet_id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet_line__sheet_id
+msgid "Sheet"
+msgstr "Feuille"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_stock_move
+msgid "Stock Move"
+msgstr "Mouvement de stock"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_inventory__display_consolid
+msgid "Toutes les consolidations sont validées ?"
+msgstr "Toutes les consolidations sont validées ?"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_stock_picking
+msgid "Transfer"
+msgstr "Transfert"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.wise_view_inventory_form
+msgid "UoM"
+msgstr "UdM"
+
+#. module: wise_inventory
+#: model:ir.model.fields,help:wise_inventory.field_consolidation_sheet__consolidated
+#: model:ir.model.fields,help:wise_inventory.field_counting_sheet__consolidated
+msgid "Used to know if a counting sheet has been consolidated"
+msgstr "Utilisé pour savoir si une feuille de comptage a été consolidée"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.consolidation_sheet_view_form
+msgid "Valider la contradiction"
+msgstr "Valider la contradiction"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.counting_sheet_view_form
+msgid "Valider le comptage"
+msgstr "Valider le comptage"
+
+#. module: wise_inventory
+#: model:ir.model.fields.selection,name:wise_inventory.selection__consolidation_sheet__state__confirm
+#: model:ir.model.fields.selection,name:wise_inventory.selection__counting_sheet__state__confirm
+msgid "Validé"
+msgstr "Validé"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_consolidation_sheet__zone_id
+#: model:ir.model.fields,field_description:wise_inventory.field_counting_sheet__zone_id
+msgid "Zone Liée"
+msgstr "Zone Liée"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__zone_v_ids
+msgid "Zone V"
+msgstr "Zone V"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_adjustment_consolidation__zone_id
+msgid "Zone consolidée"
+msgstr "Zone consolidée"
+
+#. module: wise_inventory
+#: model:ir.actions.act_window,name:wise_inventory.zone_action
+msgid "Zone de Rangement"
+msgstr "Zone de Rangement"
+
+#. module: wise_inventory
+#: model:ir.model,name:wise_inventory.model_zone_rangement
+#: model:ir.ui.menu,name:wise_inventory.menu_zone_rangement
+msgid "Zone de rangement"
+msgstr "Zone de rangement"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_general_adjustment__zone_ids
+msgid "Zones "
+msgstr "Zones "
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.zone_rangement_view_form
+msgid "Zones de Rangement"
+msgstr "Zones de Rangement"
+
+#. module: wise_inventory
+#: model_terms:ir.ui.view,arch_db:wise_inventory.zone_rangement_view_tree
+msgid "Zones de rangement"
+msgstr "Zones de rangement"
+
+#. module: wise_inventory
+#: model:ir.model.fields,field_description:wise_inventory.field_stock_location__zone_ids
+msgid "Zones rattachées"
+msgstr "Zones rattachées"

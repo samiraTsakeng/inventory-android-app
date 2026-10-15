@@ -5,49 +5,51 @@
     <record id="wise_view_inventory_form" model="ir.ui.view">
         <field name="name">wise_view_inventory.form</field>
         <field name="model">stock.inventory</field>
-        <field name="inherit_id" ref="stock.view_inventory_form"/>
+        <field name="inherit_id" ref="stock_inventory_ajustement.view_inventory_group_form"/>
         <field name="arch" type="xml">
             <div name="button_box" position="inside">
-                <button class="oe_stat_button" attrs="{'invisible': [('is_general', '=', False)]}" name="counting_sheet" string="Feuilles de Comptage" type="object" icon="fa-list" />
-                <button class="oe_stat_button" attrs="{'invisible': [('is_general', '=', False)]}" name="consolidation_sheet" string="Feuilles de Consolidation" type="object" icon="fa-list" />
-                
+                <button class="oe_stat_button" invisible="not is_general" name="counting_sheet" string="Feuilles de Comptage" type="object" icon="fa-list" />
+                <button class="oe_stat_button" invisible="not is_general" name="consolidation_sheet" string="Feuilles de Consolidation" type="object" icon="fa-list" />
             </div>
-            <xpath expr="//field[@name='filter']" position="after">
+            <xpath expr="//field[@name='product_selection']" position="before">
+                <field name="location_id" required="1" readonly="state != 'draft'" domain="[('usage', '=', 'internal')]"/>
                 <field name="is_general" invisible="1"/>
-                <field name="manager_id" attrs="{'invisible': [('is_general', '=', False)]}"/>
-                <field name="consolidated_sheet_ids" widget="many2many_tags" readonly="1" attrs="{'invisible': [('is_general', '=', False)]}"/>
-            </xpath> 
-            
-            <xpath expr="//button[@name='action_cancel_draft']" position="after">
+                <field name="manager_id" invisible="not is_general"/>
+            </xpath>
+            <field name="company_id" position="after">
+                <field name="consolidated_sheet_ids" widget="many2many_tags" readonly="1" invisible="not is_general"/>
+            </field>
+            <field name="location_ids" position="replace"/>
+            <field name="exclude_sublocation" position="replace"/>
+            <field name="responsible_id" position="replace"/>
+            <field name="owner_id" position="replace"/>
+            <xpath expr="//button[@name='action_state_to_done']" position="after">
                 <field name="display_consolid" invisible="1"/>
-                <button string="Intégrer les consolidations" name="update_adjustement" attrs="{'invisible': ['|', ('display_consolid', '=', False), ('state', '!=', 'confirm')]}" type="object" class="oe_highlight"/>
-                <button string="Rapport Excel" name="generate_excel_report" attrs="{'invisible': ['|', ('is_general', '=', False), ('state', '!=', 'done')]}" type="object" class="oe_highlight"/>
-            </xpath>
-            <xpath expr="//button[@name='action_reset_product_qty']" position="attributes">
-                <attribute name="invisible">1</attribute>
-            </xpath>
-            <xpath expr="//button[@name='action_check_serial']" position="attributes">
-                <attribute name="invisible">1</attribute>
+                <button string="Intégrer les consolidations" name="update_adjustement" invisible="not display_consolid or state != 'in_progress'" type="object" class="oe_highlight"/>
+                <button string="Rapport Excel" name="generate_excel_report" invisible="not is_general or state != 'done'" type="object" class="oe_highlight"/>
             </xpath>
             <xpath expr="//field[@name='line_ids']" position="attributes">
-                <attribute name="attrs">{'readonly': ['|', ('is_general', '=', True), ('state', '=', 'done')]}</attribute>
+                <attribute name="readonly">is_general or state == 'done'</attribute>
             </xpath>
-            <xpath expr="//field[@name='location_id']" position="attributes">
-                <attribute name="domain">[('usage', '=', 'internal')]</attribute>
-            </xpath>
-            <xpath expr="//field[@name='line_ids']/tree" position="replace">
-                <tree editable="bottom" decoration-info="product_qty != theoretical_qty" decoration-danger="theoretical_qty &lt; 0">
-                    <field name="number" required="1"/>
-                    <field name="prod_lot_id" invisible="1" />
+            <xpath expr="//field[@name='line_ids']/list" position="replace">
+                <!-- Seule la quantité comptée est modifiable ; pas d'ajout ni de
+                     suppression de ligne depuis la vue (le scanner code-barres et
+                     l'intégration des consolidations ajoutent les lignes côté serveur). -->
+                <list editable="bottom" create="0" delete="0" decoration-info="product_qty != theoretical_qty" decoration-danger="theoretical_qty &lt; 0">
+                    <field name="number" readonly="1"/>
+                    <field name="prod_lot_id" column_invisible="1" />
                     <field name="product_id" readonly="1" />
-                    <field name="product_uom_id" groups="product.group_uom" string="UoM"/>
-                    <field name="location_id" domain="[('id', 'child_of', parent.location_id)]" invisible="1"/>
-                    <field name="package_id" domain="['|', ('location_id','=', False), ('location_id', '=', location_id)]" groups="stock.group_tracking_lot"/>
-                    <field name="partner_id" groups="stock.group_tracking_owner"/>
+                    <field name="product_uom_id" groups="uom.group_uom" string="UoM"/>
+                    <field name="location_id" domain="[('id', 'child_of', parent.location_id)]" column_invisible="1"/>
+                    <field name="package_id" domain="['|', ('location_id','=', False), ('location_id', '=', location_id)]" groups="stock.group_tracking_lot" readonly="1"/>
+                    <field name="partner_id" groups="stock.group_tracking_owner" readonly="1"/>
                     <field name="theoretical_qty" readonly="1"/>
                     <field name="product_qty" />
-                    <field name="state" invisible="True"/>
-                </tree>
+                    <field name="state" column_invisible="1"/>
+                </list>
+            </xpath>
+            <xpath expr="//field[@name='date']" position="attributes">
+                <attribute name="string">Date d'inventaire</attribute>
             </xpath>
         </field>
     </record>

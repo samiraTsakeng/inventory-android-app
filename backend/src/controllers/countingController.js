@@ -212,7 +212,7 @@ class CountingController {
           jsonrpc: "2.0",
           method: "call",
           params: {
-            model: "stock.production.lot",
+            model: "stock.lot",
             method: "search_read",
             args: [[["name", "=", barcode]]],
             kwargs: {

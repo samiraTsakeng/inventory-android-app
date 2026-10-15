@@ -1,12 +1,12 @@
-
 {
     'name': 'Wise inventory',
-    'version': '1.0.0',
+    'version': '18.0.1.0.0',
     'author': 'Christian FOMEKONG',
     'category': 'Wise',
+    'license': 'LGPL-3',
     'summary': "Inventaire à l'aveugle",
     'description': "Gestion de l'inventaire à l'aveugle",
-    'depends': ['stock'],
+    'depends': ['stock', 'stock_inventory_ajustement', 'mrp', 'point_of_sale'],
     'data': [
         'security/security.xml',
         'security/ir.model.access.csv',

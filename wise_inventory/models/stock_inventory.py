@@ -1,14 +1,15 @@
-from odoo import models, fields, api, _
+from odoo import models, fields, api
 from odoo.exceptions import ValidationError
 import io
 import xlsxwriter
 import base64
 
+
 class StockInventory(models.Model):
     _inherit = 'stock.inventory'
 
     location_id = fields.Many2one(comodel_name='stock.location', string='Emplacement Inventorié', readonly=True, required=True, domain=[('usage', '=', 'internal')])
-    
+
     consolidated_sheet_ids = fields.Many2many(comodel_name="consolidation.sheet",
                                           string="Feuilles consolidées",
                                           domain=[('state', '=', 'confirm')])
@@ -17,13 +18,13 @@ class StockInventory(models.Model):
     consolidated = fields.Boolean(string="Consolidé ?", help="Permet de savoir si les feuilles de consolidation ont été intégrées ou pas.", default=False)
     display_consolid = fields.Boolean(string="Toutes les consolidations sont validées ?", default=False, compute='get_consolid',
         help="Permet de savoir si les feuilles de consolidation sont validées ou pas, afin d'afficher le bouton d'intégration de ces feuilles.")
-    
+
     def bulk_consolidation(self):
         for adjustment in self:
             sheet_ids = adjustment.consolidated_sheet_ids
             if not sheet_ids:
                 raise ValidationError("Aucune feuille de consolidation n'a été validée pour cet Ajustement.")
-            
+
             consolidation_dict = {}
             for sheet in sheet_ids:
                 for line in sheet.counting_line_ids:
@@ -43,10 +44,10 @@ class StockInventory(models.Model):
         for adjustment in self:
             consolidation_sheet = adjustment.bulk_consolidation()
             consolidation_dict = {(item.lot_id, item.product_id): item for item in consolidation_sheet}
-            adj_line_dict = {(line.lot_id, line.product_id): line for line in adjustment.line_ids}
-            
+            adj_line_dict = {(line.prod_lot_id, line.product_id): line for line in adjustment.line_ids}
+
             for line in adjustment.line_ids:
-                key = (line.lot_id, line.product_id)
+                key = (line.prod_lot_id, line.product_id)
                 if key not in consolidation_dict:
                     line.product_qty = 0
                 else:
@@ -67,7 +68,7 @@ class StockInventory(models.Model):
 
             adjustment.consolidated = True
             adjustment.display_consolid = False
-    
+
     def add_counting_sheet(self, sheet):
         self.consolidated_sheet_ids += sheet
 
@@ -78,15 +79,14 @@ class StockInventory(models.Model):
             if self.is_general and len(self.env['consolidation.sheet'].search([('stock_inventory_id', '=', self.id), ('state', '=', 'confirm')])) == len(self.consolidated_sheet_ids):
                 self.display_consolid = True
 
-    def action_cancel_draft(self):
+    def action_state_to_draft(self):
         sheet_ids = self.env['counting.sheet'].search([('stock_inventory_id', '=', self.id)])
         for sheet in sheet_ids:
             sheet.write({'state': 'cancel'})
             sheet.unlink()
 
-        return super(StockInventory, self).action_cancel_draft()
-    
-    @api.multi
+        return super(StockInventory, self).action_state_to_draft()
+
     def generate_excel_report(self):
         output = io.BytesIO()
 
@@ -114,7 +114,7 @@ class StockInventory(models.Model):
                 worksheet.write(row, 4, '')
             else:
                 worksheet.write(row, 4, gap, workbook.add_format({'font_color': '#d63447'}))
-                
+
             row += 1
 
         # Fermeture du fichier
@@ -127,16 +127,15 @@ class StockInventory(models.Model):
 
         # Création d'un attachement pour le téléchargement
         attachment = self.env['ir.attachment'].create({
-            'name': 'Report.xlsx',
+            'name': "RAPPORT " + str(self.name) + ".xlsx",
             'datas': file_base64,
-            'datas_fname': "RAPPORT " + str(self.name) + ".xlsx",
             'mimetype': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         })
 
         # Téléchargement
         base_url = self.env['ir.config_parameter'].get_param('web.base.url')
         download_url = '/web/content/' + str(attachment.id) + '?download=true'
-        
+
         return {
             "type": "ir.actions.act_url",
             "url": str(base_url) + str(download_url),
@@ -150,7 +149,7 @@ class StockInventory(models.Model):
         action['domain'] = domain
 
         return action
-    
+
     def consolidation_sheet(self):
         self.ensure_one()
         action = self.env.ref('wise_inventory.consolidation_sheet_action').read()[0]
@@ -158,12 +157,26 @@ class StockInventory(models.Model):
         action['domain'] = domain
 
         return action
-    
-    @api.model
-    def create(self, vals):
-        if 'location_id' in vals and self.env['pos.session'].search([('state', '=', 'opened')]).filtered(lambda x: x.config_id.stock_location_id.id == vals['location_id']):
-            raise ValidationError('Une session de point de vente est ouverte sur cet emplacement. Veuillez la fermer, puis réessayez.')
-        
-        res = super(StockInventory, self).create(vals)
-        
-        return res
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('location_id') and self.env['pos.session'].search([('state', '=', 'opened')]).filtered(lambda x: x.config_id.stock_location_id.id == vals['location_id']):
+                raise ValidationError('Une session de point de vente est ouverte sur cet emplacement. Veuillez la fermer, puis réessayez.')
+            # `location_ids` (champ de la base, masqué dans la vue) est celui
+            # qu'utilise le moteur pour générer les lignes : il suit location_id.
+            if vals.get('location_id'):
+                vals['location_ids'] = [(6, 0, [vals['location_id']])]
+
+        return super(StockInventory, self).create(vals_list)
+
+    def write(self, vals):
+        if vals.get('location_id'):
+            vals['location_ids'] = [(6, 0, [vals['location_id']])]
+        return super().write(vals)
+
+    def post_inventory(self, number=None):
+        records = self
+        if number:
+            records = self[:number]
+        return records.action_state_to_done()

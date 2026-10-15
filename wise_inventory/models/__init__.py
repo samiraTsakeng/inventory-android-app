@@ -7,3 +7,4 @@ from . import general_adjustment
 from . import consolidation_wizard
 from . import stock_picking
 from . import mrp_production
+from . import stock_move
