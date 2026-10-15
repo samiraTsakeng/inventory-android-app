@@ -11,26 +11,34 @@ import 'screens/scanned_items_list_page.dart';
 import 'screens/batch_list_page.dart';
 import 'screens/consolidation_list_page.dart';
 import 'services/auth_service.dart';
+import 'services/sync_service.dart';
+import 'widgets/offline_banner.dart';
 import 'screens/adjustment_action_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Try auto-login on app start
-  bool autoLoginSuccess = false;
+  var autoLogin = AutoLoginResult.noSession;
   try {
-    autoLoginSuccess = await AuthService.autoLogin();
-    print("Auto-login result: $autoLoginSuccess");
+    autoLogin = await AuthService.autoLogin();
+    print("Auto-login result: $autoLogin");
   } catch (e) {
     print("Auto-login error: $e");
   }
 
-  // If auto-login fails, clear session to force login
-  if (!autoLoginSuccess) {
+  // Without network the saved session is kept: the app opens offline and
+  // scanned items stay on the phone. A rejected session was already
+  // cleared by autoLogin.
+  final loggedIn = autoLogin == AutoLoginResult.success ||
+      autoLogin == AutoLoginResult.offline;
+  if (autoLogin == AutoLoginResult.noSession) {
     await AuthService.clearSession();
   }
 
-  runApp(MyApp(initialRoute: autoLoginSuccess ? '/adjustment-entry' : '/'));
+  SyncService.start(startOffline: autoLogin == AutoLoginResult.offline);
+
+  runApp(MyApp(initialRoute: loggedIn ? '/adjustment-entry' : '/'));
 }
 
 class MyApp extends StatelessWidget {
@@ -42,6 +50,8 @@ class MyApp extends StatelessWidget {
     final baseTextTheme = GoogleFonts.interTextTheme();
 
     return MaterialApp(
+      scaffoldMessengerKey: SyncService.messengerKey,
+      builder: (context, child) => OfflineBanner(child: child!),
       debugShowCheckedModeBanner: false,
       title: 'Wise Inventory',
       theme: ThemeData(

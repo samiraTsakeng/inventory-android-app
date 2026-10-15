@@ -4,6 +4,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
 import 'local_storage_service.dart';
 
+enum AutoLoginResult {
+  success,
+  // Saved session kept, server unreachable: the app opens offline.
+  offline,
+  rejected,
+  noSession,
+}
+
+// Odoo refused the credentials (as opposed to a network failure).
+class AuthRejectedException implements Exception {
+  final String message;
+  AuthRejectedException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class AuthService {
   static const String _sessionHostKey = 'session_host';
   static const String _sessionDbKey = 'session_db';
@@ -26,16 +43,15 @@ class AuthService {
     required String password,
   }) async {
     try {
-      // First, get available databases
-      List<String> databases = await _getDatabases(host);
-      print("Available databases: $databases");
-
       String dbName = db.trim();
 
       // If no database provided, use the first available
-      if (dbName.isEmpty && databases.isNotEmpty) {
-        dbName = databases.first;
-        print("Auto-selected database: $dbName");
+      if (dbName.isEmpty) {
+        final databases = await _getDatabases(host);
+        if (databases.isNotEmpty) {
+          dbName = databases.first;
+          print("Auto-selected database: $dbName");
+        }
       }
 
       // If still no database, try to detect
@@ -55,13 +71,23 @@ class AuthService {
           "email": email,
           "password": password,
         }),
+        // Short: at startup without network the app opens offline sooner.
+        timeout: const Duration(seconds: 12),
       );
 
       print("STATUS: ${response.statusCode}");
 
       if (response.statusCode != 200) {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData["message"] ?? "Server error");
+        String? message;
+        try {
+          message = jsonDecode(response.body)["message"];
+        } catch (_) {}
+        // 401: Odoo rejected the credentials. Anything else: the server or
+        // Odoo is unreachable, the saved session stays valid.
+        if (response.statusCode == 401) {
+          throw AuthRejectedException(message ?? "Identifiants refusés");
+        }
+        throw Exception(message ?? "Server error");
       }
 
       final data = jsonDecode(response.body);
@@ -105,53 +131,62 @@ class AuthService {
     }
   }
 
-  // Auto-login using stored credentials
-  static Future<bool> autoLogin() async {
+  // Auto-login using stored credentials.
+  // Without network the saved session is kept and the app opens offline:
+  // scanned items and batches stay on the phone. The session is only
+  // cleared when Odoo explicitly rejects the credentials.
+  static Future<AutoLoginResult> autoLogin() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
       if (!isLoggedIn) {
         print ("No saved session found");
-        return false;
+        return AutoLoginResult.noSession;
       }
       final session = await getFullSession();
       if (session == null) {
         print("session data incomplete");
-        return false;
+        return AutoLoginResult.noSession;
       }
 
-      final host = session['host'];
-      final db = session['db'] ?? '';
-      final email = session['email'];
-      final password = session['password'];
-
-      if (host == null || email == null || password == null) {
-        print("Missing credentials");
-        return false;
-      }
-      print("attempting auto login for: $email");
-
-      // Try to login with stored credentials
-
-      final success = await login(
-        host: host,
-        db: db,
-        email: email,
-        password: password,
-      );
+      print("attempting auto login for: ${session['email']}");
+      final success = await reauthenticate(rethrowErrors: true);
 
       if (success) {
         print("auto-login successful!");
-        return true;
+        return AutoLoginResult.success;
       } else {
         print("Auto-login failed, clearing session");
         await clearSession();
-        return false;
+        return AutoLoginResult.rejected;
       }
-    } catch (e) {
-      print("Auto-login error: $e");
+    } on AuthRejectedException catch (e) {
+      print("Auto-login rejected: $e");
       await clearSession();
+      return AutoLoginResult.rejected;
+    } catch (e) {
+      print("Auto-login offline: $e");
+      return AutoLoginResult.offline;
+    }
+  }
+
+  // Logs in again with the saved credentials, without touching local data.
+  // Used at startup, when the network comes back and when the backend
+  // answers 401 (it restarted and lost the session).
+  static Future<bool> reauthenticate({bool rethrowErrors = false}) async {
+    try {
+      final session = await getFullSession();
+      if (session == null) return false;
+      return await login(
+        host: session['host']!,
+        db: session['db'] ?? '',
+        email: session['email']!,
+        password: session['password']!,
+      );
+    } catch (e) {
+      if (rethrowErrors) rethrow;
+      print("Re-authentication failed: $e");
       return false;
     }
   }

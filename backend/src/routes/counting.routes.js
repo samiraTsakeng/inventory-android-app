@@ -43,4 +43,10 @@ router.post('/live-items/:sheet_id/remove', CountingController.removeLiveItem);
 router.post('/check-erp-scan', CountingController.checkAlreadyInErp);
 // POST /counting/check-erp-scans — same check for a list of barcodes
 router.post('/check-erp-scans', CountingController.checkAlreadyInErpBatch);
+
+// ✅ Offline mode
+// GET /counting/sheet-lots/:sheet_id — numbers to keep on the phone
+router.get('/sheet-lots/:sheet_id', CountingController.getSheetLots);
+// POST /counting/lookup-products — resolve numbers scanned offline
+router.post('/lookup-products', CountingController.lookupProducts);
 module.exports = router;

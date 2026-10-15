@@ -7,6 +7,8 @@ import '../utils/constants.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/sheet_cache_service.dart';
+import '../services/sync_service.dart';
 import 'scanned_items_list_page.dart';
 import '../models/batch.dart';
 import '../services/batch_storage_service.dart';
@@ -53,6 +55,10 @@ class _ScanningPageState extends State<ScanningPage>
   // Version of the shared list last received; polls return nothing new
   // while the server is still at this version.
   int? _liveVersion;
+  bool _liveSyncRunning = false;
+
+  // Numbers of this sheet kept on the phone for offline scanning.
+  int _offlineCount = 0;
 
   // ✅ Track last scan time per barcode (to detect accidental re-scans)
   final Map<String, DateTime> _lastScanTime = {};
@@ -66,8 +72,22 @@ class _ScanningPageState extends State<ScanningPage>
     _isMounted = true;
     WidgetsBinding.instance.addObserver(this);
     _loadSavedItems();
+    _prepareOffline();
     _liveSyncTimer =
         Timer.periodic(const Duration(seconds: 4), (_) => _syncLiveSession());
+  }
+
+  // Numbers of the sheet available on the phone (offline scanning):
+  // shows what is already there, then refreshes it when online.
+  Future<void> _prepareOffline() async {
+    final cached = await SheetCacheService.count(widget.countingSheetId);
+    if (_isMounted) setState(() => _offlineCount = cached);
+    if (!SyncService.online.value) return;
+
+    final refreshed = await SheetCacheService.refresh(widget.countingSheetId);
+    if (refreshed != null && _isMounted) {
+      setState(() => _offlineCount = refreshed);
+    }
   }
 
   @override
@@ -132,7 +152,21 @@ class _ScanningPageState extends State<ScanningPage>
   }
 
   Future<void> _syncLiveSession() async {
-    if (!_isMounted) return;
+    // Offline: scans stay queued in _pendingDeltas and go out once the
+    // connection is back. One sync at a time, so slow answers don't pile up.
+    if (!_isMounted || _liveSyncRunning || !SyncService.online.value) return;
+    _liveSyncRunning = true;
+    try {
+      await _doSyncLiveSession();
+    } finally {
+      _liveSyncRunning = false;
+    }
+  }
+
+  Future<void> _doSyncLiveSession() async {
+    // A list saved into a batch while offline must be cleared on the
+    // server before new scans are pushed or the shared list is read.
+    await CountingService.replayPendingClears();
 
     if (_pendingDeltas.isNotEmpty) {
       final barcodes = List<String>.from(_pendingDeltas.keys);
@@ -212,6 +246,12 @@ class _ScanningPageState extends State<ScanningPage>
   }
 
   Future<void> _pushScanOrQueue(ScannedItem item, int addedQuantity) async {
+    // Offline: queue right away instead of waiting for a timeout.
+    if (!SyncService.online.value) {
+      _pendingDeltas[item.barcode] =
+          (_pendingDeltas[item.barcode] ?? 0) + addedQuantity;
+      return;
+    }
     final serverItems = await CountingService.pushLiveScan(
       countingSheetId: widget.countingSheetId,
       item: {
@@ -390,6 +430,9 @@ class _ScanningPageState extends State<ScanningPage>
             duration: const Duration(milliseconds: 800),
           ),
         );
+      } else if (lookup.offline) {
+        // Not "not found": it couldn't be checked.
+        await _addOfflineItem(barcode);
       } else {
         setState(() {
           isLookingUp = false;
@@ -405,6 +448,47 @@ class _ScanningPageState extends State<ScanningPage>
         );
       }
     }
+  }
+
+  // Offline and the number isn't among the sheet's numbers kept on the
+  // phone: it's kept "to verify" and identified when the list is sent
+  // (an unknown number then blocks the send so it can be removed).
+  Future<void> _addOfflineItem(String barcode) async {
+    final qty = await _showQuantityDialog('Hors ligne : numéro à vérifier', barcode);
+    if (!_isMounted) return;
+    if (qty == null) {
+      setState(() {
+        isLookingUp = false;
+        isScanning = true;
+      });
+      return;
+    }
+
+    final newItem = ScannedItem(
+      barcode: barcode,
+      productName: 'À vérifier (hors ligne)',
+      productId: 0,
+      quantity: qty,
+      lotNumber: barcode,
+      tracking: ScannedItem.pendingTracking,
+    );
+
+    setState(() {
+      scannedItems.add(newItem);
+      isLookingUp = false;
+      isScanning = true;
+    });
+    _lastScanTime[barcode] = DateTime.now();
+    _saveItems();
+    _pushScanOrQueue(newItem, qty);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Hors ligne : $barcode ajouté, vérifié à l\'envoi'),
+        backgroundColor: AppColors.warningColor,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _handleDuplicateScan(int existingIndex, String barcode) async {
@@ -897,6 +981,22 @@ class _ScanningPageState extends State<ScanningPage>
           ),
         ),
         actions: [
+          // Green when the sheet's numbers are on the phone (scanning
+          // works without network).
+          Tooltip(
+            message: _offlineCount > 0
+                ? '$_offlineCount numéros disponibles hors ligne'
+                : 'Numéros non disponibles hors ligne',
+            triggerMode: TooltipTriggerMode.tap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Icon(
+                _offlineCount > 0 ? Icons.offline_pin : Icons.cloud_off,
+                size: 20,
+                color: _offlineCount > 0 ? Colors.greenAccent : Colors.white54,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.create_sharp, size: 22, color: Colors.white),
             onPressed: _addManualBarcode,

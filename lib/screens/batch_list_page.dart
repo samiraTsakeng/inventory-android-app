@@ -3,6 +3,7 @@ import '../models/batch.dart';
 import '../services/batch_storage_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/sync_service.dart';
 import '../models/scanned_item.dart';
 import 'scanned_items_list_page.dart';
 
@@ -35,11 +36,25 @@ class _BatchesListPageState extends State<BatchesListPage> {
   void initState() {
     super.initState();
     _loadBatches();
+    SyncService.pendingBatches.addListener(_onBatchesChanged);
+  }
+
+  @override
+  void dispose() {
+    SyncService.pendingBatches.removeListener(_onBatchesChanged);
+    super.dispose();
+  }
+
+  // Batches sent automatically when the connection came back: show their
+  // new state, unless the user is busy on this page.
+  void _onBatchesChanged() {
+    if (mounted && !_isSyncing && !_isSelectionMode) _loadBatches();
   }
 
   Future<void> _loadBatches() async {
     setState(() => _isLoading = true);
     final batches = await BatchStorageService.getBatches();
+    if (!mounted) return;
     // Filter batches for current counting sheet
     _batches = batches.where((b) => b.countingSheetId == widget.countingSheetId).toList();
     _selectedBatches.clear();

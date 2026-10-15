@@ -1,4 +1,8 @@
 class ScannedItem {
+  // Scanned offline and unknown to the phone: product not identified yet,
+  // checked against Odoo when the list or batch is sent.
+  static const String pendingTracking = 'pending';
+
   final String barcode;
   String productName;
   int productId;
@@ -18,6 +22,8 @@ class ScannedItem {
     this.isSynced = false,
     this.tracking = 'none',
   });
+
+  bool get isPendingLookup => tracking == pendingTracking;
 
   Map<String, dynamic> toJson() => {
     'barcode': barcode,

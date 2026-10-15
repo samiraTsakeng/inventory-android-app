@@ -83,7 +83,11 @@ class AuthController {
 
     } catch (error) {
       console.error("LOGIN ERROR:", error.message);
-      return res.status(401).json({
+      // 401 only when Odoo rejected the credentials: the app then forgets
+      // the saved session. Any other failure (Odoo unreachable...) is a 502,
+      // so the app keeps the session and works offline.
+      const rejected = /wrong credentials|No valid database/.test(error.message);
+      return res.status(rejected ? 401 : 502).json({
         success: false,
         message: error.message
       });

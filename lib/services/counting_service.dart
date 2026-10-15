@@ -1,25 +1,43 @@
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 import '../models/scanned_item.dart';
 import 'local_storage_service.dart';
+import 'sheet_cache_service.dart';
+import 'sync_service.dart';
 
 class CountingService {
   // OFFLINE-FIRST: Check cache, then API.
-  // One network round trip per scan: the product and whether this number
-  // is already in the ERP for the sheet come back together.
-  static Future<({Map<String, dynamic>? product, bool alreadyInErp})>
+  // [offline] is true when the number is unknown to the phone and the
+  // server couldn't be asked: the caller may keep it "to verify".
+  static Future<({Map<String, dynamic>? product, bool alreadyInErp, bool offline})>
       lookupProduct(String barcode, {required int countingSheetId}) async {
+    // 1. Numbers of the sheet kept on the phone: no network at all.
+    final sheetLot = await SheetCacheService.findLot(countingSheetId, barcode);
+    if (sheetLot != null) {
+      final sent = await SheetCacheService.isSent(countingSheetId, barcode);
+      return (product: sheetLot, alreadyInErp: sent, offline: false);
+    }
+
     try {
+      // 2. Number already looked up on this phone.
       final cachedProduct = await LocalStorageService.getCachedProduct(barcode);
       if (cachedProduct != null) {
         final alreadyInErp = await isAlreadyInErp(
           countingSheetId: countingSheetId,
           barcode: barcode,
         );
-        return (product: cachedProduct, alreadyInErp: alreadyInErp);
+        return (product: cachedProduct, alreadyInErp: alreadyInErp, offline: false);
       }
 
+      // 3. Unknown here and no network: don't wait for a timeout.
+      if (!SyncService.online.value) {
+        return (product: null, alreadyInErp: false, offline: true);
+      }
+
+      // 4. Ask the server: one round trip returns the product and whether
+      // this number is already in the ERP for the sheet.
       final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/lookup-product'),
         headers: {"Content-Type": "application/json"},
@@ -27,6 +45,7 @@ class CountingService {
           'barcode': barcode,
           'counting_sheet_id': countingSheetId,
         }),
+        timeout: ApiConfig.lookupTimeout,
       );
 
       if (response.statusCode == 200) {
@@ -35,14 +54,39 @@ class CountingService {
         if (data['success'] == true && data['product'] != null) {
           final product = Map<String, dynamic>.from(data['product']);
           await LocalStorageService.cacheProduct(barcode, product);
-          return (product: product, alreadyInErp: alreadyInErp);
+          return (product: product, alreadyInErp: alreadyInErp, offline: false);
         }
-        return (product: null, alreadyInErp: alreadyInErp);
+        return (product: null, alreadyInErp: alreadyInErp, offline: false);
       }
-      return (product: null, alreadyInErp: false);
+      return (product: null, alreadyInErp: false, offline: false);
     } catch (e) {
+      // Network failure: the number couldn't be checked.
       print("Product lookup error: $e");
-      return (product: null, alreadyInErp: false);
+      return (product: null, alreadyInErp: false, offline: true);
+    }
+  }
+
+  // Identifies numbers scanned offline ("to verify") in one call.
+  // Returns number -> product for those found, or null if the server
+  // couldn't be reached.
+  static Future<Map<String, Map<String, dynamic>>?> _resolvePending(
+      List<String> barcodes) async {
+    try {
+      final response = await ApiClient.post(
+        Uri.parse('${ApiConfig.baseUrl}/counting/lookup-products'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({'barcodes': barcodes}),
+      );
+      if (response.statusCode != 200) return null;
+      final data = jsonDecode(response.body);
+      if (data['success'] != true || data['products'] is! Map) return null;
+      return {
+        for (final entry in (data['products'] as Map).entries)
+          entry.key as String: Map<String, dynamic>.from(entry.value),
+      };
+    } catch (e) {
+      print("Resolve pending error: $e");
+      return null;
     }
   }
 
@@ -100,17 +144,59 @@ class CountingService {
         return const ApiResult.error('Aucun article à envoyer');
       }
 
+      // Numbers scanned offline are identified first. If one doesn't exist
+      // in Odoo nothing is sent, so the user can remove it and resend.
+      var toSend = items;
+      final pending = items
+          .where((item) => item.isPendingLookup)
+          .map((item) => item.barcode)
+          .toSet()
+          .toList();
+      if (pending.isNotEmpty) {
+        final resolved = await _resolvePending(pending);
+        if (resolved == null) {
+          return const ApiResult.error(
+              'Impossible de vérifier les numéros scannés hors ligne. Réessayez.');
+        }
+        final unknown = pending.where((b) => !resolved.containsKey(b)).toList();
+        if (unknown.isNotEmpty) {
+          return ApiResult.error(
+              '${unknown.length} numéro(s) introuvable(s) dans Odoo : '
+              '${unknown.take(5).join(', ')}. '
+              'Supprimez-les de la liste puis renvoyez.');
+        }
+        toSend = items.map((item) {
+          final product = resolved[item.barcode];
+          if (!item.isPendingLookup || product == null) return item;
+          return ScannedItem(
+            barcode: item.barcode,
+            productName: product['name'] ?? '',
+            productId: product['id'],
+            quantity: item.quantity,
+            lotNumber: product['lot_name'],
+            lotId: product['lot_id'],
+            tracking: product['tracking'] ?? 'serial',
+          );
+        }).toList();
+      }
+
       final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/submit-scans'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           'counting_sheet_id': countingSheetId,
           'adjustment_id': adjustmentId,
-          'items': items.map((e) => e.toJson()).toList(),
+          'items': toSend.map((e) => e.toJson()).toList(),
         }),
         timeout: ApiConfig.submitTimeout,
       );
-      return ApiResult.fromResponse(response);
+      final result = ApiResult.fromResponse(response);
+      if (result.success) {
+        // A rescan of these numbers is now flagged even offline.
+        await SheetCacheService.markSent(
+            countingSheetId, toSend.map((item) => item.lotNumber ?? item.barcode));
+      }
+      return result;
     } catch (e) {
       print("Submit error: $e");
       return ApiResult.fromException(e);
@@ -176,7 +262,37 @@ class CountingService {
     }
   }
 
+  // A clear that failed (offline) is remembered and replayed before any
+  // other live sync, otherwise the old shared list would come back on the
+  // phone once the connection returns.
+  static const String _pendingClearsKey = 'pending_live_clears';
+  static Future<void>? _replaying;
+
   static Future<bool> clearLiveItems(int countingSheetId) async {
+    final ok = await _postClear(countingSheetId);
+    if (!ok) await _setPendingClear(countingSheetId, true);
+    return ok;
+  }
+
+  // Replays the clears still pending. Concurrent callers share one run, so
+  // a scanning page can await it before pushing its queued scans.
+  static Future<void> replayPendingClears() {
+    return _replaying ??= _doReplayPendingClears()
+        .whenComplete(() => _replaying = null);
+  }
+
+  static Future<void> _doReplayPendingClears() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = prefs.getStringList(_pendingClearsKey) ?? const [];
+    for (final id in pending) {
+      final sheetId = int.tryParse(id);
+      if (sheetId == null || await _postClear(sheetId)) {
+        await _setPendingClear(sheetId ?? -1, false, raw: id);
+      }
+    }
+  }
+
+  static Future<bool> _postClear(int countingSheetId) async {
     try {
       final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId/clear'),
@@ -186,6 +302,18 @@ class CountingService {
       print("Clear live items error: $e");
       return false;
     }
+  }
+
+  static Future<void> _setPendingClear(int sheetId, bool pending, {String? raw}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = (prefs.getStringList(_pendingClearsKey) ?? []).toSet();
+    final id = raw ?? '$sheetId';
+    if (pending) {
+      ids.add(id);
+    } else {
+      ids.remove(id);
+    }
+    await prefs.setStringList(_pendingClearsKey, ids.toList());
   }
 
   // FIX #5: remove a single barcode from the shared live session —
@@ -214,6 +342,10 @@ class CountingService {
     required int countingSheetId,
     required String barcode,
   }) async {
+    // Offline: answer from what the phone knows instead of waiting.
+    if (!SyncService.online.value) {
+      return SheetCacheService.isSent(countingSheetId, barcode);
+    }
     try {
       final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scan'),

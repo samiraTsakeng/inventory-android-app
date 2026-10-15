@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/sheet_cache_service.dart';
+import '../services/sync_service.dart';
 import 'scanning_page.dart';
 
 class FeuilleListPage extends StatefulWidget {
@@ -51,6 +53,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           feuilles = data;
           isLoading = false;
         });
+        _downloadForOffline(data);
       } else {
         setState(() {
           feuilles = [];
@@ -67,6 +70,17 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     // After sheets are (re)loaded, check local storage for any
     // not-yet-saved scanned items for each one.
     await _loadPendingCounts();
+  }
+
+  // Keeps the numbers of the sheets in progress on the phone, so they can
+  // be scanned without network. Runs in the background, best effort.
+  void _downloadForOffline(List sheets) {
+    if (!SyncService.online.value) return;
+    for (final sheet in sheets) {
+      if (sheet['state'] == 'progress' && sheet['id'] is int) {
+        SheetCacheService.refresh(sheet['id']);
+      }
+    }
   }
 
   Future<void> _loadPendingCounts() async {

@@ -143,6 +143,14 @@ class LocalStorageService {
         await prefs.remove(key);
       }
 
+      // Offline copies: lists and the sheets' numbers.
+      final offlineKeys = allKeys.where((key) =>
+          key.startsWith('$_responseCacheKey${sessionId}_') ||
+          key.startsWith('sheet_lots_${sessionId}_'));
+      for (final key in offlineKeys.toList()) {
+        await prefs.remove(key);
+      }
+
       // Reset session ID for next login
       await prefs.remove(_sessionIdKey);
       await prefs.remove(_sheetIdKey);
@@ -150,6 +158,32 @@ class LocalStorageService {
       print("Cleared ALL session data for: $sessionId");
     } catch (e) {
       print("Error clearing session data: $e");
+    }
+  }
+
+  // Last successful server answer for a list (adjustments, sheets), so the
+  // app can still be navigated down to the scanning page offline.
+  static const String _responseCacheKey = 'response_cache_';
+
+  static Future<void> cacheResponse(String name, Object data) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = await getSessionId();
+      await prefs.setString('$_responseCacheKey${sessionId}_$name', jsonEncode(data));
+    } catch (e) {
+      print("Error caching response $name: $e");
+    }
+  }
+
+  static Future<dynamic> getCachedResponse(String name) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = await getSessionId();
+      final raw = prefs.getString('$_responseCacheKey${sessionId}_$name');
+      return raw == null ? null : jsonDecode(raw);
+    } catch (e) {
+      print("Error reading cached response $name: $e");
+      return null;
     }
   }
 

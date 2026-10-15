@@ -208,7 +208,11 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       return;
     }
 
-    final validItems = _items.where((item) => item.productId != 0).toList();
+    // Numbers scanned offline have no product yet: they're identified by
+    // submitScannedItems, so they are sent too.
+    final validItems = _items
+        .where((item) => item.productId != 0 || item.isPendingLookup)
+        .toList();
     if (validItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Aucun produit valide à envoyer')),

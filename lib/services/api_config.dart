@@ -3,6 +3,8 @@ class ApiConfig {
 
   // Default network timeout; long operations pass their own.
   static const Duration timeout = Duration(seconds: 20);
+  // A scan shouldn't wait longer: past this the number is kept "to verify".
+  static const Duration lookupTimeout = Duration(seconds: 8);
   // Sending a batch creates many lines in Odoo.
   static const Duration submitTimeout = Duration(seconds: 90);
   // Full product download at login.

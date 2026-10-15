@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/batch.dart';
 import '../models/scanned_item.dart';
 import 'local_storage_service.dart';
+import 'sync_service.dart';
 
 class BatchStorageService {
   // Batches are stored per account (same session id as the scanned items),
@@ -109,6 +110,7 @@ class BatchStorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(await _key());
     _barcodeIndex = null;
+    SyncService.pendingBatches.value = 0;
   }
 
   static Future<void> _write(List<Batch> batches) async {
@@ -116,5 +118,6 @@ class BatchStorageService {
     final batchesJson = batches.map((b) => b.toJson()).toList();
     await prefs.setString(await _key(), jsonEncode(batchesJson));
     _barcodeIndex = null;
+    SyncService.pendingBatches.value = batches.where((b) => !b.isSynced).length;
   }
 }

@@ -449,6 +449,111 @@ class CountingController {
     }
   }
 
+  // GET /counting/sheet-lots/:sheet_id
+  // Offline scanning: every lot/serial number in stock in the inventoried
+  // location of the sheet's adjustment (with its product), plus the numbers
+  // already sent to the ERP for this sheet. The app keeps it on the phone.
+  static async getSheetLots(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({ success: false, message: "Not authenticated" });
+      }
+
+      const sheetId = parseInt(req.params.sheet_id);
+      const [sheet] = await odooCall(session, "counting.sheet", "read",
+        [[sheetId], ["stock_inventory_id", "zone_id"]]);
+      if (!sheet) {
+        return res.status(404).json({ success: false, message: "Feuille introuvable" });
+      }
+
+      // The adjustment's location rather than the zone's: an item found in
+      // the wrong zone of the same location is still recognized offline.
+      const [inventory] = await odooCall(session, "stock.inventory", "read",
+        [[sheet.stock_inventory_id[0]], ["location_id"]]);
+      const locationId = inventory?.location_id?.[0];
+      if (!locationId) {
+        return res.status(400).json({ success: false, message: "Emplacement de l'ajustement introuvable" });
+      }
+
+      const [quants, lines] = await Promise.all([
+        odooCall(session, "stock.quant", "web_search_read", [], {
+          domain: [["location_id", "child_of", locationId], ["lot_id", "!=", false], ["quantity", ">", 0]],
+          specification: {
+            lot_id: { fields: { name: {} } },
+            product_id: { fields: { name: {}, tracking: {} } }
+          },
+          limit: 200000
+        }),
+        odooCall(session, "counting.sheet.line", "search_read",
+          [[["sheet_id", "=", sheetId]]], { fields: ["number"] })
+      ]);
+
+      // One entry per number (a lot can sit in several quants).
+      const lots = {};
+      for (const quant of quants?.records || []) {
+        const lot = quant.lot_id;
+        const product = quant.product_id;
+        if (!lot?.name || !product?.id || lots[lot.name]) continue;
+        lots[lot.name] = {
+          id: product.id,
+          name: product.name,
+          lot_id: lot.id,
+          lot_name: lot.name,
+          tracking: product.tracking || 'serial'
+        };
+      }
+
+      console.log(`Sheet ${sheetId}: ${Object.keys(lots).length} lots for offline use`);
+      return res.json({
+        success: true,
+        lots: Object.values(lots),
+        sent: (lines || []).map((l) => l.number).filter(Boolean)
+      });
+    } catch (error) {
+      console.error("Get sheet lots error:", error.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // POST /counting/lookup-products
+  // Resolves numbers scanned offline (not in the phone's cache) in one call.
+  // Returns { products: { <number>: product } } for the numbers found.
+  static async lookupProducts(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({ success: false, message: "Not authenticated" });
+      }
+
+      const { barcodes } = req.body;
+      if (!Array.isArray(barcodes) || barcodes.length === 0) {
+        return res.json({ success: true, products: {} });
+      }
+
+      const data = await odooCall(session, "stock.lot", "web_search_read", [], {
+        domain: [["name", "in", barcodes]],
+        specification: { name: {}, product_id: { fields: { name: {}, tracking: {} } } }
+      });
+
+      const products = {};
+      for (const lot of data?.records || []) {
+        if (!lot.product_id?.id || products[lot.name]) continue;
+        products[lot.name] = {
+          id: lot.product_id.id,
+          name: lot.product_id.name,
+          lot_id: lot.id,
+          lot_name: lot.name,
+          tracking: lot.product_id.tracking || 'serial'
+        };
+      }
+      return res.json({ success: true, products });
+    } catch (error) {
+      console.error("Lookup products error:", error.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
   // Submit scanned items to counting sheet
   static async submitScans(req, res) {
     try {

@@ -48,12 +48,21 @@ class ApiResult {
 // waiting forever. A timeout throws an Exception with a readable message,
 // handled by callers like any other network error.
 class ApiClient {
+  // Set by SyncService: called with true when the backend answered, false
+  // when it could not be reached. Drives the offline mode.
+  static void Function(bool online)? onNetworkStatus;
+
+  // Set at startup: logs in again with the saved credentials. Used when the
+  // backend answers 401 (it restarted and lost the session).
+  static Future<bool> Function()? reauthenticate;
+  static Future<bool>? _reauthInProgress;
+
   static Future<http.Response> get(
     Uri url, {
     Map<String, String>? headers,
     Duration? timeout,
   }) =>
-      _withTimeout(http.get(url, headers: headers), timeout);
+      _send(url, () => http.get(url, headers: headers), timeout);
 
   static Future<http.Response> post(
     Uri url, {
@@ -61,14 +70,41 @@ class ApiClient {
     Object? body,
     Duration? timeout,
   }) =>
-      _withTimeout(http.post(url, headers: headers, body: body), timeout);
+      _send(url, () => http.post(url, headers: headers, body: body), timeout);
 
-  static Future<http.Response> _withTimeout(
-      Future<http.Response> request, Duration? timeout) {
-    return request.timeout(
-      timeout ?? ApiConfig.timeout,
-      onTimeout: () =>
-          throw Exception('Le serveur ne répond pas (délai dépassé)'),
-    );
+  static Future<http.Response> _send(Uri url,
+      Future<http.Response> Function() request, Duration? timeout) async {
+    // Calls made directly to Odoo (database list) say nothing about the
+    // backend, so they don't change the online state.
+    final isBackend = url.toString().startsWith(ApiConfig.baseUrl);
+    var response = await _attempt(request, timeout, isBackend);
+
+    if (isBackend &&
+        response.statusCode == 401 &&
+        url.toString() != ApiConfig.login &&
+        reauthenticate != null) {
+      // Concurrent 401s share one login.
+      final ok = await (_reauthInProgress ??= reauthenticate!()
+          .whenComplete(() => _reauthInProgress = null));
+      if (ok) response = await _attempt(request, timeout, isBackend);
+    }
+    return response;
+  }
+
+  static Future<http.Response> _attempt(
+      Future<http.Response> Function() request,
+      Duration? timeout,
+      bool isBackend) async {
+    try {
+      final response = await request().timeout(timeout ?? ApiConfig.timeout);
+      if (isBackend) onNetworkStatus?.call(true);
+      return response;
+    } on TimeoutException {
+      if (isBackend) onNetworkStatus?.call(false);
+      throw Exception('Le serveur ne répond pas (délai dépassé)');
+    } catch (_) {
+      if (isBackend) onNetworkStatus?.call(false);
+      rethrow;
+    }
   }
 }
