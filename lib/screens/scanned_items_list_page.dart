@@ -263,7 +263,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
 
       if (result.success && mounted) {
         if (widget.batchId != null) {
-          await BatchStorageService.markBatchAsSynced(widget.batchId!);
+          await BatchStorageService.deleteSentBatch(widget.batchId!);
         } else {
           // ✅ FIX #1: after a successful ERP send, wipe the list completely
           // (local storage + shared live session) so nothing can be

@@ -77,18 +77,12 @@ class _ScanningPageState extends State<ScanningPage>
         Timer.periodic(const Duration(seconds: 4), (_) => _syncLiveSession());
   }
 
-  // Numbers of the sheet available on the phone (offline scanning):
-  // shows what is already there, then refreshes it when online.
+  // Numbers of the adjustment available on the phone (offline scanning).
+  // Only shown: they are downloaded by "Préparer le hors ligne", never in
+  // the background.
   Future<void> _prepareOffline() async {
     final cached = await SheetCacheService.info(widget.adjustmentId);
     if (_isMounted) setState(() => _offlineCount = cached.count);
-    if (!SyncService.online.value) return;
-
-    final refreshed = await SheetCacheService.refresh(
-        widget.countingSheetId, widget.adjustmentId);
-    if (refreshed != null && _isMounted) {
-      setState(() => _offlineCount = refreshed);
-    }
   }
 
   @override
@@ -988,7 +982,7 @@ class _ScanningPageState extends State<ScanningPage>
           Tooltip(
             message: _offlineCount > 0
                 ? '$_offlineCount numéros disponibles hors ligne'
-                : 'Numéros non disponibles hors ligne',
+                : 'Numéros non disponibles hors ligne : utilisez « Préparer le hors ligne »',
             triggerMode: TooltipTriggerMode.tap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),

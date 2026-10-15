@@ -10,10 +10,6 @@ class BatchStorageService {
   // so another user on the same phone neither sees nor sends them.
   static const String _batchesKey = 'saved_batches';
 
-  // Synced batches are already in the ERP; they're kept this long for the
-  // list page, then dropped so the stored JSON doesn't grow forever.
-  static const Duration _syncedRetention = Duration(days: 30);
-
   // countingSheetId -> barcodes present in saved batches. Built on first
   // use and reset on every write, so a scan doesn't decode every batch.
   static Map<int, Set<String>>? _barcodeIndex;
@@ -38,11 +34,18 @@ class BatchStorageService {
   }
 
   static Future<void> saveBatch(Batch batch) async {
-    final cutoff = DateTime.now().subtract(_syncedRetention);
     final batches = await getBatches();
-    batches.removeWhere((b) => b.isSynced && b.createdAt.isBefore(cutoff));
     batches.add(batch);
     await _write(batches);
+  }
+
+  // Batches kept as "synced" by earlier versions of the app: their data is
+  // in the ERP, so they are dropped (called at startup).
+  static Future<void> purgeSent() async {
+    final batches = await getBatches();
+    final before = batches.length;
+    batches.removeWhere((b) => b.isSynced);
+    if (batches.length != before) await _write(batches);
   }
 
   static Future<List<Batch>> getBatches() async {
@@ -83,14 +86,10 @@ class BatchStorageService {
     await _write(batches);
   }
 
-  static Future<void> markBatchAsSynced(String batchId) async {
-    final batches = await getBatches();
-    final index = batches.indexWhere((b) => b.id == batchId);
-    if (index != -1) {
-      batches[index].isSynced = true;
-      await _write(batches);
-    }
-  }
+  // Called once the ERP accepted the batch: its data is deleted from the
+  // phone, so it can't be sent twice and doesn't pile up. A rescan of its
+  // numbers is still flagged "déjà envoyé" (SheetCacheService.markSent).
+  static Future<void> deleteSentBatch(String batchId) => removeBatch(batchId);
 
   // ✅ NEW: replace the items of a saved batch (used when editing
   // quantities/deleting items from the scanned-items list opened from a

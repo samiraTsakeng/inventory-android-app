@@ -21,7 +21,18 @@ class OfflineBanner extends StatelessWidget {
             if (!online)
               Material(
                 color: AppColors.warningColor,
-                child: SafeArea(
+                child: InkWell(
+                  // The app never polls the server: the user asks for a
+                  // new connection test here.
+                  onTap: () async {
+                    final back = await SyncService.checkConnection();
+                    if (!back) {
+                      SyncService.messengerKey.currentState?.showSnackBar(
+                        const SnackBar(content: Text('Toujours hors ligne')),
+                      );
+                    }
+                  },
+                  child: SafeArea(
                   bottom: false,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -44,9 +55,16 @@ class OfflineBanner extends StatelessWidget {
                             ),
                           ),
                         ),
+                        const Icon(Icons.refresh, size: 16, color: Colors.white),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Réessayer',
+                          style: TextStyle(color: Colors.white, fontSize: 11),
+                        ),
                       ],
                     ),
                   ),
+                ),
                 ),
               ),
             Expanded(

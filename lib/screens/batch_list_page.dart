@@ -252,13 +252,13 @@ class _BatchesListPageState extends State<BatchesListPage> {
       );
 
       if (result.success) {
-        await BatchStorageService.markBatchAsSynced(batch.id);
+        await BatchStorageService.deleteSentBatch(batch.id);
         _replaySheetActions();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Lot synchronisé avec succès !'),
+              content: Text('Lot envoyé à Odoo et retiré du téléphone'),
               backgroundColor: Colors.green,
             ),
           );
@@ -316,7 +316,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
         );
 
         if (result.success) {
-          await BatchStorageService.markBatchAsSynced(batch.id);
+          await BatchStorageService.deleteSentBatch(batch.id);
           successCount++;
         } else {
           failCount++;
@@ -336,8 +336,8 @@ class _BatchesListPageState extends State<BatchesListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(firstError == null
-              ? ' $successCount lots synchronisés, $failCount échoués'
-              : ' $successCount lots synchronisés, $failCount échoués\n$firstError'),
+              ? ' $successCount lot(s) envoyé(s) et retiré(s) du téléphone, $failCount en échec'
+              : ' $successCount lot(s) envoyé(s) et retiré(s) du téléphone, $failCount en échec\n$firstError'),
           backgroundColor: failCount > 0 ? Colors.orange : Colors.green,
           duration: Duration(seconds: failCount > 0 ? 6 : 4),
         ),

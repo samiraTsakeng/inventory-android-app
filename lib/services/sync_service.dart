@@ -7,10 +7,11 @@ import 'counting_service.dart';
 import 'batch_storage_service.dart';
 import 'offline_actions_service.dart';
 
-// Offline mode: knows whether the backend is reachable (from every API
-// call), checks again periodically while it isn't, and when it comes back
-// sends what was done offline, sheet by sheet. A sheet can also be sent
-// by hand (syncSheet).
+// Offline mode: knows whether the backend is reachable, from the answers
+// to the calls the user triggers. Nothing is sent and nothing polls the
+// server on its own: work done offline goes out only when the user taps
+// "Envoyer" (one sheet) or "Tout envoyer", sheet by sheet; the connection
+// is retested when the user taps the offline banner.
 class SyncService {
   // false while the backend can't be reached.
   static final ValueNotifier<bool> online = ValueNotifier(true);
@@ -24,53 +25,50 @@ class SyncService {
   // reload the states Odoo now has.
   static final ValueNotifier<int> revision = ValueNotifier(0);
 
-  static const Duration _probeInterval = Duration(seconds: 15);
-  static Timer? _probeTimer;
   static Future<void>? _flushing;
 
   // Called once at startup, before runApp.
   static void start({required bool startOffline}) {
     ApiClient.onNetworkStatus = _setOnline;
     ApiClient.reauthenticate = AuthService.reauthenticate;
-    refreshPendingCount();
-    if (startOffline) {
-      _setOnline(false);
-    } else {
-      // Work left from a previous offline session (app closed before the
-      // connection came back) is replayed as soon as the app is up.
-      Future.delayed(const Duration(seconds: 2), () async {
-        if (await OfflineActionsService.hasPending() ||
-            pendingBatches.value > 0 ||
-            await CountingService.hasPendingClears()) {
-          await flush();
-        }
-      });
-    }
+    // Sent batches are deleted; older versions kept them as "synced".
+    BatchStorageService.purgeSent().whenComplete(refreshPendingCount);
+    if (startOffline) _setOnline(false);
   }
 
   static void _setOnline(bool value) {
     if (online.value == value) return;
     online.value = value;
-    if (value) {
-      _probeTimer?.cancel();
-      _probeTimer = null;
-      _onReconnected();
-    } else {
-      _probeTimer ??= Timer.periodic(_probeInterval, (_) => _probe());
-    }
+    if (value) _remindPendingWork();
   }
 
-  // Any answer from the backend switches back online (through ApiClient).
-  static Future<void> _probe() async {
+  // Back online: tells the user what is waiting, without sending it.
+  static Future<void> _remindPendingWork() async {
+    final batches = pendingBatches.value;
+    final actions = await OfflineActionsService.hasPending();
+    if (batches == 0 && !actions) return;
+    messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(batches > 0
+            ? 'Connexion rétablie : $batches lot(s) en attente. Utilisez « Envoyer » pour les transmettre.'
+            : 'Connexion rétablie : des feuilles sont à synchroniser. Utilisez « Envoyer ».'),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  // Tap on the offline banner: one call to see whether the server answers.
+  // Returns true when back online.
+  static Future<bool> checkConnection() async {
     try {
       await ApiClient.get(
         Uri.parse('${ApiConfig.baseUrl}/'),
         timeout: const Duration(seconds: 5),
       );
     } catch (_) {}
+    return online.value;
   }
-
-  static Future<void> _onReconnected() => flush();
 
   // Sheets with work to send, in the order Odoo must see it: first the
   // sheets with offline actions, in the order they were done (finish F1
@@ -88,7 +86,7 @@ class SyncService {
     return order;
   }
 
-  // Automatic: sends everything done offline, one sheet after the other
+  // "Tout envoyer": sends everything waiting, one sheet after the other
   // (start, batches, finish), and shows a summary. Concurrent calls share
   // one run.
   static Future<void> flush() {
@@ -153,7 +151,7 @@ class SyncService {
         items: batch.items,
       );
       if (sent.success) {
-        await BatchStorageService.markBatchAsSynced(batch.id);
+        await BatchStorageService.deleteSentBatch(batch.id);
         result.batchesSent++;
       } else if (!online.value) {
         return result..offline = true;

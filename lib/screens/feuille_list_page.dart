@@ -4,7 +4,6 @@ import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/batch_storage_service.dart';
 import '../services/offline_actions_service.dart';
-import '../services/sheet_cache_service.dart';
 import '../services/sync_service.dart';
 import 'scanning_page.dart';
 
@@ -30,6 +29,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   // Saved batches not sent to the ERP yet, per sheet.
   Map<int, int> _unsyncedBatches = {};
   int? _sendingSheetId;
+  bool _sendingAll = false;
 
   @override
   void initState() {
@@ -73,7 +73,6 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           feuilles = data;
           isLoading = false;
         });
-        _downloadForOffline();
       } else {
         setState(() {
           feuilles = [];
@@ -93,8 +92,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     await _loadPendingCounts();
   }
 
-  // Keeps the adjustment's numbers and sheets on the phone, so counting can
-  // go on without network. Runs in the background, best effort.
+  // Sheet as the phone sees it: started / finished offline until the action
+  // is sent to Odoo.
   dynamic _withLocalState(dynamic sheet, String? action) {
     if (action == null || sheet is! Map) return sheet;
     final copy = Map<String, dynamic>.from(sheet);
@@ -107,20 +106,24 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     return copy;
   }
 
-  // Skipped when the copy is recent ("Préparer le hors ligne" forces it).
-  Future<void> _downloadForOffline() async {
-    if (!SyncService.online.value) return;
-    final info = await SheetCacheService.info(widget.adjustmentId);
-    final updatedAt = info.updatedAt;
-    if (updatedAt != null &&
-        DateTime.now().difference(updatedAt) < const Duration(minutes: 10)) {
+  // "Tout envoyer": every sheet with work waiting, one after the other.
+  Future<void> _sendAll() async {
+    if (!SyncService.online.value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Hors ligne : touchez le bandeau « Réessayer » une fois le réseau revenu'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
-    await SheetCacheService.prepareAdjustment(widget.adjustmentId);
+    setState(() => _sendingAll = true);
+    await SyncService.flush(); // Shows the per-sheet summary.
+    if (mounted) setState(() => _sendingAll = false);
   }
 
   // Manual send of one sheet: its offline start, its batches, then its
-  // offline finish — the same as the automatic sync, for this sheet only.
+  // offline finish.
   Future<void> _sendSheet(int sheetId) async {
     if (!SyncService.online.value) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -403,6 +406,24 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // "Tout envoyer": shown when sheets have batches or offline
+          // starts/finishes waiting. Nothing is ever sent without it.
+          if (_unsyncedBatches.isNotEmpty ||
+              feuilles.any((f) => f is Map && f['_pending'] != null))
+            _sendingAll
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: 'Tout envoyer',
+                    icon: const Icon(Icons.cloud_upload, size: 22),
+                    onPressed: _sendAll,
+                  ),
           // Menu button with Terminer option
           PopupMenuButton<String>(
             onSelected: (value) {
