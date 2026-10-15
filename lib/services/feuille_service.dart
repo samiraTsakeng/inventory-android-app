@@ -1,16 +1,15 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_client.dart';
 import 'api_config.dart';
 
 class FeuilleService {
   static Future<List<dynamic>> getFeuilles(int adjustmentId) async {
     try {
-      final response = await http.get(
+      final response = await ApiClient.get(
         Uri.parse(ApiConfig.feuilles(adjustmentId)),
       );
 
       print("feuilles status: ${response.statusCode}");
-      print("Feuilles body: ${response.body}");
 
       if (response.statusCode != 200) {
         final errorData = jsonDecode(response.body);
@@ -20,7 +19,6 @@ class FeuilleService {
       }
 
       final data = jsonDecode(response.body);
-      print("Decoded data type: ${data.runtimeType}");
 
       if (data is Map && data.containsKey("success") && data["success"] == false) {
         throw Exception(data["message"] ?? 'Unknown error');

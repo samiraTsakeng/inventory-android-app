@@ -1,44 +1,54 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_client.dart';
 import 'api_config.dart';
 import '../models/scanned_item.dart';
 import 'local_storage_service.dart';
 
 class CountingService {
-  // OFFLINE-FIRST: Check cache, then API
-  static Future<Map<String, dynamic>?> lookupProduct(String barcode) async {
+  // OFFLINE-FIRST: Check cache, then API.
+  // One network round trip per scan: the product and whether this number
+  // is already in the ERP for the sheet come back together.
+  static Future<({Map<String, dynamic>? product, bool alreadyInErp})>
+      lookupProduct(String barcode, {required int countingSheetId}) async {
     try {
       final cachedProduct = await LocalStorageService.getCachedProduct(barcode);
       if (cachedProduct != null) {
-        print("Product found in OFFLINE cache: ${cachedProduct['name']}");
-        return cachedProduct;
+        final alreadyInErp = await isAlreadyInErp(
+          countingSheetId: countingSheetId,
+          barcode: barcode,
+        );
+        return (product: cachedProduct, alreadyInErp: alreadyInErp);
       }
 
-      print("Looking up product ONLINE: $barcode");
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/lookup-product'),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'barcode': barcode}),
+        body: jsonEncode({
+          'barcode': barcode,
+          'counting_sheet_id': countingSheetId,
+        }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final alreadyInErp = data['already_sent'] == true;
         if (data['success'] == true && data['product'] != null) {
-          final product = data['product'];
+          final product = Map<String, dynamic>.from(data['product']);
           await LocalStorageService.cacheProduct(barcode, product);
-          return product;
+          return (product: product, alreadyInErp: alreadyInErp);
         }
+        return (product: null, alreadyInErp: alreadyInErp);
       }
-      return null;
+      return (product: null, alreadyInErp: false);
     } catch (e) {
       print("Product lookup error: $e");
-      return null;
+      return (product: null, alreadyInErp: false);
     }
   }
 
   static Future<Map<String, dynamic>?> getSheetState(int sheetId) async {
     try {
-      final response = await http.get(
+      final response = await ApiClient.get(
         Uri.parse('${ApiConfig.baseUrl}/counting/sheet-state/$sheetId'),
       );
       if (response.statusCode == 200) {
@@ -54,7 +64,7 @@ class CountingService {
 
   static Future<bool> startSheet(int sheetId) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/start-sheet'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'sheet_id': sheetId}),
@@ -72,7 +82,7 @@ class CountingService {
 
   static Future<bool> validateSheet(int sheetId) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/validate-sheet'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'sheet_id': sheetId}),
@@ -96,7 +106,7 @@ class CountingService {
     try {
       if (items.isEmpty) return false;
 
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/submit-scans'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
@@ -104,6 +114,7 @@ class CountingService {
           'adjustment_id': adjustmentId,
           'items': items.map((e) => e.toJson()).toList(),
         }),
+        timeout: ApiConfig.submitTimeout,
       );
 
       if (response.statusCode == 200) {
@@ -125,21 +136,28 @@ class CountingService {
   // SHARED LIVE SESSION (two phones, same sheet)
 
 
-  static Future<List<Map<String, dynamic>>> getLiveItems(int countingSheetId) async {
+  // Returns the shared list and its version, or null when the server still
+  // has version [since] (nothing changed) or the request failed.
+  static Future<({int version, List<Map<String, dynamic>> items})?> getLiveItems(
+      int countingSheetId, {int? since}) async {
     try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId'),
+      final query = since != null ? '?since=$since' : '';
+      final response = await ApiClient.get(
+        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId$query'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true && data['items'] is List) {
-          return List<Map<String, dynamic>>.from(data['items']);
+          return (
+            version: (data['version'] as num?)?.toInt() ?? 0,
+            items: List<Map<String, dynamic>>.from(data['items']),
+          );
         }
       }
-      return [];
+      return null;
     } catch (e) {
       print("Get live items error: $e");
-      return [];
+      return null;
     }
   }
 
@@ -148,7 +166,7 @@ class CountingService {
     required Map<String, dynamic> item,
   }) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/live-scan'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
@@ -171,7 +189,7 @@ class CountingService {
 
   static Future<bool> clearLiveItems(int countingSheetId) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId/clear'),
       );
       return response.statusCode == 200;
@@ -189,7 +207,7 @@ class CountingService {
     required String barcode,
   }) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId/remove'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'barcode': barcode}),
@@ -208,7 +226,7 @@ class CountingService {
     required String barcode,
   }) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scan'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
@@ -235,7 +253,7 @@ class CountingService {
   }) async {
     if (barcodes.isEmpty) return {};
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scans'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({

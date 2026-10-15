@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
 import 'local_storage_service.dart';
@@ -46,7 +46,7 @@ class AuthService {
         }
       }
 
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse(ApiConfig.login),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
@@ -58,7 +58,6 @@ class AuthService {
       );
 
       print("STATUS: ${response.statusCode}");
-      print("BODY: ${response.body}");
 
       if (response.statusCode != 200) {
         final errorData = jsonDecode(response.body);
@@ -159,10 +158,11 @@ class AuthService {
 
   static Future<List<String>> _getDatabases(String host) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse("$host/web/database/list"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({}),
+        timeout: const Duration(seconds: 10),
       );
 
       if (response.statusCode == 200) {
@@ -184,7 +184,7 @@ class AuthService {
 
       for (String dbName in commonDbs) {
         try {
-          final response = await http.post(
+          final response = await ApiClient.post(
             Uri.parse(ApiConfig.login),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({

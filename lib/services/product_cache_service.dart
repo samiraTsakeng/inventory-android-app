@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_client.dart';
 import 'api_config.dart';
 import 'local_storage_service.dart';
 
@@ -16,13 +16,14 @@ class ProductCacheService {
 
       while (hasMore) {
         // Fetch products in batches
-        final response = await http.post(
+        final response = await ApiClient.post(
           Uri.parse('${ApiConfig.baseUrl}/counting/cache-products'),
           headers: {"Content-Type": "application/json"},
           body: jsonEncode({
             'offset': offset,
             'limit': _batchSize,
           }),
+          timeout: ApiConfig.cacheTimeout,
         );
 
         if (response.statusCode == 200) {
@@ -73,7 +74,7 @@ class ProductCacheService {
   // Cache products by barcode list (for specific products)
   static Future<void> cacheProductsByBarcodes(List<String> barcodes) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/counting/cache-products-by-barcode'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({'barcodes': barcodes}),

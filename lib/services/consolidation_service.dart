@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'api_client.dart';
 import 'api_config.dart';
 
 class ConsolidationService {
@@ -8,12 +8,11 @@ class ConsolidationService {
     try {
       print(" Calling API: ${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId");
 
-      final response = await http.get(
+      final response = await ApiClient.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId'),
       );
 
       print(" Response status: ${response.statusCode}");
-      print(" Response body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -45,12 +44,11 @@ class ConsolidationService {
     try {
       print(" Getting detail for sheet: $sheetId");
 
-      final response = await http.get(
+      final response = await ApiClient.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/sheet/$sheetId'),
       );
 
       print(" Detail status: ${response.statusCode}");
-      print(" Detail body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -67,7 +65,7 @@ class ConsolidationService {
   // Update verified quantity for a contradictory line
   static Future<bool> updateContradictoryLine(int lineId, int verifiedQty) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/update-contradictory-line'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
@@ -77,7 +75,6 @@ class ConsolidationService {
       );
 
       print(" Update contradictory line status: ${response.statusCode}");
-      print(" Update contradictory line body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -93,16 +90,16 @@ class ConsolidationService {
   // Validate consolidation sheet
   static Future<bool> validateConsolidationSheet(int sheetId) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/validate-sheet'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           'sheet_id': sheetId,
         }),
+        timeout: ApiConfig.submitTimeout,
       );
 
       print(" Validate consolidation sheet status: ${response.statusCode}");
-      print(" Validate consolidation sheet body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -118,12 +115,11 @@ class ConsolidationService {
   // NEW: Get zones ready for consolidation
   static Future<List<dynamic>> getConsolidationZones(int adjustmentId) async {
     try {
-      final response = await http.get(
+      final response = await ApiClient.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/zones/$adjustmentId'),
       );
 
       print(" Get zones status: ${response.statusCode}");
-      print(" Get zones body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -145,17 +141,17 @@ class ConsolidationService {
     required int zoneId,
   }) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/create'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           'adjustment_id': adjustmentId,
           'zone_id': zoneId,
         }),
+        timeout: ApiConfig.submitTimeout,
       );
 
       print(" Create consolidation status: ${response.statusCode}");
-      print(" Create consolidation body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -174,16 +170,16 @@ class ConsolidationService {
   // NEW: Apply consolidation to stock
   static Future<bool> applyConsolidation(int adjustmentId) async {
     try {
-      final response = await http.post(
+      final response = await ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/apply'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           'adjustment_id': adjustmentId,
         }),
+        timeout: ApiConfig.submitTimeout,
       );
 
       print(" Apply consolidation status: ${response.statusCode}");
-      print(" Apply consolidation body: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -199,7 +195,7 @@ class ConsolidationService {
   // NEW: Get adjustment status
   static Future<Map<String, dynamic>?> getAdjustmentStatus(int adjustmentId) async {
     try {
-      final response = await http.get(
+      final response = await ApiClient.get(
         Uri.parse('${ApiConfig.baseUrl}/consolidation/adjustment-status/$adjustmentId'),
       );
 

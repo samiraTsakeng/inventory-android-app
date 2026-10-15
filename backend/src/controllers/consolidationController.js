@@ -361,7 +361,6 @@ static async getConsolidationSheetDetail(req, res) {
       });
 
       const data = await response.json();
-      console.log("Update contradictory line response:", JSON.stringify(data, null, 2));
 
       if (data.error) {
         throw new Error(data.error.data?.message || data.error.message);
@@ -414,7 +413,6 @@ static async getConsolidationSheetDetail(req, res) {
       });
 
       const data = await response.json();
-      console.log("Validate consolidation sheet response:", JSON.stringify(data, null, 2));
 
       if (data.error) {
         throw new Error(data.error.data?.message || data.error.message);
@@ -643,7 +641,6 @@ static async getConsolidationSheetDetail(req, res) {
          });
 
          const confirmData = await confirmResponse.json();
-         console.log("Confirm response:", JSON.stringify(confirmData, null, 2));
 
          if (confirmData.error) {
            throw new Error(confirmData.error.data?.message || confirmData.error.message);
@@ -732,7 +729,6 @@ static async getConsolidationSheetDetail(req, res) {
          });
 
          const data = await response.json();
-         console.log("Apply consolidation response:", JSON.stringify(data, null, 2));
 
          if (data.error) {
            throw new Error(data.error.data?.message || data.error.message);

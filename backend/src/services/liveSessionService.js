@@ -5,57 +5,74 @@ const path = require("path");
 // on two different phones (logged in with the same head-of-team account)
 // can scan into the SAME list and see each other's scans.
 //
-// This is intentionally file-based (not just in-memory) so an accidental
-// server restart during a counting session doesn't wipe out a shared
-// session that both phones are relying on. It's a lightweight JSON store,
-// not meant to replace a real DB — fine for the scale of one warehouse
-// team working a handful of sheets at a time.
+// The list lives in memory (reads never touch the disk) and is persisted to
+// a JSON file after each change, so an accidental server restart during a
+// counting session doesn't wipe out a shared session both phones rely on.
+// Each change bumps a version number: polling clients send the version
+// they already have and get "unchanged" instead of the full list.
 //
-// Data layout: data/live_sheets/<sheetId>.json -> { items: [ {...} ] }
+// Data layout: data/live_sheets/<sheetId>.json -> { version, items: [ {...} ] }
 
 const DATA_DIR = path.join(__dirname, "..", "data", "live_sheets");
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
+// sheetId -> { version, items }
+const sessions = new Map();
+// sheetId -> promise of the write in progress (writes are serialized)
+const pendingWrites = new Map();
 
 function filePathFor(sheetId) {
   return path.join(DATA_DIR, `${sheetId}.json`);
 }
 
-function readItems(sheetId) {
-  ensureDataDir();
+// Loaded from disk once, then served from memory.
+function load(sheetId) {
+  let session = sessions.get(sheetId);
+  if (session) return session;
+
+  session = { version: 0, items: [] };
   const filePath = filePathFor(sheetId);
-  if (!fs.existsSync(filePath)) return [];
-  try {
-    const raw = fs.readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed.items) ? parsed.items : [];
-  } catch (e) {
-    console.error("liveSessionService: failed to read", filePath, e);
-    return [];
+  if (fs.existsSync(filePath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      session.items = Array.isArray(parsed.items) ? parsed.items : [];
+      session.version = Number(parsed.version) || 0;
+    } catch (e) {
+      console.error("liveSessionService: failed to read", filePath, e);
+    }
   }
+  sessions.set(sheetId, session);
+  return session;
 }
 
-function removeItem(sheetId, barcode) {
-    const items = readItems(String(sheetId));
-    const filtered = items.filter((it) => it.barcode !== barcode);
-    writeItems(String(sheetId), filtered);
-    return filtered;
+// Writes the latest snapshot without blocking the event loop. Successive
+// changes queue behind the current write; each write takes the state at
+// the moment it runs, so the file always ends with the latest version.
+function persist(sheetId) {
+  const previous = pendingWrites.get(sheetId) || Promise.resolve();
+  const next = previous.then(async () => {
+    const session = sessions.get(sheetId);
+    await fs.promises.mkdir(DATA_DIR, { recursive: true });
+    await fs.promises.writeFile(filePathFor(sheetId),
+      JSON.stringify({ version: session.version, items: session.items }), "utf8");
+  }).catch((e) => console.error("liveSessionService: failed to write", sheetId, e));
+  pendingWrites.set(sheetId, next);
+  next.then(() => {
+    if (pendingWrites.get(sheetId) === next) pendingWrites.delete(sheetId);
+  });
 }
 
-function writeItems(sheetId, items) {
-  ensureDataDir();
-  const filePath = filePathFor(sheetId);
-  fs.writeFileSync(filePath, JSON.stringify({ items }, null, 2), "utf8");
+function update(sheetId, items) {
+  const session = load(sheetId);
+  session.items = items;
+  session.version += 1;
+  persist(sheetId);
+  return session;
 }
 
 const LiveSessionService = {
-  // Returns the current shared list of scanned items for a sheet.
-  getItems(sheetId) {
-    return readItems(String(sheetId));
+  // Returns { version, items } — the current shared list for a sheet.
+  getSession(sheetId) {
+    return load(String(sheetId));
   },
 
   // ✅ Upsert a scan: if the barcode is already in the shared list, its
@@ -66,7 +83,8 @@ const LiveSessionService = {
   // duplicate entries are ever created).
   // If the barcode is new, it's added as-is.
   upsertItem(sheetId, incomingItem) {
-    const items = readItems(String(sheetId));
+    const id = String(sheetId);
+    const items = load(id).items;
     const barcode = incomingItem.barcode;
     const existingIndex = items.findIndex((it) => it.barcode === barcode);
 
@@ -85,14 +103,19 @@ const LiveSessionService = {
       });
     }
 
-    writeItems(String(sheetId), items);
-    return items;
+    return update(id, items);
+  },
+
+  // Removes one barcode from the shared list.
+  removeItem(sheetId, barcode) {
+    const id = String(sheetId);
+    return update(id, load(id).items.filter((it) => it.barcode !== barcode));
   },
 
   // Called once the shared list has been saved into a batch and/or sent
   // to the ERP, so both phones start the next lot from an empty list.
   clearItems(sheetId) {
-    writeItems(String(sheetId), []);
+    return update(String(sheetId), []);
   },
 };
 

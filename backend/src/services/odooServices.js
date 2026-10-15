@@ -17,7 +17,7 @@ class OdooService {
     });
 
     const data = await response.json();
-    console.log("Odoo login response:", JSON.stringify(data, null, 2));
+    console.log("Odoo login:", data.result?.uid ? `uid ${data.result.uid}` : "failed");
 
     if (!data.result || !data.result.uid) {
       throw new Error("Authentication failed: wrong credentials");
@@ -91,7 +91,6 @@ class OdooService {
       }
     };
 
-    console.log("Request body:", JSON.stringify(requestBody, null, 2));
 
     const response = await fetch(`${host}/web/dataset/call_kw`, {
       method: "POST",
@@ -103,7 +102,6 @@ class OdooService {
     });
 
     const data = await response.json();
-    console.log("Full Odoo response:", JSON.stringify(data, null, 2));
 
     if (data.error) {
       console.error("Odoo error:", data.error);

@@ -26,9 +26,7 @@ class LocalStorageService {
   //  Get current session ID
   static Future<String> getSessionId() async {
     final prefs = await SharedPreferences.getInstance();
-    final sessionId = prefs.getString(_sessionIdKey) ?? 'default';
-    print("Current session ID: $sessionId");
-    return sessionId;
+    return prefs.getString(_sessionIdKey) ?? 'default';
   }
 
   //  Save scanned items with better error handling
@@ -50,18 +48,10 @@ class LocalStorageService {
         'tracking': item.tracking,
       })).toList();
 
+      // setStringList completes once the value is written to disk, so no
+      // reload or read-back is needed.
       await prefs.setStringList(key, itemsJson);
       await prefs.setInt(_sheetIdKey, sheetId);
-
-      //  Force save to disk
-      await prefs.reload();
-
-      print("Saved ${items.length} items to key: $key");
-      print("Session ID: $sessionId, Sheet ID: $sheetId");
-
-      //  Verify save
-      final verify = prefs.getStringList(key);
-      print("Verification: ${verify?.length ?? 0} items saved");
     } catch (e) {
       print("Error saving scanned items: $e");
     }

@@ -2,6 +2,8 @@ const OdooService = require("../services/odooServices");
 const AuthController = require("./authController");
 const LiveSessionService = require("../services/liveSessionService");
 
+const ODOO_TIMEOUT_MS = 60000;
+
 // Single JSON-RPC call to Odoo. Throws on transport or Odoo error.
 async function odooCall(session, model, method, args, kwargs = {}) {
   const response = await fetch(`${session.host}/web/dataset/call_kw`, {
@@ -14,7 +16,8 @@ async function odooCall(session, model, method, args, kwargs = {}) {
       jsonrpc: "2.0",
       method: "call",
       params: { model, method, args, kwargs }
-    })
+    }),
+    signal: AbortSignal.timeout(ODOO_TIMEOUT_MS)
   });
   const data = await response.json();
   if (data.error) {
@@ -32,6 +35,39 @@ async function findExistingNumbers(session, sheetId, numbers) {
     [[["sheet_id", "=", sheetId], ["number", "in", numbers]]],
     { fields: ["number"] });
   return new Set((lines || []).map((l) => l.number));
+}
+
+// Finds a lot/serial number and its product in one call (web_search_read
+// reads the product's name and tracking through the many2one).
+// Returns the lookup payload, or null when the number doesn't exist.
+async function findLot(session, barcode) {
+  try {
+    const data = await odooCall(session, "stock.lot", "web_search_read", [], {
+      domain: [["name", "=", barcode]],
+      specification: { name: {}, product_id: { fields: { name: {}, tracking: {} } } },
+      limit: 1
+    });
+    const lot = data?.records?.[0];
+    if (!lot) return null;
+    const product = lot.product_id || {};
+    return {
+      success: true,
+      product: {
+        id: product.id || null,
+        name: product.name || 'Unknown Product',
+        barcode: barcode,
+        lot_id: lot.id,
+        lot_name: lot.name,
+        tracking: product.tracking || 'serial'
+      }
+    };
+  } catch (err) {
+    // Older servers without web_search_read: lot search + product read.
+    console.warn("web_search_read failed, falling back:", err.message);
+    const lots = await odooCall(session, "stock.lot", "search_read",
+      [[["name", "=", barcode]]], { fields: ["id", "name", "product_id"], limit: 1 });
+    return lots && lots.length > 0 ? processLotFound(session, lots[0], barcode) : null;
+  }
 }
 
 // Serializes submissions per sheet so a double tap / retry can't run two
@@ -123,7 +159,6 @@ class CountingController {
       }
 
       const { barcode } = req.body;
-      console.log("Looking up barcode:", barcode);
 
       // Function to detect the type of barcode
       function detectBarcodeType(code) {
@@ -168,22 +203,6 @@ class CountingController {
         // WiFi MAC (no separators)
         const isMACSimple = /^[0-9A-F]{12}$/i.test(code);
 
-        console.log("Barcode detection results:", {
-          length: length,
-          isNumeric: isNumeric,
-          hasLetters: hasLetters,
-          isIMEI: isIMEI,
-          isMEID: isMEID,
-          isICCID: isICCID,
-          isMSISDN: isMSISDN,
-          isEAN13: isEAN13,
-          isEAN8: isEAN8,
-          isUPCA: isUPCA,
-          isAppleSN: isAppleSN,
-          isSamsungSN: isSamsungSN,
-          isMAC: isMAC || isMACSimple
-        });
-
         // Return the detected type
         if (isIMEI) return 'IMEI';
         if (isMEID) return 'MEID';
@@ -201,41 +220,25 @@ class CountingController {
         return 'UNKNOWN';
       }
 
-      // First, try to find as a lot/serial number in Odoo
-      const lotResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Cookie": OdooService.sessionCookie
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "call",
-          params: {
-            model: "stock.lot",
-            method: "search_read",
-            args: [[["name", "=", barcode]]],
-            kwargs: {
-              fields: ["id", "name", "product_id"]
-            }
-          }
-        })
-      });
-
-      const lotData = await lotResponse.json();
-      console.log("Lot/Serial lookup response:", JSON.stringify(lotData, null, 2));
+      // Lot lookup and "already sent to the ERP" check run in parallel, so
+      // the app needs a single round trip per scan.
+      const sheetId = parseInt(req.body.counting_sheet_id);
+      const [lotResult, existing] = await Promise.all([
+        findLot(session, barcode),
+        sheetId
+          ? findExistingNumbers(session, sheetId, [barcode]).catch(() => new Set())
+          : Promise.resolve(null),
+      ]);
+      const alreadySent = existing ? existing.has(barcode) : undefined;
 
       // If found as lot/serial number in Odoo
-      if (lotData.result && lotData.result.length > 0) {
-        const lot = lotData.result[0];
-        console.log("Found as LOT/SERIAL in Odoo database");
-        const result = await processLotFound(session, lot, barcode);
-        return res.json(result);
+      if (lotResult) {
+        return res.json({ ...lotResult, already_sent: alreadySent });
       }
 
       // Not found in Odoo, check barcode type and provide appropriate message
       const barcodeType = detectBarcodeType(barcode);
-      console.log("Detected barcode type:", barcodeType);
+      console.log(`Lookup ${barcode}: not found (${barcodeType})`);
 
       // Get user-friendly message based on barcode type
       let errorMessage = "";
@@ -280,7 +283,8 @@ class CountingController {
       return res.json({
         success: false,
         message: errorMessage,
-        barcode_type: barcodeType
+        barcode_type: barcodeType,
+        already_sent: alreadySent
       });
 
     } catch (error) {
@@ -325,7 +329,6 @@ class CountingController {
       });
 
       const data = await response.json();
-      console.log("Sheet state response:", JSON.stringify(data, null, 2));
 
       if (data.error) {
         throw new Error(data.error.message);
@@ -377,7 +380,6 @@ class CountingController {
       });
 
       const data = await response.json();
-      console.log("Start sheet response:", JSON.stringify(data, null, 2));
 
       if (data.error) {
         throw new Error(data.error.data?.message || data.error.message || "Failed to start sheet");
@@ -429,7 +431,6 @@ class CountingController {
       });
 
       const data = await response.json();
-      console.log("Validate sheet response:", JSON.stringify(data, null, 2));
 
       if (data.error) {
         throw new Error(data.error.data?.message || data.error.message || "Failed to validate sheet");
@@ -664,7 +665,6 @@ class CountingController {
       });
 
       const data = await response.json();
-      console.log("Lines found:", JSON.stringify(data, null, 2));
 
       return res.json({
         success: true,
@@ -705,7 +705,6 @@ class CountingController {
       });
 
       const data = await response.json();
-      console.log("Sheet state:", JSON.stringify(data, null, 2));
 
       return res.json({
         success: true,
@@ -842,9 +841,16 @@ class CountingController {
     static async getLiveItems(req, res) {
       try {
         const { sheet_id } = req.params;
-        const items = LiveSessionService.getItems(sheet_id);
+        const { version, items } = LiveSessionService.getSession(sheet_id);
+
+        // The client already has this version: skip sending the list.
+        if (req.query.since !== undefined && Number(req.query.since) === version) {
+          return res.json({ success: true, version, unchanged: true });
+        }
+
         return res.json({
           success: true,
+          version,
           items
         });
       } catch (error) {
@@ -868,10 +874,11 @@ class CountingController {
           });
         }
 
-        const items = LiveSessionService.upsertItem(counting_sheet_id, req.body);
+        const { version, items } = LiveSessionService.upsertItem(counting_sheet_id, req.body);
 
         return res.json({
           success: true,
+          version,
           items
         });
       } catch (error) {
@@ -912,9 +919,9 @@ class CountingController {
           });
         }
 
-        const items = LiveSessionService.removeItem(sheet_id, barcode);
+        const { version, items } = LiveSessionService.removeItem(sheet_id, barcode);
 
-        return res.json({ success: true, items });
+        return res.json({ success: true, version, items });
       } catch (error) {
         console.error("Remove live item error:", error);
         return res.status(500).json({

@@ -50,6 +50,9 @@ class _ScanningPageState extends State<ScanningPage>
   // ✅ Shared scanning session (two team members, same sheet, two phones).
   Timer? _liveSyncTimer;
   final Map<String, int> _pendingDeltas = {};
+  // Version of the shared list last received; polls return nothing new
+  // while the server is still at this version.
+  int? _liveVersion;
 
   // ✅ Track last scan time per barcode (to detect accidental re-scans)
   final Map<String, DateTime> _lastScanTime = {};
@@ -161,10 +164,13 @@ class _ScanningPageState extends State<ScanningPage>
       await _saveItems();
     }
 
-    final serverItems =
-    await CountingService.getLiveItems(widget.countingSheetId);
-    if (serverItems.isNotEmpty) {
-      _mergeServerItems(serverItems);
+    final live = await CountingService.getLiveItems(widget.countingSheetId,
+        since: _liveVersion);
+    if (live != null) {
+      _liveVersion = live.version;
+      if (live.items.isNotEmpty) {
+        _mergeServerItems(live.items);
+      }
     }
   }
 
@@ -290,16 +296,8 @@ class _ScanningPageState extends State<ScanningPage>
 
   Future<bool> _isInSavedBatches(String barcode) async {
     try {
-      final batches = await BatchStorageService.getBatches();
-      for (final batch in batches) {
-        if (batch.countingSheetId != widget.countingSheetId) continue;
-        for (final item in batch.items) {
-          if (item.barcode == barcode) {
-            return true;
-          }
-        }
-      }
-      return false;
+      return await BatchStorageService.isBarcodeInBatches(
+          widget.countingSheetId, barcode);
     } catch (e) {
       return false;
     }
@@ -333,11 +331,11 @@ class _ScanningPageState extends State<ScanningPage>
       return;
     }
 
-    final alreadyInErp = await CountingService.isAlreadyInErp(
+    final lookup = await CountingService.lookupProduct(
+      barcode,
       countingSheetId: widget.countingSheetId,
-      barcode: barcode,
     );
-    if (alreadyInErp) {
+    if (lookup.alreadyInErp) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Cet article a déjà été envoyé à l\'ERP'),
@@ -351,7 +349,7 @@ class _ScanningPageState extends State<ScanningPage>
       return;
     }
 
-    final result = await CountingService.lookupProduct(barcode);
+    final result = lookup.product;
 
     if (_isMounted) {
       if (result != null && result['id'] != 0 && result['id'] != null) {
