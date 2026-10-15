@@ -236,6 +236,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
       if (result.success) {
         await BatchStorageService.markBatchAsSynced(batch.id);
+        SyncService.replaySheetActions();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -308,6 +309,8 @@ class _BatchesListPageState extends State<BatchesListPage> {
         failCount++;
       }
     }
+
+    if (successCount > 0) SyncService.replaySheetActions();
 
     if (mounted) {
       setState(() => _isSyncing = false);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/offline_actions_service.dart';
 import '../services/sheet_cache_service.dart';
 import '../services/sync_service.dart';
 import 'scanning_page.dart';
@@ -30,18 +31,33 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   void initState() {
     super.initState();
     fetchFeuilles();
+    SyncService.revision.addListener(fetchFeuilles);
+  }
+
+  @override
+  void dispose() {
+    SyncService.revision.removeListener(fetchFeuilles);
+    super.dispose();
   }
 
   void fetchFeuilles() async {
+    if (!mounted) return;
     setState(() {
       isLoading = true;
       errorMessage = null;
     });
 
     try {
-      final data = await FeuilleService.getFeuilles(widget.adjustmentId);
+      final serverData = await FeuilleService.getFeuilles(widget.adjustmentId);
+      // Sheets started / finished offline show their new state until the
+      // action is replayed in Odoo.
+      final pending = await OfflineActionsService.pendingBySheet();
+      final data = [
+        for (final f in serverData) _withLocalState(f, pending[f['id']]),
+      ];
+      if (!mounted) return;
 
-      if (data is List && data.isNotEmpty) {
+      if (data.isNotEmpty) {
         // Sort: progress first, then new, then confirm, then cancel
         data.sort((a, b) {
           const order = {'progress': 0, 'new': 1, 'confirm': 2, 'cancel': 3};
@@ -53,7 +69,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           feuilles = data;
           isLoading = false;
         });
-        _downloadForOffline(data);
+        _downloadForOffline();
       } else {
         setState(() {
           feuilles = [];
@@ -61,6 +77,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
@@ -72,15 +89,30 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     await _loadPendingCounts();
   }
 
-  // Keeps the numbers of the sheets in progress on the phone, so they can
-  // be scanned without network. Runs in the background, best effort.
-  void _downloadForOffline(List sheets) {
-    if (!SyncService.online.value) return;
-    for (final sheet in sheets) {
-      if (sheet['state'] == 'progress' && sheet['id'] is int) {
-        SheetCacheService.refresh(sheet['id']);
-      }
+  // Keeps the adjustment's numbers and sheets on the phone, so counting can
+  // go on without network. Runs in the background, best effort.
+  dynamic _withLocalState(dynamic sheet, String? action) {
+    if (action == null || sheet is! Map) return sheet;
+    final copy = Map<String, dynamic>.from(sheet);
+    copy['_pending'] = action;
+    if (action == OfflineActionsService.validate) {
+      copy['state'] = 'confirm';
+    } else if (copy['state'] == 'new') {
+      copy['state'] = 'progress';
     }
+    return copy;
+  }
+
+  // Skipped when the copy is recent ("Préparer le hors ligne" forces it).
+  Future<void> _downloadForOffline() async {
+    if (!SyncService.online.value) return;
+    final info = await SheetCacheService.info(widget.adjustmentId);
+    final updatedAt = info.updatedAt;
+    if (updatedAt != null &&
+        DateTime.now().difference(updatedAt) < const Duration(minutes: 10)) {
+      return;
+    }
+    await SheetCacheService.prepareAdjustment(widget.adjustmentId);
   }
 
   Future<void> _loadPendingCounts() async {
@@ -148,7 +180,25 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     return progressSheet?['name'] ?? 'Feuille en cours';
   }
 
+  // Offline: the start is kept and done in Odoo when the connection comes
+  // back; the sheet can be scanned right away.
+  Future<void> _startOffline(int sheetId) async {
+    await OfflineActionsService.add(OfflineActionsService.start, sheetId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hors ligne : comptage commencé, confirmé par Odoo à la synchronisation'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    fetchFeuilles();
+  }
+
   Future<void> _startSheet(int sheetId) async {
+    if (!SyncService.online.value) {
+      await _startOffline(sheetId);
+      return;
+    }
     setState(() => _startingSheetId = sheetId);
     try {
       final result = await CountingService.startSheet(sheetId);
@@ -157,6 +207,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           const SnackBar(content: Text('Comptage commencé'), backgroundColor: Colors.green),
         );
         fetchFeuilles();
+      } else if (!SyncService.online.value) {
+        // The connection dropped during the call.
+        await _startOffline(sheetId);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -170,7 +223,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
       );
     } finally {
-      setState(() => _startingSheetId = null);
+      if (mounted) setState(() => _startingSheetId = null);
     }
   }
 
@@ -217,7 +270,36 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     }
   }
 
+  // Offline: the sheet is finished in Odoo once the connection is back and
+  // all its batches were sent. Scans not saved into a batch would never be
+  // sent, so they must be saved first.
+  Future<void> _validateOffline(int sheetId) async {
+    final unsaved = _pendingCounts[sheetId] ?? 0;
+    if (unsaved > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Enregistrez d\'abord les $unsaved article(s) scanné(s) dans un lot'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    await OfflineActionsService.add(OfflineActionsService.validate, sheetId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hors ligne : comptage terminé, validé dans Odoo après l\'envoi de ses lots'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    fetchFeuilles();
+  }
+
   Future<void> _validateSheet(int sheetId) async {
+    if (!SyncService.online.value) {
+      await _validateOffline(sheetId);
+      return;
+    }
     setState(() => _validatingSheetId = sheetId);
     try {
       final result = await CountingService.validateSheet(sheetId);
@@ -226,6 +308,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           const SnackBar(content: Text('Comptage terminé'), backgroundColor: Colors.green),
         );
         fetchFeuilles();
+      } else if (!SyncService.online.value) {
+        // The connection dropped during the call.
+        await _validateOffline(sheetId);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -239,7 +324,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
       );
     } finally {
-      setState(() => _validatingSheetId = null);
+      if (mounted) setState(() => _validatingSheetId = null);
     }
   }
 
@@ -346,6 +431,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             final isNew = sheetState == 'new';
             final isConfirm = sheetState == 'confirm';
             final pendingCount = _pendingCounts[countingSheetId] ?? 0;
+            // Started / finished offline, not confirmed by Odoo yet.
+            final waitingSync = f is Map && f['_pending'] != null;
 
 
             // Teams can start counting at the same time - that's the whole point of having 2 teams!
@@ -385,7 +472,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            getStatusText(sheetState),
+                            waitingSync
+                                ? '${getStatusText(sheetState)} · à synchroniser'
+                                : getStatusText(sheetState),
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
@@ -515,12 +604,16 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               ),
                             ),
                           if (isConfirm)
-                            const SizedBox(
+                            SizedBox(
                               width: double.infinity,
                               child: Text(
-                                '✓ Terminé',
+                                waitingSync ? '⏳ Terminé · validé à la synchro' : '✓ Terminé',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: waitingSync ? Colors.orange : Colors.green,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                         ],

@@ -47,6 +47,8 @@ router.post('/check-erp-scans', CountingController.checkAlreadyInErpBatch);
 // ✅ Offline mode
 // GET /counting/sheet-lots/:sheet_id — numbers to keep on the phone
 router.get('/sheet-lots/:sheet_id', CountingController.getSheetLots);
+// GET /counting/offline-pack/:adjustment_id — sheets + numbers of an adjustment
+router.get('/offline-pack/:adjustment_id', CountingController.getOfflinePack);
 // POST /counting/lookup-products — resolve numbers scanned offline
 router.post('/lookup-products', CountingController.lookupProducts);
 module.exports = router;

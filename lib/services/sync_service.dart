@@ -5,6 +5,7 @@ import 'api_config.dart';
 import 'auth_service.dart';
 import 'counting_service.dart';
 import 'batch_storage_service.dart';
+import 'offline_actions_service.dart';
 
 // Offline mode: knows whether the backend is reachable (from every API
 // call), checks again periodically while it isn't, and when it comes back
@@ -18,16 +19,33 @@ class SyncService {
   // MaterialApp.scaffoldMessengerKey).
   static final GlobalKey<ScaffoldMessengerState> messengerKey = GlobalKey();
 
+  // Bumped after each replay of offline work, so open screens (sheet list)
+  // reload the states Odoo now has.
+  static final ValueNotifier<int> revision = ValueNotifier(0);
+
   static const Duration _probeInterval = Duration(seconds: 15);
   static Timer? _probeTimer;
   static bool _isSyncing = false;
+  static Future<void>? _flushing;
 
   // Called once at startup, before runApp.
   static void start({required bool startOffline}) {
     ApiClient.onNetworkStatus = _setOnline;
     ApiClient.reauthenticate = AuthService.reauthenticate;
-    if (startOffline) _setOnline(false);
     refreshPendingCount();
+    if (startOffline) {
+      _setOnline(false);
+    } else {
+      // Work left from a previous offline session (app closed before the
+      // connection came back) is replayed as soon as the app is up.
+      Future.delayed(const Duration(seconds: 2), () async {
+        if (await OfflineActionsService.hasPending() ||
+            pendingBatches.value > 0 ||
+            await CountingService.hasPendingClears()) {
+          await flush();
+        }
+      });
+    }
   }
 
   static void _setOnline(bool value) {
@@ -52,19 +70,59 @@ class SyncService {
     } catch (_) {}
   }
 
-  static Future<void> _onReconnected() async {
-    await CountingService.replayPendingClears();
-    if (pendingBatches.value == 0) return;
-    final result = await syncPendingData();
-    if (result.synced == 0 && result.failed == 0) return;
+  static Future<void> _onReconnected() => flush();
+
+  // After a manual send from the batch list: a sheet finished offline
+  // may now have all its batches in the ERP and can be validated.
+  static Future<void> replaySheetActions() async {
+    if (!await OfflineActionsService.hasPending()) return;
+    final errors = [
+      ...await OfflineActionsService.replayStarts(),
+      ...await OfflineActionsService.replayValidations(),
+    ];
+    revision.value++;
+    if (errors.isEmpty) return;
     messengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: Text(result.failed == 0
-            ? 'Connexion rétablie : ${result.synced} lot(s) envoyé(s)'
-            : 'Connexion rétablie : ${result.synced} lot(s) envoyé(s), '
-                '${result.failed} en échec (voir la liste des lots)'),
-        backgroundColor: result.failed == 0 ? Colors.green : Colors.orange,
-        duration: const Duration(seconds: 5),
+        content: Text(errors.take(2).join('\n')),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 8),
+      ),
+    );
+  }
+
+  // Replays everything done offline, in the order Odoo needs it: shared
+  // lists cleared, sheets started, batches sent, then sheets finished.
+  // Concurrent calls share one run.
+  static Future<void> flush() {
+    return _flushing ??= _doFlush().whenComplete(() => _flushing = null);
+  }
+
+  static Future<void> _doFlush() async {
+    await CountingService.replayPendingClears();
+    final startErrors = await OfflineActionsService.replayStarts();
+    final batches = pendingBatches.value > 0
+        ? await syncPendingData()
+        : (synced: 0, failed: 0);
+    final validateErrors = await OfflineActionsService.replayValidations();
+    revision.value++;
+
+    final errors = [...startErrors, ...validateErrors];
+    if (batches.synced == 0 && batches.failed == 0 && errors.isEmpty) return;
+
+    final lines = <String>[
+      if (batches.synced > 0 || batches.failed > 0)
+        batches.failed == 0
+            ? '${batches.synced} lot(s) envoyé(s)'
+            : '${batches.synced} lot(s) envoyé(s), ${batches.failed} en échec (voir la liste des lots)',
+      ...errors.take(2),
+    ];
+    final ok = batches.failed == 0 && errors.isEmpty;
+    messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text('Synchronisation : ${lines.join('\n')}'),
+        backgroundColor: ok ? Colors.green : Colors.orange,
+        duration: Duration(seconds: ok ? 4 : 8),
       ),
     );
   }

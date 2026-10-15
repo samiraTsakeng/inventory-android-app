@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'consolidation_list_page.dart';
 import 'consolidation_zones_page.dart';
 import 'adjustment_action_page.dart';
+import '../services/sheet_cache_service.dart';
+import '../services/sync_service.dart';
 
 class ChoicePage extends StatelessWidget {
   final int? adjustmentId;
@@ -64,6 +66,8 @@ class ChoicePage extends StatelessWidget {
                 );
               },
             ),
+            const SizedBox(height: 12),
+            _OfflinePrepareCard(adjustmentId: adjId),
             const SizedBox(height: 20),
 
             // Consolidation Management Card (combines everything)
@@ -151,6 +155,134 @@ class ChoicePage extends StatelessWidget {
               ),
               if (enabled)
                 Icon(Icons.arrow_forward_ios, color: color, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Downloads what the counting teams need to work without network: the
+// user's sheets, the serial/lot numbers of the inventoried location and
+// what each sheet already sent. Shows how fresh the copy on the phone is.
+class _OfflinePrepareCard extends StatefulWidget {
+  final int adjustmentId;
+
+  const _OfflinePrepareCard({required this.adjustmentId});
+
+  @override
+  State<_OfflinePrepareCard> createState() => _OfflinePrepareCardState();
+}
+
+class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
+  bool _isPreparing = false;
+  int _count = 0;
+  DateTime? _updatedAt;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInfo();
+  }
+
+  Future<void> _loadInfo() async {
+    final info = await SheetCacheService.info(widget.adjustmentId);
+    if (!mounted) return;
+    setState(() {
+      _count = info.count;
+      _updatedAt = info.updatedAt;
+    });
+  }
+
+  Future<void> _prepare() async {
+    if (!SyncService.online.value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Connexion nécessaire pour préparer le hors ligne'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isPreparing = true);
+    final result = await SheetCacheService.prepareAdjustment(widget.adjustmentId);
+    if (!mounted) return;
+    setState(() => _isPreparing = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result == null
+            ? 'Préparation impossible, réessayez avec une meilleure connexion'
+            : 'Prêt pour le hors ligne : ${result.sheets} feuille(s), ${result.lots} numéros'),
+        backgroundColor: result == null ? Colors.red : Colors.green,
+      ),
+    );
+    await _loadInfo();
+  }
+
+  String _subtitle() {
+    final updatedAt = _updatedAt;
+    if (_count == 0 || updatedAt == null) {
+      return 'Télécharger feuilles et numéros pour compter sans réseau';
+    }
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'Prêt : $_count numéros · mis à jour le '
+        '${two(updatedAt.day)}/${two(updatedAt.month)} à ${two(updatedAt.hour)}h${two(updatedAt.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _count > 0;
+    final color = ready ? Colors.green : Colors.teal;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: _isPreparing ? null : _prepare,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  ready ? Icons.offline_pin : Icons.cloud_download,
+                  size: 26,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Préparer le hors ligne',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _subtitle(),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              if (_isPreparing)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Icon(Icons.refresh, color: color, size: 22),
             ],
           ),
         ),

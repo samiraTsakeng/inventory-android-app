@@ -70,6 +70,34 @@ async function findLot(session, barcode) {
   }
 }
 
+// Every lot/serial number in stock under a location, with its product
+// (one entry per number: a lot can sit in several quants).
+async function fetchLocationLots(session, locationId) {
+  const quants = await odooCall(session, "stock.quant", "web_search_read", [], {
+    domain: [["location_id", "child_of", locationId], ["lot_id", "!=", false], ["quantity", ">", 0]],
+    specification: {
+      lot_id: { fields: { name: {} } },
+      product_id: { fields: { name: {}, tracking: {} } }
+    },
+    limit: 200000
+  });
+
+  const lots = {};
+  for (const quant of quants?.records || []) {
+    const lot = quant.lot_id;
+    const product = quant.product_id;
+    if (!lot?.name || !product?.id || lots[lot.name]) continue;
+    lots[lot.name] = {
+      id: product.id,
+      name: product.name,
+      lot_id: lot.id,
+      lot_name: lot.name,
+      tracking: product.tracking || 'serial'
+    };
+  }
+  return Object.values(lots);
+}
+
 // Serializes submissions per sheet so a double tap / retry can't run two
 // submits in parallel and create the same lines twice.
 const sheetLocks = new Map();
@@ -476,42 +504,66 @@ class CountingController {
         return res.status(400).json({ success: false, message: "Emplacement de l'ajustement introuvable" });
       }
 
-      const [quants, lines] = await Promise.all([
-        odooCall(session, "stock.quant", "web_search_read", [], {
-          domain: [["location_id", "child_of", locationId], ["lot_id", "!=", false], ["quantity", ">", 0]],
-          specification: {
-            lot_id: { fields: { name: {} } },
-            product_id: { fields: { name: {}, tracking: {} } }
-          },
-          limit: 200000
-        }),
+      const [lots, lines] = await Promise.all([
+        fetchLocationLots(session, locationId),
         odooCall(session, "counting.sheet.line", "search_read",
           [[["sheet_id", "=", sheetId]]], { fields: ["number"] })
       ]);
 
-      // One entry per number (a lot can sit in several quants).
-      const lots = {};
-      for (const quant of quants?.records || []) {
-        const lot = quant.lot_id;
-        const product = quant.product_id;
-        if (!lot?.name || !product?.id || lots[lot.name]) continue;
-        lots[lot.name] = {
-          id: product.id,
-          name: product.name,
-          lot_id: lot.id,
-          lot_name: lot.name,
-          tracking: product.tracking || 'serial'
-        };
-      }
-
-      console.log(`Sheet ${sheetId}: ${Object.keys(lots).length} lots for offline use`);
+      console.log(`Sheet ${sheetId}: ${lots.length} lots for offline use`);
       return res.json({
         success: true,
-        lots: Object.values(lots),
+        lots,
         sent: (lines || []).map((l) => l.number).filter(Boolean)
       });
     } catch (error) {
       console.error("Get sheet lots error:", error.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // GET /counting/offline-pack/:adjustment_id
+  // Everything needed to count an adjustment without network, in one call:
+  // the user's counting sheets, the lot/serial numbers in stock in the
+  // inventoried location (shared by all its sheets) and, per sheet, the
+  // numbers already sent to the ERP.
+  static async getOfflinePack(req, res) {
+    try {
+      const session = AuthController.getSession();
+      if (!session || !session.host) {
+        return res.status(401).json({ success: false, message: "Not authenticated" });
+      }
+
+      const adjustmentId = parseInt(req.params.adjustment_id);
+      const [feuilles, [inventory]] = await Promise.all([
+        OdooService.fetchFeuilles(session.host, adjustmentId, session.uid),
+        odooCall(session, "stock.inventory", "read", [[adjustmentId], ["location_id"]])
+      ]);
+      const locationId = inventory?.location_id?.[0];
+      if (!locationId) {
+        return res.status(400).json({ success: false, message: "Emplacement de l'ajustement introuvable" });
+      }
+
+      const sheetIds = feuilles.map((f) => f.id);
+      const [lots, lines] = await Promise.all([
+        fetchLocationLots(session, locationId),
+        sheetIds.length > 0
+          ? odooCall(session, "counting.sheet.line", "search_read",
+              [[["sheet_id", "in", sheetIds]]], { fields: ["number", "sheet_id"] })
+          : Promise.resolve([])
+      ]);
+
+      const sent = {};
+      for (const line of lines || []) {
+        const sheetId = Array.isArray(line.sheet_id) ? line.sheet_id[0] : line.sheet_id;
+        if (!line.number || !sheetId) continue;
+        (sent[sheetId] = sent[sheetId] || []).push(line.number);
+      }
+
+      console.log(`Offline pack ${adjustmentId}: ${feuilles.length} sheets, ${lots.length} lots`);
+      return res.json({ success: true, feuilles, lots, sent });
+    } catch (error) {
+      console.error("Offline pack error:", error.message);
       return res.status(500).json({ success: false, message: error.message });
     }
   }

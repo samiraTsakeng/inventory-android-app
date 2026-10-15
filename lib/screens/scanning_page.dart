@@ -80,11 +80,12 @@ class _ScanningPageState extends State<ScanningPage>
   // Numbers of the sheet available on the phone (offline scanning):
   // shows what is already there, then refreshes it when online.
   Future<void> _prepareOffline() async {
-    final cached = await SheetCacheService.count(widget.countingSheetId);
-    if (_isMounted) setState(() => _offlineCount = cached);
+    final cached = await SheetCacheService.info(widget.adjustmentId);
+    if (_isMounted) setState(() => _offlineCount = cached.count);
     if (!SyncService.online.value) return;
 
-    final refreshed = await SheetCacheService.refresh(widget.countingSheetId);
+    final refreshed = await SheetCacheService.refresh(
+        widget.countingSheetId, widget.adjustmentId);
     if (refreshed != null && _isMounted) {
       setState(() => _offlineCount = refreshed);
     }
@@ -374,6 +375,7 @@ class _ScanningPageState extends State<ScanningPage>
     final lookup = await CountingService.lookupProduct(
       barcode,
       countingSheetId: widget.countingSheetId,
+      adjustmentId: widget.adjustmentId,
     );
     if (lookup.alreadyInErp) {
       ScaffoldMessenger.of(context).showSnackBar(

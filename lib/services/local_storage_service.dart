@@ -143,10 +143,13 @@ class LocalStorageService {
         await prefs.remove(key);
       }
 
-      // Offline copies: lists and the sheets' numbers.
+      // Offline copies: lists, the adjustments' numbers and what each sheet
+      // sent (re-downloaded at the next login). Batches and sheet actions
+      // not replayed yet are kept, like the batches.
       final offlineKeys = allKeys.where((key) =>
           key.startsWith('$_responseCacheKey${sessionId}_') ||
-          key.startsWith('sheet_lots_${sessionId}_'));
+          key.startsWith('adj_lots_${sessionId}_') ||
+          key.startsWith('sheet_sent_${sessionId}_'));
       for (final key in offlineKeys.toList()) {
         await prefs.remove(key);
       }

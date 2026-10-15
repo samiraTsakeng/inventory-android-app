@@ -12,9 +12,10 @@ class CountingService {
   // [offline] is true when the number is unknown to the phone and the
   // server couldn't be asked: the caller may keep it "to verify".
   static Future<({Map<String, dynamic>? product, bool alreadyInErp, bool offline})>
-      lookupProduct(String barcode, {required int countingSheetId}) async {
-    // 1. Numbers of the sheet kept on the phone: no network at all.
-    final sheetLot = await SheetCacheService.findLot(countingSheetId, barcode);
+      lookupProduct(String barcode,
+          {required int countingSheetId, required int adjustmentId}) async {
+    // 1. Numbers of the adjustment kept on the phone: no network at all.
+    final sheetLot = await SheetCacheService.findLot(adjustmentId, barcode);
     if (sheetLot != null) {
       final sent = await SheetCacheService.isSent(countingSheetId, barcode);
       return (product: sheetLot, alreadyInErp: sent, offline: false);
@@ -272,6 +273,11 @@ class CountingService {
     final ok = await _postClear(countingSheetId);
     if (!ok) await _setPendingClear(countingSheetId, true);
     return ok;
+  }
+
+  static Future<bool> hasPendingClears() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_pendingClearsKey) ?? const []).isNotEmpty;
   }
 
   // Replays the clears still pending. Concurrent callers share one run, so
