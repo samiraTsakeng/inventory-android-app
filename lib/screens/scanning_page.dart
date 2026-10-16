@@ -293,7 +293,9 @@ class _ScanningPageState extends State<ScanningPage>
 
       final tracking = result['tracking'] ?? 'serial';
       final lotName = result['lot_name'] ?? matchedBarcode;
-      final lotIdValue = result['lot_id'] ?? 0;
+      // lot_id = id du stock.lot. Jamais 0 : null si absent, le backend le résout alors.
+      final parsedLotId = int.tryParse(result['lot_id']?.toString() ?? '');
+      final int? lotIdValue = (parsedLotId != null && parsedLotId > 0) ? parsedLotId : null;
       final productIdValue = result['id'];
 
       if (tracking == 'lot') {
@@ -529,7 +531,7 @@ class _ScanningPageState extends State<ScanningPage>
   }
 
   Future<void> _handleLotProduct(Map<String, dynamic> result, String barcode,
-      String tracking, String lotName, int lotIdValue, int productIdValue) async {
+      String tracking, String lotName, int? lotIdValue, int productIdValue) async {
     final qty = await _showQuantityDialog(result['name'] ?? 'Unknown', barcode);
     if (qty == null) {
       if (_isMounted) {

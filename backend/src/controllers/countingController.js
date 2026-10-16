@@ -61,6 +61,36 @@ async function processLotFound(session, lot, barcode) {
   };
 }
 
+// ✅ Résout le VRAI lot_id (stock.lot.id) à partir du numéro de série/lot et du
+// produit. On ne fait plus confiance à la valeur envoyée par le téléphone
+// (qui pouvait être 0/null ou périmée dans le cache hors-ligne) : le champ
+// lot_id de counting.sheet.line est un Many2one vers stock.lot, donc on le
+// lit directement dans stock.lot.
+async function resolveLotId(session, lotName, productId) {
+  const response = await fetch(`${session.host}/web/dataset/call_kw`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Cookie": OdooService.sessionCookie
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "call",
+      params: {
+        model: "stock.lot",
+        method: "search_read",
+        args: [[["name", "=", lotName], ["product_id", "=", Number(productId)]]],
+        kwargs: { fields: ["id", "name", "product_id"], limit: 1 }
+      }
+    })
+  });
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error.data?.message || data.error.message || "Erreur Odoo (stock.lot)");
+  }
+  return data.result && data.result.length > 0 ? data.result[0].id : null;
+}
+
 class CountingController {
   // Look up product by lot/serial number barcode
   static async lookupProduct(req, res) {
@@ -536,6 +566,24 @@ class CountingController {
         }
         item.quantity = qty; // normalized for the create/write calls below
 
+        // ✅ lot_id = id du stock.lot correspondant (lu dans Odoo, pas depuis le téléphone)
+        let resolvedLotId = null;
+        try {
+          resolvedLotId = await resolveLotId(session, lineNumber, item.product_id);
+        } catch (err) {
+          console.error(`Lot lookup failed for ${lineNumber}:`, err.message);
+          failedItems.push({ barcode: lineNumber, reason: `Impossible de lire le lot dans Odoo : ${err.message}` });
+          continue;
+        }
+        if (!resolvedLotId) {
+          console.error(`No stock.lot found for ${lineNumber} / product ${item.product_id}`);
+          failedItems.push({
+            barcode: lineNumber,
+            reason: "Numéro de série/lot introuvable dans stock.lot pour ce produit — l'article n'a pas été envoyé."
+          });
+          continue;
+        }
+
         //  Search for an existing line for this exact sheet + number
         // BEFORE creating anything. Without this, resubmitting (double
         // tap on "Envoyer", a rescan-to-add-quantity that was already
@@ -544,6 +592,7 @@ class CountingController {
         // its already-recorded quantity.
         let existingLineId = null;
         let existingQty = 0;
+        let existingHasLot = false;
         try {
           const searchResponse = await fetch(`${session.host}/web/dataset/call_kw`, {
             method: "POST",
@@ -558,7 +607,7 @@ class CountingController {
                 model: "counting.sheet.line",
                 method: "search_read",
                 args: [[["sheet_id", "=", counting_sheet_id], ["number", "=", lineNumber]]],
-                kwargs: { fields: ["id", "counted_qty"], limit: 1 }
+                kwargs: { fields: ["id", "counted_qty", "lot_id"], limit: 1 }
               }
             })
           });
@@ -566,6 +615,7 @@ class CountingController {
           if (searchData.result && searchData.result.length > 0) {
             existingLineId = searchData.result[0].id;
             existingQty = searchData.result[0].counted_qty || 0;
+            existingHasLot = !!searchData.result[0].lot_id;
           }
         } catch (err) {
           console.warn("Could not check for existing line, will create a new one:", err.message);
@@ -589,7 +639,7 @@ class CountingController {
               params: {
                 model: "counting.sheet.line",
                 method: "write",
-                args: [[existingLineId], { counted_qty: newQty }],
+                args: [[existingLineId], existingHasLot ? { counted_qty: newQty } : { counted_qty: newQty, lot_id: resolvedLotId }],
                 kwargs: {}
               }
             })
@@ -618,7 +668,7 @@ class CountingController {
           product_id: item.product_id,
           counted_qty: item.quantity,
           sheet_id: counting_sheet_id,
-          lot_id: item.lot_id
+          lot_id: resolvedLotId
         };
 
         console.log("Creating line:", JSON.stringify(lineData, null, 2));
@@ -856,7 +906,7 @@ class CountingController {
             method: "search_read",
             args: [[["sheet_id", "=", parseInt(sheet_id)]]],
             kwargs: {
-              fields: ["id", "number", "product_id", "counted_qty", "sheet_id"]
+              fields: ["id", "number", "product_id", "counted_qty", "sheet_id", "lot_id"]
             }
           }
         })
