@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 
 class ConsolidationDetailPage extends StatefulWidget {
@@ -75,12 +76,31 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     return field.toString();
   }
 
+  String _initials(dynamic userField) {
+    // userField is either null, an int, or [id, name]
+    if (userField == null) return '';
+    String name = '';
+    if (userField is List && userField.length > 1) {
+      name = userField[1]?.toString() ?? '';
+    } else if (userField is Map && userField.containsKey('name')) {
+      name = userField['name']?.toString() ?? '';
+    } else {
+      name = userField.toString();
+    }
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '';
+    if (parts.length == 1) {
+      return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
+
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'confirm': return Colors.green;
-      case 'progress': return Colors.orange;
-      case 'new': return Colors.blue;
-      case 'cancel': return Colors.red;
+      case 'confirm': return AppColors.successColor;
+      case 'progress': return AppColors.warningColor;
+      case 'new': return AppColors.primaryColor;
+      case 'cancel': return AppColors.errorColor;
       default: return Colors.grey;
     }
   }
@@ -104,7 +124,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Veuillez entrer une quantité valide'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -120,7 +140,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(' Quantité vérifiée sauvegardée'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.successColor,
         ),
       );
       await fetchDetail();
@@ -128,17 +148,62 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(' Erreur lors de la sauvegarde'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppColors.errorColor,
         ),
       );
     }
+  }
+
+  Future<void> _removeContradictoryLine(int lineId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Retirer la ligne contradictoire ?'),
+        content: const Text(
+          'Cette ligne sera retirée de la liste dans l\'application uniquement. '
+              'Aucune modification ne sera faite dans l\'ERP.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Non'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.errorColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Oui'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      final lines = sheetData!['counting_contradictory_line_ids'] as List;
+      lines.removeWhere((l) => l['id'] == lineId);
+      _quantityControllers[lineId]?.dispose();
+      _quantityControllers.remove(lineId);
+    });
   }
 
   Future<void> _validateConsolidation() async {
     final shouldValidate = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Valider la consolidation", style: TextStyle(fontSize: 18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.fact_check_outlined, color: AppColors.primaryColor, size: 20),
+            SizedBox(width: 8),
+            Text("Valider la consolidation", style: TextStyle(fontSize: 18)),
+          ],
+        ),
         content: Text(
           "Voulez-vous valider la consolidation \"${widget.sheetName}\" ?\n\nCette action est irréversible et mettra à jour le stock.",
           style: const TextStyle(fontSize: 14),
@@ -151,7 +216,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.successColor,
               foregroundColor: Colors.white,
             ),
             child: const Text("Oui, valider", style: TextStyle(fontSize: 14)),
@@ -171,7 +236,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(' Consolidation validée avec succès !'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.successColor,
           ),
         );
         Navigator.pop(context, true);
@@ -179,7 +244,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(' Erreur lors de la validation'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
@@ -206,9 +271,6 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       return Scaffold(
         appBar: AppBar(
           title: const Text("Détails", style: TextStyle(fontSize: 16)),
-          backgroundColor: Colors.blue,
-          foregroundColor: Colors.white,
-          elevation: 0,
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, size: 20),
@@ -221,11 +283,11 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 50, color: Colors.red),
+                const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
                 const SizedBox(height: 16),
                 Text(
                   errorMessage ?? "Erreur de chargement",
-                  style: const TextStyle(fontSize: 13, color: Colors.red),
+                  style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
@@ -251,12 +313,9 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     );
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
         title: Text(widget.sheetName, style: const TextStyle(fontSize: 15)),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -286,21 +345,21 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
           // Zone info and team summary
           Container(
             padding: const EdgeInsets.all(12),
-            color: Colors.white,
+            color: AppColors.surfaceColor,
             child: Column(
               children: [
                 Row(
                   children: [
-                    Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                    const Icon(Icons.location_on, size: 16, color: AppColors.textSecondary),
                     const SizedBox(width: 8),
                     Text(
                       "Zone: ${widget.zoneName}",
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                     ),
                     const Spacer(),
                     Text(
                       "Total: ${countingLines.length + contradictoryLines.length} lignes",
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -312,17 +371,18 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.blue[50],
+                          color: AppColors.primaryColor.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.blue[200]!),
+                          border: Border.all(color: AppColors.primaryColor.withOpacity(0.25)),
                         ),
                         child: Center(
                           child: Text(
-                            " Équipe 1",
+                            //show initials of the counter in charge of sheet 1
+                            " Équipe 1 ${_initials(sheetData!['counting_sheet_1']?['user_id'])}",
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: Colors.blue[700],
+                              color: AppColors.primaryColor,
                             ),
                           ),
                         ),
@@ -334,17 +394,17 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.purple[50],
+                          color: AppColors.secondaryColor.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.purple[200]!),
+                          border: Border.all(color: AppColors.secondaryColor.withOpacity(0.25)),
                         ),
                         child: Center(
                           child: Text(
-                            " Équipe 2",
+                            " Équipe 2 ${_initials(sheetData!['counting_sheet_2']?['user_id'])}",
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: Colors.purple[700],
+                              color: AppColors.secondaryColor,
                             ),
                           ),
                         ),
@@ -366,45 +426,29 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.green[50],
+                        color: AppColors.successColor.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.green[200]!),
+                        border: Border.all(color: AppColors.successColor.withOpacity(0.3)),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle, size: 16, color: Colors.green[700]),
+                          const Icon(Icons.check_circle, size: 16, color: AppColors.successColor),
                           const SizedBox(width: 8),
-                          Text(
+                          Expanded(
+                          child: Text(
                             " Lignes correspondantes (${countingLines.length})",
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: Colors.green[700],
+                              color: AppColors.successColor,
                             ),
+                          ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    ...countingLines.map((line) => Card(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      child: ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.check, size: 16, color: Colors.green),
-                        title: Text(
-                          getName(line['lot_id']),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                        subtitle: Text(
-                          getName(line['product_id']),
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                        ),
-                        trailing: Text(
-                          "Qté: ${line['counted_qty']}",
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    )),
+                    //const SizedBox(height: 8),
+
                     const SizedBox(height: 12),
                   ],
                   // Contradictory lines (teams disagree)
@@ -412,29 +456,29 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange[50],
+                        color: AppColors.warningColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange[200]!),
+                        border: Border.all(color: AppColors.warningColor.withOpacity(0.3)),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber, size: 16, color: Colors.orange[700]),
+                          const Icon(Icons.warning_amber, size: 16, color: AppColors.warningColor),
                           const SizedBox(width: 8),
                           Text(
                             "️ Lignes contradictoires (${contradictoryLines.length})",
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: Colors.orange[700],
+                              color: AppColors.warningColor,
                             ),
                           ),
                           const Spacer(),
                           if (isProgress)
                             Text(
                               "${contradictoryLines.where((l) => l['verified_qty'] != null && l['verified_qty'] > 0).length}/${contradictoryLines.length} vérifiées",
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey[600],
+                                color: AppColors.textSecondary,
                               ),
                             ),
                         ],
@@ -465,7 +509,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                     width: 30,
                                     height: 30,
                                     decoration: BoxDecoration(
-                                      color: isVerified ? Colors.green[100] : Colors.orange[100],
+                                      color: (isVerified ? AppColors.successColor : AppColors.warningColor).withOpacity(0.15),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Center(
@@ -474,7 +518,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12,
-                                          color: isVerified ? Colors.green : Colors.orange,
+                                          color: isVerified ? AppColors.successColor : AppColors.warningColor,
                                         ),
                                       ),
                                     ),
@@ -493,16 +537,25 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                         ),
                                         Text(
                                           getName(line['product_id']),
-                                          style: TextStyle(
+                                          style: const TextStyle(
                                             fontSize: 11,
-                                            color: Colors.grey[600],
+                                            color: AppColors.textSecondary,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
                                   if (isVerified)
-                                    const Icon(Icons.check_circle, size: 20, color: Colors.green),
+                                    const Icon(Icons.check_circle, size: 20, color: AppColors.successColor),
+                                  // delete button
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size:18, color: AppColors.errorColor),
+                                    onPressed: () => _removeContradictoryLine(lineId),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'retirer cette ligne',
+
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -514,7 +567,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                                       decoration: BoxDecoration(
-                                        color: Colors.blue[50],
+                                        color: AppColors.primaryColor.withOpacity(0.06),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Column(
@@ -523,7 +576,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                             "Équipe 1",
                                             style: TextStyle(
                                               fontSize: 9,
-                                              color: Colors.blue[700],
+                                              color: AppColors.primaryColor,
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -542,12 +595,12 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                   // VS
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    child: Text(
+                                    child: const Text(
                                       "VS",
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.grey[500],
+                                        color: AppColors.textSecondary,
                                       ),
                                     ),
                                   ),
@@ -557,7 +610,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                                       decoration: BoxDecoration(
-                                        color: Colors.purple[50],
+                                        color: AppColors.secondaryColor.withOpacity(0.06),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Column(
@@ -566,7 +619,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                             "Équipe 2",
                                             style: TextStyle(
                                               fontSize: 9,
-                                              color: Colors.purple[700],
+                                              color: AppColors.secondaryColor,
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -592,9 +645,9 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                                         decoration: BoxDecoration(
-                                          color: isVerified ? Colors.green[50] : Colors.grey[50],
+                                          color: isVerified ? AppColors.successColor.withOpacity(0.08) : AppColors.backgroundColor,
                                           borderRadius: BorderRadius.circular(6),
-                                          border: isVerified ? Border.all(color: Colors.green[300]!) : null,
+                                          border: isVerified ? Border.all(color: AppColors.successColor.withOpacity(0.3)) : null,
                                         ),
                                         child: Column(
                                           children: [
@@ -602,7 +655,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                               "Quantité vérifiée",
                                               style: TextStyle(
                                                 fontSize: 9,
-                                                color: isVerified ? Colors.green[600] : Colors.grey[600],
+                                                color: isVerified ? AppColors.successColor : AppColors.textSecondary,
                                                 fontWeight: FontWeight.w500,
                                               ),
                                             ),
@@ -612,7 +665,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                               style: const TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.green,
+                                                color: AppColors.successColor,
                                               ),
                                             )
                                                 : Row(
@@ -630,7 +683,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                                   ),
                                                 ),
                                                 IconButton(
-                                                  icon: const Icon(Icons.save, size: 18, color: Colors.blue),
+                                                  icon: const Icon(Icons.save, size: 18, color: AppColors.primaryColor),
                                                   onPressed: isSaving
                                                       ? null
                                                       : () => _saveVerifiedQuantity(lineId),
@@ -651,7 +704,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.green,
+                                    color: AppColors.successColor,
                                   ),
                                 ),
                             ],
@@ -671,7 +724,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                             ? null
                             : _validateConsolidation,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                          backgroundColor: AppColors.successColor,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -688,18 +741,21 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                       ),
                     ),
                   if (isConfirm)
-                    const SizedBox(
+                    Container(
                       width: double.infinity,
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text(
-                          '✓ Consolidation validée',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(top: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.successColor.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text(
+                        '✓ Consolidation validée',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: AppColors.successColor,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
