@@ -78,8 +78,9 @@ enregistrés, puis l'appel est rejoué.
   Les autres ajustements n'apparaissent pas, même pour un administrateur.
 - Écran de choix :
   - **Feuille de comptage** : le travail des équipes ;
-  - **Préparer le hors ligne** : télécharge ce qu'il faut pour compter sans
-    réseau (voir §4) ;
+  - **Mode hors ligne** : état de la copie gardée sur le téléphone pour
+    compter sans réseau (préparée automatiquement, voir §4) ; un appui la
+    rafraîchit ;
   - **Gestion des consolidations** : le travail du responsable.
 
 ### 3.3 Comptage (responsables d'équipe)
@@ -132,15 +133,29 @@ Toujours en ligne.
 
 ## 4. Mode hors ligne
 
-### 4.1 Préparer (avec réseau)
-Le bouton **Préparer le hors ligne** (écran de choix) télécharge en un appel :
-- les feuilles de l'utilisateur pour l'inventaire ;
+### 4.1 Préparation automatique
+Une fois connecté, l'application télécharge **automatiquement**, avec les
+droits Odoo de l'utilisateur, tout ce qu'il faut pour travailler sans réseau,
+pour **chaque inventaire** qui le concerne (`OfflinePrepService`) :
+- la liste des inventaires ;
+- les feuilles de l'utilisateur pour chaque inventaire ;
 - tous les **numéros de série / lots en stock** dans l'emplacement inventorié,
-  avec leur article ;
+  avec leur article (seulement si l'utilisateur a une feuille à compter) ;
 - pour chaque feuille, les **numéros déjà envoyés** à Odoo.
 
-La carte indique ensuite « Prêt : N numéros · mis à jour le … ». Rien n'est
-téléchargé automatiquement : il faut refaire « Préparer » pour rafraîchir.
+Elle se lance :
+- après la connexion ;
+- à chaque démarrage de l'application quand Odoo répond ;
+- au retour du réseau, si la dernière préparation a plus de 15 minutes.
+
+Un message confirme la fin (« Mode hors ligne prêt : N feuille(s), M
+numéros »). La carte **Mode hors ligne** de l'écran de choix indique la
+fraîcheur de la copie (« Prêt sans réseau : N numéros · mis à jour le … ») ;
+un appui la rafraîchit pour cet inventaire.
+
+Il suffit donc de s'être connecté une fois avec du réseau : ensuite, le
+comptage complet (commencer, scanner, enregistrer en lots, terminer) se fait
+sans connexion, et est envoyé à Odoo au retour du réseau (§5).
 
 ### 4.2 Ce qui fonctionne sans réseau
 | Action | Comportement hors ligne |
@@ -234,7 +249,7 @@ Toutes les données sont séparées **par compte** (adresse Odoo + email).
 | Liste en cours de scan (par feuille) | Enregistrement en lot, envoi direct, déconnexion |
 | Lots en attente d'envoi | Envoi accepté par Odoo, suppression manuelle |
 | Démarrages / fins faits hors ligne | Rejoués dans Odoo (ou refusés) |
-| Numéros de l'inventaire (préparation) | Déconnexion (re-téléchargés par « Préparer ») |
+| Numéros de l'inventaire (préparation) | Déconnexion (re-téléchargés automatiquement à la connexion) |
 | Numéros déjà envoyés par feuille | Déconnexion |
 | Dernières listes d'inventaires et de feuilles | Déconnexion |
 | Identifiants de connexion | Déconnexion, ou identifiants refusés par Odoo |

@@ -6,6 +6,7 @@ import 'auth_service.dart';
 import 'counting_service.dart';
 import 'batch_storage_service.dart';
 import 'offline_actions_service.dart';
+import 'offline_prep_service.dart';
 
 // Offline mode: knows whether the Odoo server is reachable, from the answers
 // to the calls the user triggers. Nothing is sent and nothing polls the
@@ -39,7 +40,11 @@ class SyncService {
   static void _setOnline(bool value) {
     if (online.value == value) return;
     online.value = value;
-    if (value) _remindPendingWork();
+    if (value) {
+      _remindPendingWork();
+      // Back online: refreshes the offline copy if it is old.
+      OfflinePrepService.refreshIfStale();
+    }
   }
 
   // Back online: tells the user what is waiting, without sending it.

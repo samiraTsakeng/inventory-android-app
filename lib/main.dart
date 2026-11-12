@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'utils/constants.dart';
@@ -12,6 +13,7 @@ import 'screens/batch_list_page.dart';
 import 'screens/consolidation_list_page.dart';
 import 'services/auth_service.dart';
 import 'services/sync_service.dart';
+import 'services/offline_prep_service.dart';
 import 'widgets/offline_banner.dart';
 import 'screens/adjustment_action_page.dart';
 
@@ -39,6 +41,11 @@ void main() async {
   SyncService.start(startOffline: autoLogin == AutoLoginResult.offline);
 
   runApp(MyApp(initialRoute: loggedIn ? '/adjustment-entry' : '/'));
+
+  // Connected: downloads what's needed to work offline, in the background.
+  if (autoLogin == AutoLoginResult.success) {
+    unawaited(OfflinePrepService.prepareAll());
+  }
 }
 
 class MyApp extends StatelessWidget {

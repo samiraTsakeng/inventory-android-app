@@ -78,8 +78,8 @@ class _ScanningPageState extends State<ScanningPage>
   }
 
   // Numbers of the adjustment available on the phone (offline scanning).
-  // Only shown: they are downloaded by "Préparer le hors ligne", never in
-  // the background.
+  // Only shown here: they are downloaded automatically once connected
+  // (OfflinePrepService).
   Future<void> _prepareOffline() async {
     final cached = await SheetCacheService.info(widget.adjustmentId);
     if (_isMounted) setState(() => _offlineCount = cached.count);

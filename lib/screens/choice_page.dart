@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
+import '../services/offline_prep_service.dart';
 import 'consolidation_list_page.dart';
 import 'consolidation_zones_page.dart';
 import 'adjustment_action_page.dart';
@@ -164,9 +165,10 @@ class ChoicePage extends StatelessWidget {
   }
 }
 
-// Downloads what the counting teams need to work without network: the
-// user's sheets, the serial/lot numbers of the inventoried location and
-// what each sheet already sent. Shows how fresh the copy on the phone is.
+// Offline copy of the adjustment: the user's sheets, the serial/lot numbers
+// of the inventoried location and what each sheet already sent. Downloaded
+// automatically once connected (OfflinePrepService); a tap refreshes it.
+// Shows how fresh the copy on the phone is.
 class _OfflinePrepareCard extends StatefulWidget {
   final int adjustmentId;
 
@@ -185,6 +187,19 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
   void initState() {
     super.initState();
     _loadInfo();
+    OfflinePrepService.revision.addListener(_loadInfo);
+    OfflinePrepService.running.addListener(_onRunning);
+  }
+
+  @override
+  void dispose() {
+    OfflinePrepService.revision.removeListener(_loadInfo);
+    OfflinePrepService.running.removeListener(_onRunning);
+    super.dispose();
+  }
+
+  void _onRunning() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadInfo() async {
@@ -225,11 +240,14 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
 
   String _subtitle() {
     final updatedAt = _updatedAt;
+    if (OfflinePrepService.running.value && !_isPreparing) {
+      return 'Préparation automatique en cours…';
+    }
     if (_count == 0 || updatedAt == null) {
-      return 'Télécharger feuilles et numéros pour compter sans réseau';
+      return 'Se prépare automatiquement dès que la connexion est disponible';
     }
     String two(int n) => n.toString().padLeft(2, '0');
-    return 'Prêt : $_count numéros · mis à jour le '
+    return 'Prêt sans réseau : $_count numéros · mis à jour le '
         '${two(updatedAt.day)}/${two(updatedAt.month)} à ${two(updatedAt.hour)}h${two(updatedAt.minute)}';
   }
 
@@ -265,7 +283,7 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Préparer le hors ligne',
+                      'Mode hors ligne',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
@@ -276,7 +294,7 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
                   ],
                 ),
               ),
-              if (_isPreparing)
+              if (_isPreparing || OfflinePrepService.running.value)
                 const SizedBox(
                   width: 20,
                   height: 20,

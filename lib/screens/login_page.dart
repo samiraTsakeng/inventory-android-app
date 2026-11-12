@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
+import '../services/offline_prep_service.dart';
 import '../services/product_cache_service.dart';
 import '../utils/constants.dart';
 import '../utils/storage.dart';
@@ -88,8 +89,9 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (success && mounted) {
-        // Cache products in the background
+        // Cache products and prepare offline work in the background
         _cacheProductsAfterLogin();
+        OfflinePrepService.prepareAll();
 
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
       }
@@ -116,8 +118,9 @@ class _LoginPageState extends State<LoginPage> {
       final success = await AuthService.secondAuthentication(passwordController.text);
 
       if (success && mounted) {
-        // Cache products in the background
+        // Cache products and prepare offline work in the background
         _cacheProductsAfterLogin();
+        OfflinePrepService.prepareAll();
 
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
       } else {

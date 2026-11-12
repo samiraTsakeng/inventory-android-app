@@ -34,7 +34,30 @@ class AuthService {
     return raw.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
   }
 
+  // A login is running: the session saved on the phone is not final yet.
+  static bool get loginInProgress => _loginsInProgress > 0;
+  static int _loginsInProgress = 0;
+
   static Future<bool> login({
+    required String host,
+    required String db,
+    required String email,
+    required String password,
+  }) async {
+    _loginsInProgress++;
+    try {
+      return await _login(host: host, db: db, email: email, password: password);
+    } finally {
+      _loginsInProgress--;
+    }
+  }
+
+  static Future<bool> isLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('is_logged_in') ?? false;
+  }
+
+  static Future<bool> _login({
     required String host,
     required String db,
     required String email,
