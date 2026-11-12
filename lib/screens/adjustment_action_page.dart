@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
 import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 import 'consolidation_zones_page.dart';
@@ -48,7 +49,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = e.toString();
+        errorMessage = friendlyError(e);
         isLoading = false;
       });
     }
@@ -118,7 +119,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
       setState(() => isApplying = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur: ${e.toString()}'),
+          content: Text(friendlyError(e)),
           backgroundColor: AppColors.errorColor,
         ),
       );
@@ -130,7 +131,7 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: Text(widget.adjustmentName, style: const TextStyle(fontSize: 16)),
+        title: Text(widget.adjustmentName),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),

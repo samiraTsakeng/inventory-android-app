@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
 import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 
@@ -63,7 +64,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       }
     } catch (e) {
       setState(() {
-        errorMessage = e.toString();
+        errorMessage = friendlyError(e);
         isLoading = false;
       });
     }
@@ -101,7 +102,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
       case 'progress': return AppColors.warningColor;
       case 'new': return AppColors.primaryColor;
       case 'cancel': return AppColors.errorColor;
-      default: return Colors.grey;
+      default: return AppColors.textSecondary;
     }
   }
 
@@ -270,7 +271,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     if (errorMessage != null || sheetData == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text("Détails", style: TextStyle(fontSize: 16)),
+          title: const Text("Détails"),
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, size: 20),
@@ -315,7 +316,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: Text(widget.sheetName, style: const TextStyle(fontSize: 15)),
+        title: Text(widget.sheetName),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),

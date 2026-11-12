@@ -43,7 +43,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text("Ajustement de stock", style: TextStyle(fontSize: 18)),
+        title: const Text("Ajustement de stock"),
         centerTitle: true,
         leading: Builder(
           builder: (context) => IconButton(

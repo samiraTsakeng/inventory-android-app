@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
 import '../utils/constants.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
@@ -191,7 +192,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     switch (tracking) {
       case 'serial': return AppColors.secondaryColor;
       case 'lot': return AppColors.warningColor;
-      default: return Colors.grey;
+      default: return AppColors.textSecondary;
     }
   }
 
@@ -297,7 +298,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         setState(() => _isSending = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur: ${e.toString()}'),
+            content: Text(friendlyError(e)),
             backgroundColor: AppColors.errorColor,
           ),
         );
@@ -326,7 +327,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: Text(widget.sheetName, style: const TextStyle(fontSize: 15)),
+        title: Text(widget.sheetName),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -483,7 +484,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                                   const SizedBox(height: 4),
                                   Row(
                                     children: [
-                                      Icon(Icons.qr_code_2, size: 11, color: Colors.grey[500]),
+                                      Icon(Icons.qr_code_2, size: 11, color: AppColors.textSecondary),
                                       const SizedBox(width: 3),
                                       Text(
                                         item.barcode,

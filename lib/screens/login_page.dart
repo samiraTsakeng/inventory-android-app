@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/product_cache_service.dart';
@@ -61,7 +62,7 @@ class _LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(' $count produits chargés pour le mode hors ligne'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.successColor,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -96,8 +97,8 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Login failed: ${e.toString()}"),
-            backgroundColor: Colors.red,
+            content: Text(friendlyError(e)),
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
@@ -120,14 +121,14 @@ class _LoginPageState extends State<LoginPage> {
 
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
       } else {
-        throw Exception("Invalid password");
+        throw Exception("Mot de passe incorrect");
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(" Authentication failed: ${e.toString()}"),
-            backgroundColor: Colors.red,
+            content: Text(friendlyError(e)),
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
@@ -184,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Veuillez entrer votre email'),
-                    backgroundColor: Colors.orange,
+                    backgroundColor: AppColors.warningColor,
                   ),
                 );
                 return;
@@ -208,7 +209,7 @@ class _LoginPageState extends State<LoginPage> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Un lien de réinitialisation a été envoyé à votre email'),
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppColors.successColor,
                   ),
                 );
 
@@ -216,8 +217,8 @@ class _LoginPageState extends State<LoginPage> {
                 Navigator.pop(context); // Close loading
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Erreur: ${e.toString()}'),
-                    backgroundColor: Colors.red,
+                    content: Text(friendlyError(e)),
+                    backgroundColor: AppColors.errorColor,
                   ),
                 );
               }
@@ -257,7 +258,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 5),
                 const Text(
                   "Connectez-vous pour continuer",
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 40),
 
@@ -335,7 +336,7 @@ class _LoginPageState extends State<LoginPage> {
                         foregroundColor: AppColors.primaryColor,
                       ),
                       child: const Text(
-                        "Mot de passe oublié?",
+                        "Mot de passe oublié ?",
                         style: TextStyle(fontSize: 14),
                       ),
                     ),
@@ -348,7 +349,7 @@ class _LoginPageState extends State<LoginPage> {
                   TextButton(
                     onPressed: _resetToFullLogin,
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey,
+                      foregroundColor: AppColors.textSecondary,
                     ),
                     child: const Text(
                       "Changer de compte",
@@ -372,7 +373,7 @@ class _LoginPageState extends State<LoginPage> {
       }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: AppColors.backgroundColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: TextField(

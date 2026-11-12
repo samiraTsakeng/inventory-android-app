@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
+import '../utils/constants.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
@@ -82,7 +84,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        errorMessage = e.toString();
+        errorMessage = friendlyError(e);
         isLoading = false;
       });
     }
@@ -112,7 +114,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Hors ligne : touchez le bandeau « Réessayer » une fois le réseau revenu'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -129,7 +131,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Hors ligne : la feuille sera envoyée au retour du réseau'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -141,7 +143,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.describe()),
-        backgroundColor: result.error == null && !result.offline ? Colors.green : Colors.orange,
+        backgroundColor: result.error == null && !result.offline ? AppColors.successColor : AppColors.warningColor,
         duration: const Duration(seconds: 6),
       ),
     );
@@ -189,11 +191,11 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'progress': return Colors.green;
-      case 'confirm': return Colors.blue;
-      case 'new': return Colors.orange;
-      case 'cancel': return Colors.red;
-      default: return Colors.grey;
+      case 'progress': return AppColors.successColor;
+      case 'confirm': return AppColors.secondaryColor;
+      case 'new': return AppColors.warningColor;
+      case 'cancel': return AppColors.errorColor;
+      default: return AppColors.textSecondary;
     }
   }
 
@@ -233,7 +235,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Hors ligne : comptage commencé, confirmé par Odoo à la synchronisation'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppColors.warningColor,
       ),
     );
     fetchFeuilles();
@@ -249,7 +251,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       final result = await CountingService.startSheet(sheetId);
       if (result.success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comptage commencé'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Comptage commencé'), backgroundColor: AppColors.successColor),
         );
         fetchFeuilles();
       } else if (!SyncService.online.value) {
@@ -259,13 +261,13 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.message ?? 'Erreur lors du démarrage'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+        SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.errorColor),
       );
     } finally {
       if (mounted) setState(() => _startingSheetId = null);
@@ -278,7 +280,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
     if (sheetId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: AppColors.warningColor),
       );
       return;
     }
@@ -295,7 +297,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Envoyez d\'abord les $unsynced lot(s) de cette feuille (bouton Envoyer)'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -318,7 +320,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: AppColors.errorColor,
                 foregroundColor: Colors.white,
               ),
               child: const Text("Oui, terminer", style: TextStyle(fontSize: 14)),
@@ -342,7 +344,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Enregistrez d\'abord les $unsaved article(s) scanné(s) dans un lot'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -352,7 +354,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Hors ligne : comptage terminé, validé dans Odoo après l\'envoi de ses lots'),
-        backgroundColor: Colors.orange,
+        backgroundColor: AppColors.warningColor,
       ),
     );
     fetchFeuilles();
@@ -368,7 +370,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       final result = await CountingService.validateSheet(sheetId);
       if (result.success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comptage terminé'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Comptage terminé'), backgroundColor: AppColors.successColor),
         );
         fetchFeuilles();
       } else if (!SyncService.online.value) {
@@ -378,13 +380,13 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.message ?? 'Erreur lors de la validation'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.errorColor,
           ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: ${e.toString()}'), backgroundColor: Colors.red),
+        SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.errorColor),
       );
     } finally {
       if (mounted) setState(() => _validatingSheetId = null);
@@ -394,10 +396,10 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text("Feuilles", style: TextStyle(fontSize: 15)),
-        backgroundColor: Colors.blue,
+        title: const Text("Feuilles"),
+        backgroundColor: AppColors.secondaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -436,7 +438,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                 value: 'terminer',
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle, size: 18, color: Colors.green),
+                    Icon(Icons.check_circle, size: 18, color: AppColors.successColor),
                     SizedBox(width: 8),
                     Text('Terminer le comptage en cours'),
                   ],
@@ -468,11 +470,11 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 50, color: Colors.red),
+              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
               const SizedBox(height: 16),
               Text(
                 errorMessage!,
-                style: const TextStyle(fontSize: 13, color: Colors.red),
+                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -491,7 +493,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory, size: 40, color: Colors.grey),
+            Icon(Icons.inventory, size: 40, color: AppColors.textSecondary),
             SizedBox(height: 8),
             Text("Aucune feuille trouvée", style: TextStyle(fontSize: 12)),
           ],
@@ -570,7 +572,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.orange,
+                                color: AppColors.warningColor,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
@@ -611,12 +613,12 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                           const SizedBox(height: 3),
                           Row(
                             children: [
-                              Icon(Icons.location_on, size: 9, color: Colors.grey[500]),
+                              Icon(Icons.location_on, size: 9, color: AppColors.textSecondary),
                               const SizedBox(width: 2),
                               Expanded(
                                 child: Text(
                                   zoneName,
-                                  style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -626,12 +628,12 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                           const SizedBox(height: 2),
                           Row(
                             children: [
-                              Icon(Icons.person, size: 9, color: Colors.grey[500]),
+                              Icon(Icons.person, size: 9, color: AppColors.textSecondary),
                               const SizedBox(width: 2),
                               Expanded(
                                 child: Text(
                                   getName(f["user_id"]),
-                                  style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -642,11 +644,11 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                             const SizedBox(height: 2),
                             Row(
                               children: [
-                                Icon(Icons.inventory_2, size: 9, color: Colors.blue[600]),
+                                Icon(Icons.inventory_2, size: 9, color: AppColors.secondaryColor),
                                 const SizedBox(width: 2),
                                 Text(
                                   '$unsyncedBatches lot(s) à envoyer',
-                                  style: TextStyle(fontSize: 9, color: Colors.blue[700], fontWeight: FontWeight.w600),
+                                  style: TextStyle(fontSize: 9, color: AppColors.secondaryColor, fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
@@ -659,7 +661,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                               child: ElevatedButton(
                                 onPressed: _startingSheetId == countingSheetId ? null : () => _startSheet(countingSheetId),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: AppColors.successColor,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 4),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -691,7 +693,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                   _loadPendingCounts();
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
+                                  backgroundColor: AppColors.secondaryColor,
                                   foregroundColor: Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 4),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -711,7 +713,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                     ? null
                                     : () => _confirmAndValidate(countingSheetId, sheetName),
                                 style: TextButton.styleFrom(
-                                  foregroundColor: Colors.red[700],
+                                  foregroundColor: AppColors.errorColor,
                                   padding: EdgeInsets.zero,
                                   textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
                                 ),
@@ -726,7 +728,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: waitingSync ? Colors.orange : Colors.green,
+                                  color: waitingSync ? AppColors.warningColor : AppColors.successColor,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),

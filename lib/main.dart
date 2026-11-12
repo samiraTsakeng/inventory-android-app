@@ -73,9 +73,9 @@ class MyApp extends StatelessWidget {
           backgroundColor: AppColors.primaryColor,
           foregroundColor: Colors.white,
           elevation: 0,
-          centerTitle: false,
+          centerTitle: true,
           titleTextStyle: GoogleFonts.inter(
-            fontSize: 19,
+            fontSize: 17,
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),

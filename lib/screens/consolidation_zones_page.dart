@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
 import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 
@@ -43,7 +44,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
       print("Loaded ${zones.length} zones ready for consolidation");
     } catch (e) {
       setState(() {
-        errorMessage = e.toString();
+        errorMessage = friendlyError(e);
         isLoading = false;
       });
     }
@@ -114,7 +115,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
       setState(() => isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur: ${e.toString()}'),
+          content: Text(friendlyError(e)),
           backgroundColor: AppColors.errorColor,
         ),
       );
@@ -126,7 +127,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text("Zones à consolider", style: TextStyle(fontSize: 16)),
+        title: const Text("Zones à consolider"),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),

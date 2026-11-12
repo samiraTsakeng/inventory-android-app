@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import '../services/local_storage_service.dart';
 
 class CacheStatusWidget extends StatefulWidget {
@@ -29,7 +30,7 @@ class _CacheStatusWidgetState extends State<CacheStatusWidget> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: _cachedCount > 0 ? Colors.green[100] : Colors.grey[200],
+        color: _cachedCount > 0 ? AppColors.successColor.withOpacity(0.12) : AppColors.borderColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -38,14 +39,14 @@ class _CacheStatusWidgetState extends State<CacheStatusWidget> {
           Icon(
             _cachedCount > 0 ? Icons.check_circle : Icons.cloud_off,
             size: 14,
-            color: _cachedCount > 0 ? Colors.green : Colors.grey,
+            color: _cachedCount > 0 ? AppColors.successColor : AppColors.textSecondary,
           ),
           const SizedBox(width: 4),
           Text(
             _cachedCount > 0 ? '$_cachedCount produits en cache' : 'Mode hors ligne prêt',
             style: TextStyle(
               fontSize: 10,
-              color: _cachedCount > 0 ? Colors.green[800] : Colors.grey[600],
+              color: _cachedCount > 0 ? AppColors.successColor : AppColors.textSecondary,
             ),
           ),
         ],

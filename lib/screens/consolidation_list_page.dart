@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
 import '../utils/constants.dart';
 import '../services/consolidation_service.dart';
 import 'consolidation_detail_page.dart';
@@ -52,7 +53,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
     } catch (e) {
       print("Error fetching consolidation sheets: $e");
       setState(() {
-        errorMessage = e.toString();
+        errorMessage = friendlyError(e);
         isLoading = false;
       });
     }
@@ -85,7 +86,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
       case 'progress': return AppColors.warningColor;
       case 'new': return AppColors.primaryColor;
       case 'cancel': return AppColors.errorColor;
-      default: return Colors.grey;
+      default: return AppColors.textSecondary;
     }
   }
 
@@ -115,7 +116,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text("Consolidations", style: TextStyle(fontSize: 16)),
+        title: const Text("Consolidations"),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
@@ -314,7 +315,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
                       // Arrow
                       Icon(
                         Icons.chevron_right,
-                        color: Colors.grey[400],
+                        color: AppColors.textSecondary.withOpacity(0.7),
                       ),
                     ],
                   ),

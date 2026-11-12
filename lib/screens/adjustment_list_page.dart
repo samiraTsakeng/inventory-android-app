@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
 import '../services/adjustment_service.dart';
 import '../utils/constants.dart';
 import 'choice_page.dart';
@@ -30,7 +31,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = e.toString();
+        errorMessage = friendlyError(e);
         isLoading = false;
       });
     }
@@ -48,11 +49,11 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
 
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'draft': return Colors.orange;
-      case 'confirm': return Colors.green;
+      case 'draft': return AppColors.warningColor;
+      case 'confirm': return AppColors.successColor;
       case 'done': return AppColors.primaryColor;
-      case 'cancel': return Colors.red;
-      default: return Colors.grey;
+      case 'cancel': return AppColors.errorColor;
+      default: return AppColors.textSecondary;
     }
   }
 
@@ -116,11 +117,11 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
+                Icon(Icons.calendar_today, size: 12, color: AppColors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
                   formatDate(adj["date"]),
-                  style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -154,9 +155,9 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text("Ajustements", style: TextStyle(fontSize: 16)),
+        title: const Text("Ajustements"),
         backgroundColor: AppColors.primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -184,9 +185,9 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 40, color: Colors.red),
+            const Icon(Icons.error_outline, size: 40, color: AppColors.errorColor),
             const SizedBox(height: 8),
-            Text("Error: $errorMessage", style: const TextStyle(fontSize: 12)),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 32), child: Text(errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14))),
             const SizedBox(height: 8),
             ElevatedButton(
               onPressed: () {
@@ -206,7 +207,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory, size: 40, color: Colors.grey),
+            Icon(Icons.inventory, size: 40, color: AppColors.textSecondary),
             SizedBox(height: 8),
             Text("Aucun ajustement trouvé", style: TextStyle(fontSize: 12)),
           ],
@@ -263,7 +264,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                                 color: getStatusColor(adj["state"]),
                               ),
                             ),
-                            Icon(Icons.chevron_right, size: 14, color: Colors.grey[400]),
+                            Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary.withOpacity(0.7)),
                           ],
                         ),
                       ),
@@ -286,11 +287,11 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(Icons.calendar_today, size: 10, color: Colors.grey[500]),
+                                Icon(Icons.calendar_today, size: 10, color: AppColors.textSecondary),
                                 const SizedBox(width: 2),
                                 Text(
                                   formatDate(adj["date"]),
-                                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
                                 ),
                               ],
                             ),
@@ -298,7 +299,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
+                                color: AppColors.secondaryColor.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Row(
@@ -306,10 +307,10 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                                 children: [
                                   Text(
                                     "Voir",
-                                    style: TextStyle(fontSize: 12, color: Colors.blue),
+                                    style: TextStyle(fontSize: 12, color: AppColors.secondaryColor),
                                   ),
                                   SizedBox(width: 2),
-                                  Icon(Icons.arrow_forward, size: 8, color: Colors.blue),
+                                  Icon(Icons.arrow_forward, size: 8, color: AppColors.secondaryColor),
                                 ],
                               ),
                             ),

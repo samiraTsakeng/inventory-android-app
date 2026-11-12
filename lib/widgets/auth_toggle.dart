@@ -16,7 +16,7 @@ class AuthToggle extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: AppColors.borderColor,
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(

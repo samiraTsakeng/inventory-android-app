@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import 'consolidation_list_page.dart';
 import 'consolidation_zones_page.dart';
 import 'adjustment_action_page.dart';
@@ -19,7 +20,7 @@ class ChoicePage extends StatelessWidget {
         Navigator.pop(context);
       });
       return const Scaffold(
-        body: Center(child: Text("Error: No adjustment selected")),
+        body: Center(child: Text("Aucun ajustement sélectionné")),
       );
     }
 
@@ -27,7 +28,7 @@ class ChoicePage extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text("Choisir une option"),
-        backgroundColor: Colors.blue,
+        backgroundColor: AppColors.secondaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -57,7 +58,7 @@ class ChoicePage extends StatelessWidget {
               title: "Feuille de comptage",
               subtitle: "Scanner les articles pour le comptage",
               icon: Icons.qr_code_scanner,
-              color: Colors.blue,
+              color: AppColors.secondaryColor,
               onTap: () {
                 Navigator.pushNamed(
                   context,
@@ -76,7 +77,7 @@ class ChoicePage extends StatelessWidget {
               title: "Gestion des consolidations",
               subtitle: "Consolider les zones et appliquer au stock",
               icon: Icons.merge_type,
-              color: Colors.purple,
+              color: AppColors.primaryLight,
               onTap: () {
                 Navigator.push(
                   context,
@@ -117,7 +118,7 @@ class ChoicePage extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: enabled ? Colors.white : Colors.grey[50],
+            color: enabled ? Colors.white : AppColors.backgroundColor,
           ),
           child: Row(
             children: [
@@ -127,7 +128,7 @@ class ChoicePage extends StatelessWidget {
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, size: 32, color: enabled ? color : Colors.grey),
+                child: Icon(icon, size: 32, color: enabled ? color : AppColors.textSecondary),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -139,7 +140,7 @@ class ChoicePage extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: enabled ? Colors.black87 : Colors.grey,
+                        color: enabled ? Colors.black87 : AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -147,7 +148,7 @@ class ChoicePage extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: 14,
-                        color: enabled ? Colors.grey[600] : Colors.grey[400],
+                        color: enabled ? AppColors.textSecondary : AppColors.textSecondary.withOpacity(0.7),
                       ),
                     ),
                   ],
@@ -200,7 +201,7 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Connexion nécessaire pour préparer le hors ligne'),
-          backgroundColor: Colors.orange,
+          backgroundColor: AppColors.warningColor,
         ),
       );
       return;
@@ -216,7 +217,7 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
         content: Text(result == null
             ? 'Préparation impossible, réessayez avec une meilleure connexion'
             : 'Prêt pour le hors ligne : ${result.sheets} feuille(s), ${result.lots} numéros'),
-        backgroundColor: result == null ? Colors.red : Colors.green,
+        backgroundColor: result == null ? AppColors.errorColor : AppColors.successColor,
       ),
     );
     await _loadInfo();
@@ -235,7 +236,7 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
   @override
   Widget build(BuildContext context) {
     final ready = _count > 0;
-    final color = ready ? Colors.green : Colors.teal;
+    final color = ready ? AppColors.successColor : AppColors.tertiaryColor;
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -270,7 +271,7 @@ class _OfflinePrepareCardState extends State<_OfflinePrepareCard> {
                     const SizedBox(height: 4),
                     Text(
                       _subtitle(),
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                     ),
                   ],
                 ),

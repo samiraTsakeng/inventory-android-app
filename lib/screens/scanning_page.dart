@@ -1021,9 +1021,9 @@ class _ScanningPageState extends State<ScanningPage>
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout, size: 18, color: Colors.red),
+                    Icon(Icons.logout, size: 18, color: AppColors.errorColor),
                     SizedBox(width: 8),
-                    Text('Déconnexion', style: TextStyle(color: Colors.red)),
+                    Text('Déconnexion', style: TextStyle(color: AppColors.errorColor)),
                   ],
                 ),
               ),
@@ -1167,7 +1167,7 @@ class _ScanningPageState extends State<ScanningPage>
                   child: LinearProgressIndicator(
                     value: (scannedItems.length / 999).clamp(0.0, 1.0),
                     minHeight: 4,
-                    backgroundColor: Colors.grey[200],
+                    backgroundColor: AppColors.borderColor,
                     color: AppColors.successColor,
                   ),
                 ),
@@ -1176,7 +1176,7 @@ class _ScanningPageState extends State<ScanningPage>
                   scannedItems.isEmpty
                       ? "Scannez le code-barres"
                       : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
