@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'api_config.dart';
 import 'local_storage_service.dart';
 
 enum AutoLoginResult {
@@ -42,93 +40,92 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    final server = ApiClient.normalizeHost(host);
+    // Short: at startup without network the app opens offline sooner.
+    const timeout = Duration(seconds: 12);
+    final Map<String, dynamic> info;
+    String dbName = db.trim();
     try {
-      String dbName = db.trim();
-
-      // If no database provided, use the first available
-      if (dbName.isEmpty) {
-        final databases = await _getDatabases(host);
-        if (databases.isNotEmpty) {
-          dbName = databases.first;
-          print("Auto-selected database: $dbName");
-        }
-      }
-
-      // If still no database, try to detect
-      if (dbName.isEmpty) {
-        dbName = await _detectDatabase(host, email, password);
-        if (dbName.isEmpty) {
-          throw Exception("No database found. Please check your connection.");
-        }
-      }
-
-      final response = await ApiClient.post(
-        Uri.parse(ApiConfig.login),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "host": host,
-          "db": dbName,
-          "email": email,
-          "password": password,
-        }),
-        // Short: at startup without network the app opens offline sooner.
-        timeout: const Duration(seconds: 12),
-      );
-
-      print("STATUS: ${response.statusCode}");
-
-      if (response.statusCode != 200) {
-        String? message;
-        try {
-          message = jsonDecode(response.body)["message"];
-        } catch (_) {}
-        // 401: Odoo rejected the credentials. Anything else: the server or
-        // Odoo is unreachable, the saved session stays valid.
-        if (response.statusCode == 401) {
-          throw AuthRejectedException(message ?? "Identifiants refusés");
-        }
-        throw Exception(message ?? "Server error");
-      }
-
-      final data = jsonDecode(response.body);
-
-      if (data["success"] == true) {
-        // ✅ Generate a STABLE session ID based on host + email only.
-        // IMPORTANT: this must NOT include a timestamp. Every app restart
-        // (including the silent autoLogin() call in main.dart) calls this
-        // same login() method. If the session ID changes on every login,
-        // it changes the SharedPreferences key namespace used to persist
-        // not-yet-saved scanned items (see LocalStorageService), which
-        // orphans and effectively "deletes" any scanned articles that
-        // hadn't been saved into a batch yet (e.g. after a battery death
-        // or app crash mid-scan). Keeping it deterministic per account
-        // means the same user always maps back to the same storage keys,
-        // so their unsaved scanned items are recovered automatically.
-        final sessionId = _generateSessionId(host, email);
-
-        // ✅ Save session
-        await _saveSession(
-          host: host,
+      if (dbName.isNotEmpty) {
+        info = await ApiClient.authenticate(
+          host: server,
           db: dbName,
-          email: email,
+          login: email,
           password: password,
-          uid: data["uid"],
-          name: data["name"],
-          sessionId: sessionId,
+          timeout: timeout,
         );
-
-        // ✅ Set session ID in local storage for cache
-        await LocalStorageService.setSessionId(sessionId);
-
-        return true;
+      } else {
+        // No database given: the one where these credentials are accepted.
+        final found = await _authenticateAnyDatabase(
+          server,
+          email,
+          password,
+          timeout,
+        );
+        dbName = found.db;
+        info = found.info;
       }
-
-      return false;
-
-    } catch (e) {
-      print("AUTH ERROR: $e");
-      rethrow;
+    } on OdooAuthException catch (e) {
+      // Odoo refused the credentials: the saved session is forgotten.
+      throw AuthRejectedException(e.message);
     }
+
+    // ✅ Stable session id based on host + email only. It must NOT include a
+    // timestamp: every app start (silent autoLogin() in main.dart) calls
+    // this login(). If the id changed on every login, it would change the
+    // SharedPreferences namespace used to persist not-yet-saved scanned
+    // items (see LocalStorageService), orphaning articles scanned before a
+    // battery death or crash. Deterministic per account, the same user
+    // always maps back to the same storage keys.
+    final sessionId = _generateSessionId(host, email);
+
+    await _saveSession(
+      host: host,
+      db: dbName,
+      email: email,
+      password: password,
+      uid: info['uid'] as int,
+      name: (info['name'] ?? info['username'] ?? email).toString(),
+      sessionId: sessionId,
+    );
+    await LocalStorageService.setSessionId(sessionId);
+    return true;
+  }
+
+  // Tries the server's databases (or common names when the list is hidden)
+  // until one accepts the credentials.
+  static Future<({String db, Map<String, dynamic> info})>
+  _authenticateAnyDatabase(
+    String host,
+    String email,
+    String password,
+    Duration timeout,
+  ) async {
+    final listed = await ApiClient.databases(host);
+    final candidates = listed.isNotEmpty
+        ? listed
+        : const ['odoo_db', 'odoo', 'postgres', 'default'];
+    OdooAuthException? lastRefusal;
+    for (final candidate in candidates) {
+      try {
+        final info = await ApiClient.authenticate(
+          host: host,
+          db: candidate,
+          login: email,
+          password: password,
+          timeout: timeout,
+        );
+        return (db: candidate, info: info);
+      } on OdooAuthException catch (e) {
+        lastRefusal = e;
+      }
+    }
+    if (listed.length == 1 && lastRefusal != null) throw lastRefusal;
+    throw OdooAuthException(
+      listed.isEmpty
+          ? 'Base de données introuvable : renseignez le nom de la base.'
+          : 'Email ou mot de passe incorrect.',
+    );
   }
 
   // Auto-login using stored credentials.
@@ -141,7 +138,7 @@ class AuthService {
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
       if (!isLoggedIn) {
-        print ("No saved session found");
+        print("No saved session found");
         return AutoLoginResult.noSession;
       }
       final session = await getFullSession();
@@ -172,8 +169,8 @@ class AuthService {
   }
 
   // Logs in again with the saved credentials, without touching local data.
-  // Used at startup, when the network comes back and when the backend
-  // answers 401 (it restarted and lost the session).
+  // Used at startup, when the network comes back and when Odoo answers
+  // that the session expired.
   static Future<bool> reauthenticate({bool rethrowErrors = false}) async {
     try {
       final session = await getFullSession();
@@ -188,62 +185,6 @@ class AuthService {
       if (rethrowErrors) rethrow;
       print("Re-authentication failed: $e");
       return false;
-    }
-  }
-
-  static Future<List<String>> _getDatabases(String host) async {
-    try {
-      final response = await ApiClient.post(
-        Uri.parse("$host/web/database/list"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({}),
-        timeout: const Duration(seconds: 10),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['result'] != null && data['result'] is List) {
-          return List<String>.from(data['result']);
-        }
-      }
-      return [];
-    } catch (e) {
-      print("Get databases error: $e");
-      return [];
-    }
-  }
-
-  static Future<String> _detectDatabase(String host, String email, String password) async {
-    try {
-      final commonDbs = ['odoo_db', 'odoo', 'postgres', 'default'];
-
-      for (String dbName in commonDbs) {
-        try {
-          final response = await ApiClient.post(
-            Uri.parse(ApiConfig.login),
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode({
-              "host": host,
-              "db": dbName,
-              "email": email,
-              "password": password,
-            }),
-          );
-
-          if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            if (data["success"] == true) {
-              return dbName;
-            }
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-      return '';
-    } catch (e) {
-      print("Detect database error: $e");
-      return '';
     }
   }
 
@@ -273,11 +214,7 @@ class AuthService {
     final email = prefs.getString(_sessionEmailKey);
 
     if (host != null && email != null) {
-      return {
-        'host': host,
-        'db': db ?? '',
-        'email': email,
-      };
+      return {'host': host, 'db': db ?? '', 'email': email};
     }
     return null;
   }
@@ -314,6 +251,7 @@ class AuthService {
     await prefs.remove(_sessionUidKey);
     await prefs.remove(_sessionNameKey);
     await prefs.remove('is_logged_in');
+    ApiClient.clearSession();
 
     // ✅ Clear all local data for this session
     await LocalStorageService.clearAllSessionData();

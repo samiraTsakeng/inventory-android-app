@@ -7,13 +7,13 @@ import 'counting_service.dart';
 import 'batch_storage_service.dart';
 import 'offline_actions_service.dart';
 
-// Offline mode: knows whether the backend is reachable, from the answers
+// Offline mode: knows whether the Odoo server is reachable, from the answers
 // to the calls the user triggers. Nothing is sent and nothing polls the
 // server on its own: work done offline goes out only when the user taps
 // "Envoyer" (one sheet) or "Tout envoyer", sheet by sheet; the connection
 // is retested when the user taps the offline banner.
 class SyncService {
-  // false while the backend can't be reached.
+  // false while the Odoo server can't be reached.
   static final ValueNotifier<bool> online = ValueNotifier(true);
   // Saved batches not sent to the ERP yet.
   static final ValueNotifier<int> pendingBatches = ValueNotifier(0);
@@ -49,9 +49,11 @@ class SyncService {
     if (batches == 0 && !actions) return;
     messengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: Text(batches > 0
-            ? 'Connexion rétablie : $batches lot(s) en attente. Utilisez « Envoyer » pour les transmettre.'
-            : 'Connexion rétablie : des feuilles sont à synchroniser. Utilisez « Envoyer ».'),
+        content: Text(
+          batches > 0
+              ? 'Connexion rétablie : $batches lot(s) en attente. Utilisez « Envoyer » pour les transmettre.'
+              : 'Connexion rétablie : des feuilles sont à synchroniser. Utilisez « Envoyer ».',
+        ),
         backgroundColor: Colors.blue,
         duration: const Duration(seconds: 6),
       ),
@@ -62,8 +64,8 @@ class SyncService {
   // Returns true when back online.
   static Future<bool> checkConnection() async {
     try {
-      await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/'),
+      await ApiClient.call(
+        ApiConfig.versionInfo,
         timeout: const Duration(seconds: 5),
       );
     } catch (_) {}
@@ -76,12 +78,14 @@ class SyncService {
   // batches waiting, oldest batch first.
   static Future<List<int>> sheetsToSync() async {
     final order = await OfflineActionsService.sheetsInOrder();
-    final batches = (await BatchStorageService.getBatches())
-        .where((b) => !b.isSynced)
-        .toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final batches =
+        (await BatchStorageService.getBatches())
+            .where((b) => !b.isSynced)
+            .toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     for (final batch in batches) {
-      if (!order.contains(batch.countingSheetId)) order.add(batch.countingSheetId);
+      if (!order.contains(batch.countingSheetId))
+        order.add(batch.countingSheetId);
     }
     return order;
   }
@@ -131,10 +135,14 @@ class SyncService {
   // first refusal: what follows would be refused too.
   static Future<SheetSyncResult> _syncOneSheet(int sheetId) async {
     final allBatches = await BatchStorageService.getBatches();
-    final sheetBatches = allBatches.where((b) => b.countingSheetId == sheetId).toList();
+    final sheetBatches = allBatches
+        .where((b) => b.countingSheetId == sheetId)
+        .toList();
     final result = SheetSyncResult(
       sheetId,
-      sheetBatches.isNotEmpty ? sheetBatches.first.sheetName : 'Feuille $sheetId',
+      sheetBatches.isNotEmpty
+          ? sheetBatches.first.sheetName
+          : 'Feuille $sheetId',
     );
 
     final start = await OfflineActionsService.replayStart(sheetId);
@@ -176,11 +184,13 @@ class SyncService {
     final ok = results.every((r) => r.error == null && !r.offline);
     messengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: Text([
-          'Synchronisation',
-          ...lines.take(4),
-          if (lines.length > 4) '…',
-        ].join('\n')),
+        content: Text(
+          [
+            'Synchronisation',
+            ...lines.take(4),
+            if (lines.length > 4) '…',
+          ].join('\n'),
+        ),
         backgroundColor: ok ? Colors.green : Colors.orange,
         duration: Duration(seconds: ok ? 5 : 10),
       ),
@@ -200,7 +210,6 @@ class SyncService {
     return batches.any((b) => !b.isSynced);
   }
 }
-
 
 // What a sheet sync did, for the messages shown to the user.
 class SheetSyncResult {
@@ -226,8 +235,8 @@ class SheetSyncResult {
     final problem = error != null
         ? 'refusé : $error'
         : offline
-            ? 'connexion perdue, reprise plus tard'
-            : null;
+        ? 'connexion perdue, reprise plus tard'
+        : null;
     if (done.isEmpty && problem == null) return '$sheetName : rien à envoyer';
     return '$sheetName : ${[...done, if (problem != null) problem].join(', ')}';
   }

@@ -27,27 +27,38 @@ class SheetCacheService {
   // Downloads everything needed to count the adjustment offline: the
   // user's sheets (kept for the sheet list), the numbers and what each
   // sheet already sent. Returns null when the server couldn't be reached.
-  static Future<({int sheets, int lots})?> prepareAdjustment(int adjustmentId) async {
+  static Future<({int sheets, int lots})?> prepareAdjustment(
+    int adjustmentId,
+  ) async {
     try {
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/counting/offline-pack/$adjustmentId'),
+      final response = await ApiClient.call(
+        ApiConfig.offlinePack,
+        params: {'adjustment_id': adjustmentId},
         timeout: ApiConfig.cacheTimeout,
       );
       if (response.statusCode != 200) return null;
       final data = jsonDecode(response.body);
-      if (data['success'] != true || data['lots'] is! List || data['feuilles'] is! List) {
+      if (data['success'] != true ||
+          data['lots'] is! List ||
+          data['feuilles'] is! List) {
         return null;
       }
 
       final feuilles = data['feuilles'] as List;
-      await LocalStorageService.cacheResponse('feuilles_$adjustmentId', feuilles);
+      await LocalStorageService.cacheResponse(
+        'feuilles_$adjustmentId',
+        feuilles,
+      );
       final lotCount = await _storeLots(adjustmentId, data['lots']);
 
       final sent = (data['sent'] as Map?) ?? const {};
       for (final sheet in feuilles) {
         final sheetId = sheet['id'];
         if (sheetId is! int) continue;
-        await _storeSent(sheetId, List<String>.from(sent['$sheetId'] ?? const []));
+        await _storeSent(
+          sheetId,
+          List<String>.from(sent['$sheetId'] ?? const []),
+        );
       }
       return (sheets: feuilles.length, lots: lotCount);
     } catch (e) {
@@ -61,8 +72,9 @@ class SheetCacheService {
   // or null when the server couldn't be reached (the previous copy stays).
   static Future<int?> refresh(int sheetId, int adjustmentId) async {
     try {
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/counting/sheet-lots/$sheetId'),
+      final response = await ApiClient.call(
+        ApiConfig.sheetLots,
+        params: {'sheet_id': sheetId},
         timeout: ApiConfig.cacheTimeout,
       );
       if (response.statusCode != 200) return null;
@@ -78,7 +90,10 @@ class SheetCacheService {
   }
 
   // Product of a number of the adjustment's location, or null.
-  static Future<Map<String, dynamic>?> findLot(int adjustmentId, String barcode) async {
+  static Future<Map<String, dynamic>?> findLot(
+    int adjustmentId,
+    String barcode,
+  ) async {
     return (await _loadLots(adjustmentId))?.lots[barcode];
   }
 
@@ -89,7 +104,9 @@ class SheetCacheService {
   }
 
   // Numbers available offline for the adjustment and when they were taken.
-  static Future<({int count, DateTime? updatedAt})> info(int adjustmentId) async {
+  static Future<({int count, DateTime? updatedAt})> info(
+    int adjustmentId,
+  ) async {
     final cache = await _loadLots(adjustmentId);
     return (count: cache?.lots.length ?? 0, updatedAt: cache?.updatedAt);
   }
@@ -162,15 +179,15 @@ class _LotCache {
   _LotCache({required this.lots, required this.updatedAt});
 
   Map<String, dynamic> toJson() => {
-        'lots': lots.values.toList(),
-        'updated_at': updatedAt.toIso8601String(),
-      };
+    'lots': lots.values.toList(),
+    'updated_at': updatedAt.toIso8601String(),
+  };
 
   factory _LotCache.fromJson(Map<String, dynamic> json) => _LotCache(
-        lots: {
-          for (final lot in json['lots'] as List)
-            lot['lot_name'] as String: Map<String, dynamic>.from(lot),
-        },
-        updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
-      );
+    lots: {
+      for (final lot in json['lots'] as List)
+        lot['lot_name'] as String: Map<String, dynamic>.from(lot),
+    },
+    updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
+  );
 }

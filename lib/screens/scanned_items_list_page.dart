@@ -112,7 +112,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   }
 
   // ✅ FIX #5: on delete — remove from local list, persist, AND notify the
-  // backend so its shared live-session list (used by both phones) also
+  // Odoo server so its shared live-session list (used by both phones) also
   // drops the entry. Otherwise rescanning it triggers "already scanned".
   Future<void> _deleteItem(ScannedItem item) async {
     final confirmed = await showDialog<bool>(

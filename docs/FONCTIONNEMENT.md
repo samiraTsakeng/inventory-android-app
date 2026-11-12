@@ -27,34 +27,42 @@ hors ligne ; la consolidation et l'application se font en ligne.
 ## 2. Architecture
 
 ```
-┌──────────────────┐   HTTP / JSON    ┌──────────────────┐   JSON-RPC    ┌─────────────────────┐
-│ Téléphone        │ ───────────────► │ Serveur Node.js  │ ────────────► │ Odoo 18             │
-│ (Flutter)        │                  │ backend/, :3001  │               │ + module            │
-│ - scan           │ ◄─────────────── │ - relais Odoo    │ ◄──────────── │   wise_inventory    │
-│ - stockage local │                  │ - liste partagée │               │                     │
-└──────────────────┘                  └──────────────────┘               └─────────────────────┘
+┌──────────────────┐      JSON-RPC (session Odoo)      ┌──────────────────────────────┐
+│ Téléphone        │ ────────────────────────────────► │ Odoo 18                      │
+│ (Flutter)        │                                   │ + module wise_inventory      │
+│ - scan           │ ◄──────────────────────────────── │   - API mobile               │
+│ - stockage local │                                   │     /wise_inventory/api/...  │
+└──────────────────┘                                   │   - liste partagée           │
+                                                       └──────────────────────────────┘
 ```
 
 | Composant | Rôle | Emplacement |
 |---|---|---|
 | **Application mobile** | Écrans, scan, stockage sur le téléphone, mode hors ligne | `lib/` |
-| **Serveur Node** | Connexion à Odoo, relais des appels, liste partagée entre deux téléphones | `backend/src/` |
-| **Module Odoo** | Règles métier : feuilles, lignes, consolidation, application au stock, route d'envoi mobile | `C:\Odoo 18.0.20250623\server\wiserp_v18\wise_inventory` |
+| **Module Odoo** | Règles métier, API mobile (`controllers/mobile_api.py`), liste partagée entre deux téléphones (`counting.sheet.live.line`) | `C:\Odoo 18.0.20250623\server\wiserp_v18\wise_inventory` |
 
-Le téléphone ne parle **jamais directement à Odoo** (sauf pour lister les bases
-à la connexion). Toutes les règles sont appliquées par Odoo : qui peut commencer
-ou terminer une feuille, un seul comptage en cours par zone, un numéro une seule
-fois par feuille, quantité 1 pour un article suivi par numéro de série, etc.
+Le téléphone parle **directement à Odoo**, à l'adresse saisie à la connexion,
+sans serveur intermédiaire. Il ouvre sa **propre session Odoo**
+(`/web/session/authenticate`) et appelle les routes JSON du module avec le
+cookie `session_id` : chaque appel s'exécute **avec les droits de
+l'utilisateur connecté**. Toutes les règles sont appliquées par Odoo : qui peut
+commencer ou terminer une feuille, un seul comptage en cours par zone, un numéro
+une seule fois par feuille, quantité 1 pour un article suivi par numéro de
+série, etc.
 
-L'adresse du serveur Node est définie dans `lib/services/api_config.dart`
-(`baseUrl`).
+Le client est `lib/services/api_client.dart` (`ApiClient.call`) ; les routes
+sont listées dans `lib/services/api_config.dart`. Une session expirée
+(redémarrage d'Odoo...) est rouverte automatiquement avec les identifiants
+enregistrés, puis l'appel est rejoué.
 
 ---
 
 ## 3. Parcours de l'utilisateur
 
 ### 3.1 Connexion
-- Saisie de l'adresse Odoo, de l'email et du mot de passe.
+- Saisie de l'adresse Odoo, de l'email et du mot de passe. Si le nom de la
+  base n'est pas saisi, l'application essaie les bases du serveur jusqu'à
+  celle qui accepte les identifiants.
 - À chaque lancement, l'application se reconnecte avec la session enregistrée.
 - **Sans réseau au lancement**, la session est conservée et l'application
   s'ouvre en mode hors ligne (les scans et les lots restent sur le téléphone).
@@ -96,7 +104,9 @@ pas encore confirmée par Odoo.
 - Contrôles anti-doublon : déjà dans la liste (proposition d'ajouter une
   quantité), déjà dans un lot sauvegardé, déjà envoyé à l'ERP.
 - **Deux téléphones peuvent scanner la même feuille** : la liste est partagée
-  par le serveur Node et rafraîchie toutes les 4 s.
+  par Odoo (modèle `counting.sheet.live.line`) et rafraîchie toutes les 4 s.
+  Deux scans simultanés sont traités l'un après l'autre : jamais de doublon
+  ni de quantité perdue.
 - La liste est enregistrée sur le téléphone à chaque scan (elle survit à un
   crash ou une batterie vide).
 - Icône en haut : verte si les numéros de l'inventaire sont sur le téléphone.
@@ -144,7 +154,7 @@ téléchargé automatiquement : il faut refaire « Préparer » pour rafraîchir
 | Consolider, appliquer | Non (demande les deux comptages dans Odoo) |
 
 ### 4.3 Détection de la connexion
-- L'application passe **hors ligne** dès qu'un appel au serveur Node échoue
+- L'application passe **hors ligne** dès qu'un appel à Odoo échoue
   (immédiat sans réseau ; jusqu'à 8 à 20 s si le Wi-Fi est connecté mais le
   serveur injoignable). Un **bandeau orange** apparaît en haut de tous les
   écrans : « Hors ligne · N lot(s) en attente d'envoi ».
@@ -182,7 +192,8 @@ F2 : refusé : Veuillez terminer le comptage précédent sur cette zone
 ```
 
 ### 5.3 Ce que fait Odoo à la réception d'un lot
-Route `POST /wise_inventory/api/sheet/submit` du module, **une transaction** :
+Route `/wise_inventory/api/counting/submit` du module, **une transaction**
+(deux envois de la même feuille sont traités l'un après l'autre) :
 - démarre la feuille si elle est encore « Nouveau » ;
 - **ignore les numéros déjà présents** sur la feuille : renvoyer un lot ne crée
   jamais de doublon (protégé aussi par la contrainte `unique(sheet_id, number)`) ;
@@ -191,9 +202,6 @@ Route `POST /wise_inventory/api/sheet/submit` du module, **une transaction** :
   autres sont gardées ;
 - valide la feuille si le lot contient 50 articles ou plus et qu'aucune ligne
   n'a été refusée.
-
-Si le module installé n'a pas encore cette route, le serveur Node utilise
-l'ancien chemin (appels `call_kw` successifs) avec les mêmes garanties.
 
 ### 5.4 Après l'envoi
 - **Lot accepté** : supprimé du téléphone.
@@ -211,9 +219,9 @@ l'ancien chemin (appels `call_kw` successifs) avec les mêmes garanties.
 | Aucune ligne comptée | Terminer une feuille sans aucune ligne |
 | Le numéro 'X' ne correspond à aucun article | Numéro inexistant dans Odoo (souvent une erreur de scan) |
 | L'article … est suivi par N° de série … ne peut être différente de 1 | Quantité ≠ 1 sur un numéro de série |
-| Odoo injoignable, rien n'a été envoyé | Le serveur Node ne joint pas Odoo |
+| Le module wise_inventory n'est pas à jour sur le serveur Odoo | Le module installé n'a pas l'API mobile : mettre à jour `wise_inventory` |
 | Session expirée : veuillez vous reconnecter | Reconnexion automatique impossible |
-| Le serveur ne répond pas (délai dépassé) | Réseau trop lent ou serveur arrêté |
+| Le serveur ne répond pas (délai dépassé) | Réseau trop lent ou Odoo arrêté |
 
 ---
 
@@ -233,47 +241,57 @@ Toutes les données sont séparées **par compte** (adresse Odoo + email).
 
 ---
 
-## 7. Serveur Node — principales routes
+## 7. API mobile du module — principales routes
+
+Routes JSON-RPC (`type='json'`, `auth='user'`) de
+`wise_inventory/controllers/mobile_api.py`, préfixe `/wise_inventory/api`.
+Une réponse peut porter `_status` (400 refus, 404 introuvable) ; une erreur
+Odoo remonte en erreur JSON-RPC avec son message.
 
 | Route | Usage |
 |---|---|
-| `POST /auth/login` | Connexion (401 = identifiants refusés, 502 = Odoo injoignable) |
-| `GET /adjustments` | Ajustements en brouillon / en cours dont l'utilisateur est responsable ou où il a une feuille |
-| `GET /feuilles/:adjustmentId` | Feuilles de l'utilisateur |
-| `GET /counting/offline-pack/:adjustmentId` | Préparation hors ligne (feuilles, numéros, déjà envoyés) |
-| `POST /counting/lookup-product` | Article d'un numéro + « déjà envoyé » (1 appel par scan inconnu) |
-| `POST /counting/lookup-products` | Identification des numéros scannés hors ligne |
-| `POST /counting/submit-scans` | Envoi d'un lot (via la route du module) |
-| `POST /counting/start-sheet`, `/validate-sheet` | Commencer / terminer une feuille |
-| `GET /counting/live-items/:sheetId`, `POST /counting/live-scan` | Liste partagée entre deux téléphones |
-| `/consolidation/...` | Zones à consolider, consolidations, application |
+| `/adjustments` | Ajustements en brouillon / en cours dont l'utilisateur est responsable ou où il a une feuille |
+| `/feuilles` | Feuilles de l'utilisateur pour un ajustement |
+| `/counting/offline_pack` | Préparation hors ligne (feuilles, numéros, déjà envoyés) |
+| `/counting/sheet_lots` | Même chose pour une feuille (écran de scan) |
+| `/counting/lookup_product` | Article d'un numéro + « déjà envoyé » (1 appel par scan inconnu) |
+| `/counting/lookup_products` | Identification des numéros scannés hors ligne |
+| `/counting/submit` | Envoi d'un lot |
+| `/counting/start_sheet`, `/counting/validate_sheet` | Commencer / terminer une feuille |
+| `/counting/live_items`, `/live_scan`, `/live_remove`, `/live_clear` | Liste partagée entre deux téléphones |
+| `/counting/check_erp_scan(s)` | Numéros déjà envoyés sur une feuille |
+| `/products/cache`, `/products/by_barcode` | Articles gardés sur le téléphone |
+| `/consolidation/...` | Zones à consolider, consolidations, lignes contradictoires, application |
+
+L'ancienne route `/sheet/submit` (utilisée par l'ancien serveur Node) est
+conservée pour les téléphones pas encore mis à jour.
 
 ---
 
 ## 8. Déploiement
 
 1. **Module Odoo** : vérifier l'absence de doublons (feuille, numéro), puis
-   mettre à jour `wise_inventory` (`-u wise_inventory`).
+   mettre à jour `wise_inventory` (`-u wise_inventory`, version 18.0.1.4.0 :
+   API mobile et liste partagée).
    ```sql
    SELECT sheet_id, number, count(*) FROM counting_sheet_line
    WHERE sheet_id IS NOT NULL AND number IS NOT NULL
    GROUP BY sheet_id, number HAVING count(*) > 1;
    ```
-2. **Serveur Node** : `cd backend && npm install && npm start` (port 3001).
-3. **Application** : vérifier `baseUrl` dans `lib/services/api_config.dart`,
-   puis `flutter analyze` et `flutter build apk`.
+2. **Application** : `flutter analyze` puis `flutter build apk`. Aucune adresse
+   à configurer dans le code : l'utilisateur saisit l'adresse d'Odoo à la
+   connexion.
 
-La nouvelle application nécessite le nouveau serveur Node. Le serveur Node
-fonctionne avec l'ancien comme avec le nouveau module.
+Le téléphone doit pouvoir joindre Odoo (même réseau Wi-Fi, ou Odoo exposé).
+L'application nécessite le module mis à jour ; avec un ancien module, elle
+affiche « Le module wise_inventory n'est pas à jour sur le serveur Odoo ».
 
 ---
 
 ## 9. Limites connues
-- Le serveur Node utilise **une seule session Odoo** pour tous les téléphones
-  (le dernier connecté) : à corriger pour un usage multi-utilisateurs réel.
-- Mot de passe enregistré en clair sur le téléphone ; serveur Node en HTTP sans
-  jeton d'accès.
-- Si Odoo est arrêté mais le serveur Node joignable, l'application reste « en
-  ligne » et affiche des erreurs « Odoo injoignable » au lieu du bandeau.
+- Mot de passe enregistré en clair sur le téléphone (pour rouvrir la session
+  Odoo) ; préférer Odoo en HTTPS hors du réseau local.
+- L'application ne fonctionne pas en version web (navigateur) : le navigateur
+  interdit de transmettre le cookie de session Odoo.
 - Un très grand emplacement (dizaines de milliers de numéros) rend la
   préparation hors ligne lourde (stockage `SharedPreferences`).

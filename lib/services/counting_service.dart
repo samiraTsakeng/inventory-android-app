@@ -11,9 +11,14 @@ class CountingService {
   // OFFLINE-FIRST: Check cache, then API.
   // [offline] is true when the number is unknown to the phone and the
   // server couldn't be asked: the caller may keep it "to verify".
-  static Future<({Map<String, dynamic>? product, bool alreadyInErp, bool offline})>
-      lookupProduct(String barcode,
-          {required int countingSheetId, required int adjustmentId}) async {
+  static Future<
+    ({Map<String, dynamic>? product, bool alreadyInErp, bool offline})
+  >
+  lookupProduct(
+    String barcode, {
+    required int countingSheetId,
+    required int adjustmentId,
+  }) async {
     // 1. Numbers of the adjustment kept on the phone: no network at all.
     final sheetLot = await SheetCacheService.findLot(adjustmentId, barcode);
     if (sheetLot != null) {
@@ -29,7 +34,11 @@ class CountingService {
           countingSheetId: countingSheetId,
           barcode: barcode,
         );
-        return (product: cachedProduct, alreadyInErp: alreadyInErp, offline: false);
+        return (
+          product: cachedProduct,
+          alreadyInErp: alreadyInErp,
+          offline: false,
+        );
       }
 
       // 3. Unknown here and no network: don't wait for a timeout.
@@ -39,13 +48,9 @@ class CountingService {
 
       // 4. Ask the server: one round trip returns the product and whether
       // this number is already in the ERP for the sheet.
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/lookup-product'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'barcode': barcode,
-          'counting_sheet_id': countingSheetId,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.lookupProduct,
+        params: {'barcode': barcode, 'counting_sheet_id': countingSheetId},
         timeout: ApiConfig.lookupTimeout,
       );
 
@@ -71,12 +76,12 @@ class CountingService {
   // Returns number -> product for those found, or null if the server
   // couldn't be reached.
   static Future<Map<String, Map<String, dynamic>>?> _resolvePending(
-      List<String> barcodes) async {
+    List<String> barcodes,
+  ) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/lookup-products'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'barcodes': barcodes}),
+      final response = await ApiClient.call(
+        ApiConfig.lookupProducts,
+        params: {'barcodes': barcodes},
       );
       if (response.statusCode != 200) return null;
       final data = jsonDecode(response.body);
@@ -93,8 +98,9 @@ class CountingService {
 
   static Future<Map<String, dynamic>?> getSheetState(int sheetId) async {
     try {
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/counting/sheet-state/$sheetId'),
+      final response = await ApiClient.call(
+        ApiConfig.sheetState,
+        params: {'sheet_id': sheetId},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -109,10 +115,9 @@ class CountingService {
 
   static Future<ApiResult> startSheet(int sheetId) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/start-sheet'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'sheet_id': sheetId}),
+      final response = await ApiClient.call(
+        ApiConfig.startSheet,
+        params: {'sheet_id': sheetId},
       );
       return ApiResult.fromResponse(response);
     } catch (e) {
@@ -123,10 +128,9 @@ class CountingService {
 
   static Future<ApiResult> validateSheet(int sheetId) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/validate-sheet'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'sheet_id': sheetId}),
+      final response = await ApiClient.call(
+        ApiConfig.validateSheet,
+        params: {'sheet_id': sheetId},
       );
       return ApiResult.fromResponse(response);
     } catch (e) {
@@ -157,14 +161,16 @@ class CountingService {
         final resolved = await _resolvePending(pending);
         if (resolved == null) {
           return const ApiResult.error(
-              'Impossible de vérifier les numéros scannés hors ligne. Réessayez.');
+            'Impossible de vérifier les numéros scannés hors ligne. Réessayez.',
+          );
         }
         final unknown = pending.where((b) => !resolved.containsKey(b)).toList();
         if (unknown.isNotEmpty) {
           return ApiResult.error(
-              '${unknown.length} numéro(s) introuvable(s) dans Odoo : '
-              '${unknown.take(5).join(', ')}. '
-              'Supprimez-les de la liste puis renvoyez.');
+            '${unknown.length} numéro(s) introuvable(s) dans Odoo : '
+            '${unknown.take(5).join(', ')}. '
+            'Supprimez-les de la liste puis renvoyez.',
+          );
         }
         toSend = items.map((item) {
           final product = resolved[item.barcode];
@@ -181,21 +187,22 @@ class CountingService {
         }).toList();
       }
 
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/submit-scans'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
+      final response = await ApiClient.call(
+        ApiConfig.submit,
+        params: {
           'counting_sheet_id': countingSheetId,
           'adjustment_id': adjustmentId,
           'items': toSend.map((e) => e.toJson()).toList(),
-        }),
+        },
         timeout: ApiConfig.submitTimeout,
       );
       final result = ApiResult.fromResponse(response);
       if (result.success) {
         // A rescan of these numbers is now flagged even offline.
         await SheetCacheService.markSent(
-            countingSheetId, toSend.map((item) => item.lotNumber ?? item.barcode));
+          countingSheetId,
+          toSend.map((item) => item.lotNumber ?? item.barcode),
+        );
       }
       return result;
     } catch (e) {
@@ -208,18 +215,19 @@ class CountingService {
     return await LocalStorageService.getCachedProductsCount();
   }
 
-
   // SHARED LIVE SESSION (two phones, same sheet)
-
 
   // Returns the shared list and its version, or null when the server still
   // has version [since] (nothing changed) or the request failed.
-  static Future<({int version, List<Map<String, dynamic>> items})?> getLiveItems(
-      int countingSheetId, {int? since}) async {
+  static Future<({int version, List<Map<String, dynamic>> items})?>
+  getLiveItems(int countingSheetId, {int? since}) async {
     try {
-      final query = since != null ? '?since=$since' : '';
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId$query'),
+      final response = await ApiClient.call(
+        ApiConfig.liveItems,
+        params: {
+          'sheet_id': countingSheetId,
+          if (since != null) 'since': since,
+        },
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -242,13 +250,9 @@ class CountingService {
     required Map<String, dynamic> item,
   }) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-scan'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'counting_sheet_id': countingSheetId,
-          ...item,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.liveScan,
+        params: {'counting_sheet_id': countingSheetId, ...item},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -283,8 +287,9 @@ class CountingService {
   // Replays the clears still pending. Concurrent callers share one run, so
   // a scanning page can await it before pushing its queued scans.
   static Future<void> replayPendingClears() {
-    return _replaying ??= _doReplayPendingClears()
-        .whenComplete(() => _replaying = null);
+    return _replaying ??= _doReplayPendingClears().whenComplete(
+      () => _replaying = null,
+    );
   }
 
   static Future<void> _doReplayPendingClears() async {
@@ -300,8 +305,9 @@ class CountingService {
 
   static Future<bool> _postClear(int countingSheetId) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId/clear'),
+      final response = await ApiClient.call(
+        ApiConfig.liveClear,
+        params: {'sheet_id': countingSheetId},
       );
       return response.statusCode == 200;
     } catch (e) {
@@ -310,7 +316,11 @@ class CountingService {
     }
   }
 
-  static Future<void> _setPendingClear(int sheetId, bool pending, {String? raw}) async {
+  static Future<void> _setPendingClear(
+    int sheetId,
+    bool pending, {
+    String? raw,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final ids = (prefs.getStringList(_pendingClearsKey) ?? []).toSet();
     final id = raw ?? '$sheetId';
@@ -330,10 +340,9 @@ class CountingService {
     required String barcode,
   }) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/live-items/$countingSheetId/remove'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'barcode': barcode}),
+      final response = await ApiClient.call(
+        ApiConfig.liveRemove,
+        params: {'sheet_id': countingSheetId, 'barcode': barcode},
       );
       return response.statusCode == 200;
     } catch (e) {
@@ -353,13 +362,9 @@ class CountingService {
       return SheetCacheService.isSent(countingSheetId, barcode);
     }
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scan'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'counting_sheet_id': countingSheetId,
-          'barcode': barcode,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.checkErpScan,
+        params: {'counting_sheet_id': countingSheetId, 'barcode': barcode},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -380,13 +385,9 @@ class CountingService {
   }) async {
     if (barcodes.isEmpty) return {};
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/check-erp-scans'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'counting_sheet_id': countingSheetId,
-          'barcodes': barcodes,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.checkErpScans,
+        params: {'counting_sheet_id': countingSheetId, 'barcodes': barcodes},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

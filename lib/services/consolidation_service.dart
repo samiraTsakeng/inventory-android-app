@@ -6,10 +6,9 @@ class ConsolidationService {
   // Get all consolidation sheets for an adjustment
   static Future<List<dynamic>> getConsolidationSheets(int adjustmentId) async {
     try {
-      print(" Calling API: ${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId");
-
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/sheets/$adjustmentId'),
+      final response = await ApiClient.call(
+        ApiConfig.consolidationSheets,
+        params: {'adjustment_id': adjustmentId},
       );
 
       print(" Response status: ${response.statusCode}");
@@ -21,7 +20,9 @@ class ConsolidationService {
         if (data is List) {
           print(" Data is a list with ${data.length} items");
           return data;
-        } else if (data is Map && data.containsKey('success') && data['success'] == true) {
+        } else if (data is Map &&
+            data.containsKey('success') &&
+            data['success'] == true) {
           if (data.containsKey('sheets') && data['sheets'] is List) {
             print(" Found sheets in response: ${data['sheets'].length}");
             return data['sheets'];
@@ -31,7 +32,9 @@ class ConsolidationService {
         return [];
       } else {
         print(" Server returned error: ${response.statusCode}");
-        throw Exception('Failed to fetch consolidation sheets: ${response.statusCode}');
+        throw Exception(
+          'Failed to fetch consolidation sheets: ${response.statusCode}',
+        );
       }
     } catch (e) {
       print(" Get consolidation sheets error: $e");
@@ -40,12 +43,15 @@ class ConsolidationService {
   }
 
   // Get consolidation sheet details with lines
-  static Future<Map<String, dynamic>?> getConsolidationSheetDetail(int sheetId) async {
+  static Future<Map<String, dynamic>?> getConsolidationSheetDetail(
+    int sheetId,
+  ) async {
     try {
       print(" Getting detail for sheet: $sheetId");
 
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/sheet/$sheetId'),
+      final response = await ApiClient.call(
+        ApiConfig.consolidationSheet,
+        params: {'sheet_id': sheetId},
       );
 
       print(" Detail status: ${response.statusCode}");
@@ -63,15 +69,14 @@ class ConsolidationService {
   }
 
   // Update verified quantity for a contradictory line
-  static Future<bool> updateContradictoryLine(int lineId, int verifiedQty) async {
+  static Future<bool> updateContradictoryLine(
+    int lineId,
+    int verifiedQty,
+  ) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/update-contradictory-line'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'line_id': lineId,
-          'verified_qty': verifiedQty,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.updateContradictoryLine,
+        params: {'line_id': lineId, 'verified_qty': verifiedQty},
       );
 
       print(" Update contradictory line status: ${response.statusCode}");
@@ -90,12 +95,9 @@ class ConsolidationService {
   // Validate consolidation sheet
   static Future<bool> validateConsolidationSheet(int sheetId) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/validate-sheet'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'sheet_id': sheetId,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.validateConsolidationSheet,
+        params: {'sheet_id': sheetId},
         timeout: ApiConfig.submitTimeout,
       );
 
@@ -115,8 +117,9 @@ class ConsolidationService {
   // NEW: Get zones ready for consolidation
   static Future<List<dynamic>> getConsolidationZones(int adjustmentId) async {
     try {
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/zones/$adjustmentId'),
+      final response = await ApiClient.call(
+        ApiConfig.consolidationZones,
+        params: {'adjustment_id': adjustmentId},
       );
 
       print(" Get zones status: ${response.statusCode}");
@@ -141,13 +144,9 @@ class ConsolidationService {
     required int zoneId,
   }) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/create'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'adjustment_id': adjustmentId,
-          'zone_id': zoneId,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.createConsolidation,
+        params: {'adjustment_id': adjustmentId, 'zone_id': zoneId},
         timeout: ApiConfig.submitTimeout,
       );
 
@@ -170,12 +169,9 @@ class ConsolidationService {
   // NEW: Apply consolidation to stock
   static Future<bool> applyConsolidation(int adjustmentId) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/apply'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          'adjustment_id': adjustmentId,
-        }),
+      final response = await ApiClient.call(
+        ApiConfig.applyConsolidation,
+        params: {'adjustment_id': adjustmentId},
         timeout: ApiConfig.submitTimeout,
       );
 
@@ -193,10 +189,13 @@ class ConsolidationService {
   }
 
   // NEW: Get adjustment status
-  static Future<Map<String, dynamic>?> getAdjustmentStatus(int adjustmentId) async {
+  static Future<Map<String, dynamic>?> getAdjustmentStatus(
+    int adjustmentId,
+  ) async {
     try {
-      final response = await ApiClient.get(
-        Uri.parse('${ApiConfig.baseUrl}/consolidation/adjustment-status/$adjustmentId'),
+      final response = await ApiClient.call(
+        ApiConfig.adjustmentStatus,
+        params: {'adjustment_id': adjustmentId},
       );
 
       print("Adjustment status: ${response.statusCode}");
@@ -215,4 +214,3 @@ class ConsolidationService {
     }
   }
 }
-

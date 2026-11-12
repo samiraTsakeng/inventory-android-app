@@ -10,7 +10,10 @@ class FeuilleService {
     try {
       final http.Response response;
       try {
-        response = await ApiClient.get(Uri.parse(ApiConfig.feuilles(adjustmentId)));
+        response = await ApiClient.call(
+          ApiConfig.feuilles,
+          params: {'adjustment_id': adjustmentId},
+        );
       } catch (e) {
         // Offline: last list received for this adjustment, if any.
         final cached = await LocalStorageService.getCachedResponse(cacheName);
@@ -29,7 +32,9 @@ class FeuilleService {
 
       final data = jsonDecode(response.body);
 
-      if (data is Map && data.containsKey("success") && data["success"] == false) {
+      if (data is Map &&
+          data.containsKey("success") &&
+          data["success"] == false) {
         throw Exception(data["message"] ?? 'Unknown error');
       }
 

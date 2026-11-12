@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
 
 // Outcome of a call whose failure reason must reach the user (Odoo's own
@@ -12,7 +13,7 @@ class ApiResult {
   const ApiResult.ok([this.message]) : success = true;
   const ApiResult.error(this.message) : success = false;
 
-  // Builds the result from a backend response ({success, message}).
+  // Builds the result from an API response ({success, message}).
   factory ApiResult.fromResponse(http.Response response) {
     Map<String, dynamic>? data;
     try {
@@ -25,12 +26,15 @@ class ApiResult {
     }
     if (response.statusCode == 401) {
       return const ApiResult.error(
-          'Session expirée : veuillez vous reconnecter.');
+        'Session expirée : veuillez vous reconnecter.',
+      );
     }
     final message = data?['message']?.toString();
-    return ApiResult.error(message != null && message.isNotEmpty
-        ? message
-        : 'Erreur serveur (${response.statusCode})');
+    return ApiResult.error(
+      message != null && message.isNotEmpty
+          ? message
+          : 'Erreur serveur (${response.statusCode})',
+    );
   }
 
   // Network failure (timeout, no Wi-Fi...).
@@ -38,73 +42,276 @@ class ApiResult {
     final text = e.toString().replaceFirst('Exception: ', '');
     if (text.contains('SocketException') || text.contains('ClientException')) {
       return const ApiResult.error(
-          'Impossible de joindre le serveur. Vérifiez la connexion.');
+        'Impossible de joindre le serveur. Vérifiez la connexion.',
+      );
     }
     return ApiResult.error(text);
   }
 }
 
-// HTTP calls with a timeout, so a dropped Wi-Fi never leaves a screen
-// waiting forever. A timeout throws an Exception with a readable message,
-// handled by callers like any other network error.
+// Calls to the Odoo server entered at login, in JSON-RPC, with the Odoo
+// session cookie. Every call has a timeout, so a dropped Wi-Fi never leaves
+// a screen waiting forever (a timeout throws an Exception with a readable
+// message, handled by callers like any other network error).
+//
+// [call] returns an http.Response shaped like a REST answer, so services
+// read it the same way whatever the route:
+//  - 200 with the route's result as body;
+//  - the result's `_status` when the route sets one (400 refusal, 404...);
+//  - 401 when the Odoo session expired (the call is replayed once after
+//    logging in again with the saved credentials);
+//  - 400 with {success: false, message} for an Odoo error (UserError,
+//    ValidationError, access refused...);
+//  - 404 when the route doesn't exist (module not updated on the server).
 class ApiClient {
-  // Set by SyncService: called with true when the backend answered, false
-  // when it could not be reached. Drives the offline mode.
+  // Set by SyncService: called with true when Odoo answered, false when it
+  // could not be reached. Drives the offline mode.
   static void Function(bool online)? onNetworkStatus;
 
-  // Set at startup: logs in again with the saved credentials. Used when the
-  // backend answers 401 (it restarted and lost the session).
+  // Set at startup: logs in again with the saved credentials. Used when
+  // Odoo answers that the session expired.
   static Future<bool> Function()? reauthenticate;
   static Future<bool>? _reauthInProgress;
 
-  static Future<http.Response> get(
-    Uri url, {
-    Map<String, String>? headers,
+  // Saved by AuthService (URL as typed at login).
+  static const String _hostKey = 'session_host';
+
+  static String? _host;
+  // Value of the Odoo session_id cookie.
+  static String? _sessionId;
+
+  // Server used before the first login of this run (saved session).
+  static Future<String?> _currentHost() async {
+    if (_host != null) return _host;
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_hostKey);
+    return _host = saved == null ? null : normalizeHost(saved);
+  }
+
+  static String normalizeHost(String host) {
+    var value = host.trim();
+    while (value.endsWith('/')) {
+      value = value.substring(0, value.length - 1);
+    }
+    if (!value.startsWith('http://') && !value.startsWith('https://')) {
+      value = 'http://$value';
+    }
+    return value;
+  }
+
+  static void clearSession() {
+    _sessionId = null;
+    _host = null;
+  }
+
+  // Calls a JSON route of the Odoo server.
+  static Future<http.Response> call(
+    String route, {
+    Map<String, dynamic> params = const {},
     Duration? timeout,
-  }) =>
-      _send(url, () => http.get(url, headers: headers), timeout);
+  }) async {
+    var response = await _attempt(route, params, timeout);
 
-  static Future<http.Response> post(
-    Uri url, {
-    Map<String, String>? headers,
-    Object? body,
-    Duration? timeout,
-  }) =>
-      _send(url, () => http.post(url, headers: headers, body: body), timeout);
-
-  static Future<http.Response> _send(Uri url,
-      Future<http.Response> Function() request, Duration? timeout) async {
-    // Calls made directly to Odoo (database list) say nothing about the
-    // backend, so they don't change the online state.
-    final isBackend = url.toString().startsWith(ApiConfig.baseUrl);
-    var response = await _attempt(request, timeout, isBackend);
-
-    if (isBackend &&
-        response.statusCode == 401 &&
-        url.toString() != ApiConfig.login &&
-        reauthenticate != null) {
-      // Concurrent 401s share one login.
-      final ok = await (_reauthInProgress ??= reauthenticate!()
-          .whenComplete(() => _reauthInProgress = null));
-      if (ok) response = await _attempt(request, timeout, isBackend);
+    if (response.statusCode == 401 && reauthenticate != null) {
+      // Concurrent expirations share one login.
+      final ok = await (_reauthInProgress ??= reauthenticate!().whenComplete(
+        () => _reauthInProgress = null,
+      ));
+      if (ok) response = await _attempt(route, params, timeout);
     }
     return response;
   }
 
-  static Future<http.Response> _attempt(
-      Future<http.Response> Function() request,
-      Duration? timeout,
-      bool isBackend) async {
+  // Opens an Odoo session. Returns the session info (uid, name...) or
+  // throws: [OdooAuthException] when Odoo refused the login, another
+  // exception when the server couldn't be reached.
+  static Future<Map<String, dynamic>> authenticate({
+    required String host,
+    required String db,
+    required String login,
+    required String password,
+    Duration? timeout,
+  }) async {
+    final server = normalizeHost(host);
+    final http.Response response;
     try {
-      final response = await request().timeout(timeout ?? ApiConfig.timeout);
-      if (isBackend) onNetworkStatus?.call(true);
-      return response;
+      response = await http
+          .post(
+            Uri.parse('$server${ApiConfig.authenticate}'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'call',
+              'params': {'db': db, 'login': login, 'password': password},
+            }),
+          )
+          .timeout(timeout ?? ApiConfig.timeout);
     } on TimeoutException {
-      if (isBackend) onNetworkStatus?.call(false);
+      onNetworkStatus?.call(false);
       throw Exception('Le serveur ne répond pas (délai dépassé)');
     } catch (_) {
-      if (isBackend) onNetworkStatus?.call(false);
+      onNetworkStatus?.call(false);
       rethrow;
     }
+    onNetworkStatus?.call(true);
+
+    final Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      throw Exception(
+        "Le serveur n'a pas renvoyé une réponse Odoo valide. Vérifiez l'URL.",
+      );
+    }
+    final error = data['error'];
+    if (error is Map) {
+      final name =
+          (error['data'] is Map ? error['data']['name'] : null)?.toString() ??
+          '';
+      if (name.contains('AccessDenied')) {
+        throw OdooAuthException('Email ou mot de passe incorrect.');
+      }
+      throw OdooAuthException(_errorMessage(error));
+    }
+    final result = data['result'];
+    if (result is! Map || result['uid'] == null || result['uid'] == false) {
+      throw OdooAuthException('Email ou mot de passe incorrect.');
+    }
+
+    _host = server;
+    _sessionId = _sessionCookie(response) ?? _sessionId;
+    return Map<String, dynamic>.from(result);
   }
+
+  // Databases of the server, or an empty list when the server hides it.
+  static Future<List<String>> databases(String host) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${normalizeHost(host)}${ApiConfig.databaseList}'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'call',
+              'params': {},
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+      final data = jsonDecode(response.body);
+      if (data is Map && data['result'] is List) {
+        return List<String>.from(data['result']);
+      }
+    } catch (e) {
+      print("Get databases error: $e");
+    }
+    return [];
+  }
+
+  static Future<http.Response> _attempt(
+    String route,
+    Map<String, dynamic> params,
+    Duration? timeout,
+  ) async {
+    final host = await _currentHost();
+    if (host == null) {
+      return _json(401, {'success': false, 'message': 'Non connecté'});
+    }
+
+    final http.Response raw;
+    try {
+      raw = await http
+          .post(
+            Uri.parse('$host$route'),
+            headers: {
+              'Content-Type': 'application/json',
+              if (_sessionId != null) 'Cookie': 'session_id=$_sessionId',
+            },
+            body: jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'call',
+              'params': params,
+            }),
+          )
+          .timeout(timeout ?? ApiConfig.timeout);
+      onNetworkStatus?.call(true);
+    } on TimeoutException {
+      onNetworkStatus?.call(false);
+      throw Exception('Le serveur ne répond pas (délai dépassé)');
+    } catch (_) {
+      onNetworkStatus?.call(false);
+      rethrow;
+    }
+
+    _sessionId = _sessionCookie(raw) ?? _sessionId;
+
+    if (raw.statusCode == 404) {
+      return _json(404, {
+        'success': false,
+        'message':
+            "Le module wise_inventory n'est pas à jour sur le serveur Odoo.",
+      });
+    }
+    if (raw.statusCode != 200) {
+      return _json(raw.statusCode, {
+        'success': false,
+        'message': 'Erreur serveur (${raw.statusCode})',
+      });
+    }
+
+    final dynamic data;
+    try {
+      data = jsonDecode(raw.body);
+    } catch (_) {
+      return _json(502, {
+        'success': false,
+        'message': 'Réponse invalide du serveur Odoo',
+      });
+    }
+
+    final error = data is Map ? data['error'] : null;
+    if (error is Map) {
+      final name =
+          (error['data'] is Map ? error['data']['name'] : null)?.toString() ??
+          '';
+      if (name.contains('SessionExpired')) {
+        _sessionId = null;
+        return _json(401, {'success': false, 'message': 'Session expirée'});
+      }
+      return _json(400, {'success': false, 'message': _errorMessage(error)});
+    }
+
+    final result = data is Map ? data['result'] : null;
+    var status = 200;
+    if (result is Map && result['_status'] is int) {
+      status = result.remove('_status') as int;
+    }
+    return _json(status, result);
+  }
+
+  static String _errorMessage(Map error) {
+    final details = error['data'];
+    final message = details is Map ? details['message'] : null;
+    return (message ?? error['message'] ?? 'Erreur Odoo').toString();
+  }
+
+  static String? _sessionCookie(http.Response response) {
+    final header = response.headers['set-cookie'];
+    if (header == null) return null;
+    return RegExp(r'session_id=([^;,\s]+)').firstMatch(header)?.group(1);
+  }
+
+  static http.Response _json(int status, Object? body) => http.Response.bytes(
+    utf8.encode(jsonEncode(body)),
+    status,
+    headers: const {'content-type': 'application/json; charset=utf-8'},
+  );
+}
+
+// Odoo refused the login (wrong credentials, unknown database...).
+class OdooAuthException implements Exception {
+  final String message;
+  OdooAuthException(this.message);
+
+  @override
+  String toString() => message;
 }

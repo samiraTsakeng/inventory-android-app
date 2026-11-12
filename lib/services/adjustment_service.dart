@@ -10,7 +10,7 @@ class AdjustmentService {
   static Future<List<dynamic>> getAdjustments() async {
     final http.Response response;
     try {
-      response = await ApiClient.get(Uri.parse(ApiConfig.adjustments));
+      response = await ApiClient.call(ApiConfig.adjustments);
     } catch (e) {
       // Offline: last list received, if any.
       final cached = await LocalStorageService.getCachedResponse('adjustments');
@@ -20,14 +20,16 @@ class AdjustmentService {
 
     print("status: ${response.statusCode}");
 
-    if(response.statusCode != 200) {
+    if (response.statusCode != 200) {
       throw Exception("server errror: ${response.body}");
     }
 
     final data = jsonDecode(response.body);
 
     // HANDLE BACKEND ERRORS (IMPORTANT)
-    if (data is Map && data.containsKey("success") && data["success"] == false) {
+    if (data is Map &&
+        data.containsKey("success") &&
+        data["success"] == false) {
       throw Exception(data["message"]);
     }
 

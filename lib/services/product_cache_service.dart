@@ -16,13 +16,9 @@ class ProductCacheService {
 
       while (hasMore) {
         // Fetch products in batches
-        final response = await ApiClient.post(
-          Uri.parse('${ApiConfig.baseUrl}/counting/cache-products'),
-          headers: {"Content-Type": "application/json"},
-          body: jsonEncode({
-            'offset': offset,
-            'limit': _batchSize,
-          }),
+        final response = await ApiClient.call(
+          ApiConfig.productsCache,
+          params: {'offset': offset, 'limit': _batchSize},
           timeout: ApiConfig.cacheTimeout,
         );
 
@@ -36,7 +32,8 @@ class ProductCacheService {
             // Cache each product
             for (final product in products) {
               // Extract barcode from product
-              final barcode = product['barcode'] ?? product['default_code'] ?? '';
+              final barcode =
+                  product['barcode'] ?? product['default_code'] ?? '';
               if (barcode.isNotEmpty) {
                 await LocalStorageService.cacheProduct(barcode, {
                   'id': product['id'],
@@ -74,10 +71,9 @@ class ProductCacheService {
   // Cache products by barcode list (for specific products)
   static Future<void> cacheProductsByBarcodes(List<String> barcodes) async {
     try {
-      final response = await ApiClient.post(
-        Uri.parse('${ApiConfig.baseUrl}/counting/cache-products-by-barcode'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({'barcodes': barcodes}),
+      final response = await ApiClient.call(
+        ApiConfig.productsByBarcode,
+        params: {'barcodes': barcodes},
       );
 
       if (response.statusCode == 200) {
