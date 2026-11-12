@@ -288,6 +288,17 @@ class ApiClient {
     return _json(status, result);
   }
 
+  // Message to show for a failed response: Odoo's reason when there is
+  // one, otherwise a generic French message.
+  static String errorMessage(http.Response response) {
+    try {
+      final data = jsonDecode(response.body);
+      final message = data is Map ? data['message'] : null;
+      if (message is String && message.isNotEmpty) return message;
+    } catch (_) {}
+    return 'Erreur du serveur Odoo (${response.statusCode}).';
+  }
+
   static String _errorMessage(Map error) {
     final details = error['data'];
     final message = details is Map ? details['message'] : null;

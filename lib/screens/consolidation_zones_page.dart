@@ -98,7 +98,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
       if (sheetId != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Consolidation créée avec succès!'),
+            content: Text('Consolidation créée avec succès.'),
             backgroundColor: AppColors.successColor,
           ),
         );

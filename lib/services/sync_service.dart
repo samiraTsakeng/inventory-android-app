@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../utils/constants.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 import 'auth_service.dart';
@@ -59,7 +60,7 @@ class SyncService {
               ? 'Connexion rétablie : $batches lot(s) en attente. Utilisez « Envoyer » pour les transmettre.'
               : 'Connexion rétablie : des feuilles sont à synchroniser. Utilisez « Envoyer ».',
         ),
-        backgroundColor: Colors.blue,
+        backgroundColor: AppColors.secondaryColor,
         duration: const Duration(seconds: 6),
       ),
     );
@@ -196,7 +197,7 @@ class SyncService {
             if (lines.length > 4) '…',
           ].join('\n'),
         ),
-        backgroundColor: ok ? Colors.green : Colors.orange,
+        backgroundColor: ok ? AppColors.successColor : AppColors.warningColor,
         duration: Duration(seconds: ok ? 5 : 10),
       ),
     );

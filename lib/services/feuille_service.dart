@@ -27,7 +27,7 @@ class FeuilleService {
         final errorData = jsonDecode(response.body);
         print("Error response: $errorData");
         // Return empty list and let the UI handle the error via exception
-        throw Exception(errorData['message'] ?? 'Server error');
+        throw Exception(errorData['message'] ?? ApiClient.errorMessage(response));
       }
 
       final data = jsonDecode(response.body);
@@ -35,14 +35,14 @@ class FeuilleService {
       if (data is Map &&
           data.containsKey("success") &&
           data["success"] == false) {
-        throw Exception(data["message"] ?? 'Unknown error');
+        throw Exception(data["message"] ?? 'Erreur inconnue.');
       }
 
       if (data is List) {
         await LocalStorageService.cacheResponse(cacheName, data);
         return data;
       } else {
-        throw Exception("Invalid data format from server");
+        throw Exception("Réponse inattendue du serveur Odoo.");
       }
     } catch (e) {
       print("Feuilles service error: $e");

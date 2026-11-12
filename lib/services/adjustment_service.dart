@@ -21,7 +21,7 @@ class AdjustmentService {
     print("status: ${response.statusCode}");
 
     if (response.statusCode != 200) {
-      throw Exception("server errror: ${response.body}");
+      throw Exception(ApiClient.errorMessage(response));
     }
 
     final data = jsonDecode(response.body);
@@ -38,7 +38,7 @@ class AdjustmentService {
       await LocalStorageService.cacheResponse('adjustments', data);
       return data;
     } else {
-      throw Exception("Invalid data format from server");
+      throw Exception("Réponse inattendue du serveur Odoo.");
     }
   }
 }

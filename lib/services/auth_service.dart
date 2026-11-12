@@ -284,7 +284,7 @@ class AuthService {
     try {
       final session = await getFullSession();
       if (session == null) {
-        throw Exception("No session found. Please login again.");
+        throw Exception("Aucune session enregistrée : veuillez vous reconnecter.");
       }
 
       return await login(

@@ -133,22 +133,22 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
 
     setState(() => isSaving = true);
 
-    final success = await ConsolidationService.updateContradictoryLine(lineId, value);
+    final result = await ConsolidationService.updateContradictoryLine(lineId, value);
 
     setState(() => isSaving = false);
 
-    if (success) {
+    if (result.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(' Quantité vérifiée sauvegardée'),
+          content: Text('Quantité vérifiée enregistrée.'),
           backgroundColor: AppColors.successColor,
         ),
       );
       await fetchDetail();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(' Erreur lors de la sauvegarde'),
+        SnackBar(
+          content: Text(result.message ?? 'Erreur lors de l\'enregistrement.'),
           backgroundColor: AppColors.errorColor,
         ),
       );
@@ -229,22 +229,22 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
     if (shouldValidate == true) {
       setState(() => isSaving = true);
 
-      final success = await ConsolidationService.validateConsolidationSheet(widget.sheetId);
+      final result = await ConsolidationService.validateConsolidationSheet(widget.sheetId);
 
       setState(() => isSaving = false);
 
-      if (success) {
+      if (result.success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(' Consolidation validée avec succès !'),
+            content: Text('Consolidation validée avec succès.'),
             backgroundColor: AppColors.successColor,
           ),
         );
         Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(' Erreur lors de la validation'),
+          SnackBar(
+            content: Text(result.message ?? 'Erreur lors de la validation.'),
             backgroundColor: AppColors.errorColor,
           ),
         );

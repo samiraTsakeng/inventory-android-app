@@ -62,7 +62,7 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(' $count produits chargés pour le mode hors ligne'),
+            content: Text('$count produits chargés pour le mode hors ligne'),
             backgroundColor: AppColors.successColor,
             duration: const Duration(seconds: 2),
           ),

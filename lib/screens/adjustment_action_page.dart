@@ -95,22 +95,22 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
     setState(() => isApplying = true);
 
     try {
-      final success = await ConsolidationService.applyConsolidation(widget.adjustmentId);
+      final result = await ConsolidationService.applyConsolidation(widget.adjustmentId);
 
       setState(() => isApplying = false);
 
-      if (success) {
+      if (result.success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Consolidation appliquée avec succès!'),
+            content: Text('Consolidation appliquée avec succès.'),
             backgroundColor: AppColors.successColor,
           ),
         );
         await fetchStatus();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erreur lors de l\'application de la consolidation'),
+          SnackBar(
+            content: Text(result.message ?? 'Erreur lors de l\'application de la consolidation.'),
             backgroundColor: AppColors.errorColor,
           ),
         );

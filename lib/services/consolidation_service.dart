@@ -32,9 +32,7 @@ class ConsolidationService {
         return [];
       } else {
         print(" Server returned error: ${response.statusCode}");
-        throw Exception(
-          'Failed to fetch consolidation sheets: ${response.statusCode}',
-        );
+        throw Exception(ApiClient.errorMessage(response));
       }
     } catch (e) {
       print(" Get consolidation sheets error: $e");
@@ -69,7 +67,7 @@ class ConsolidationService {
   }
 
   // Update verified quantity for a contradictory line
-  static Future<bool> updateContradictoryLine(
+  static Future<ApiResult> updateContradictoryLine(
     int lineId,
     int verifiedQty,
   ) async {
@@ -78,39 +76,25 @@ class ConsolidationService {
         ApiConfig.updateContradictoryLine,
         params: {'line_id': lineId, 'verified_qty': verifiedQty},
       );
-
-      print(" Update contradictory line status: ${response.statusCode}");
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
-      }
-      return false;
+      return ApiResult.fromResponse(response);
     } catch (e) {
-      print(" Update contradictory line error: $e");
-      return false;
+      print("updateContradictoryLine error: $e");
+      return ApiResult.fromException(e);
     }
   }
 
   // Validate consolidation sheet
-  static Future<bool> validateConsolidationSheet(int sheetId) async {
+  static Future<ApiResult> validateConsolidationSheet(int sheetId) async {
     try {
       final response = await ApiClient.call(
         ApiConfig.validateConsolidationSheet,
         params: {'sheet_id': sheetId},
         timeout: ApiConfig.submitTimeout,
       );
-
-      print(" Validate consolidation sheet status: ${response.statusCode}");
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
-      }
-      return false;
+      return ApiResult.fromResponse(response);
     } catch (e) {
-      print(" Validate consolidation sheet error: $e");
-      return false;
+      print("validateConsolidationSheet error: $e");
+      return ApiResult.fromException(e);
     }
   }
 
@@ -131,7 +115,7 @@ class ConsolidationService {
         }
         return [];
       }
-      throw Exception('Failed to fetch consolidation zones');
+      throw Exception(ApiClient.errorMessage(response));
     } catch (e) {
       print(" Get consolidation zones error: $e");
       rethrow;
@@ -159,7 +143,7 @@ class ConsolidationService {
         }
         return null;
       }
-      throw Exception('Failed to create consolidation sheet');
+      throw Exception(ApiClient.errorMessage(response));
     } catch (e) {
       print("Create consolidation error: $e");
       rethrow;
@@ -167,24 +151,17 @@ class ConsolidationService {
   }
 
   // NEW: Apply consolidation to stock
-  static Future<bool> applyConsolidation(int adjustmentId) async {
+  static Future<ApiResult> applyConsolidation(int adjustmentId) async {
     try {
       final response = await ApiClient.call(
         ApiConfig.applyConsolidation,
         params: {'adjustment_id': adjustmentId},
         timeout: ApiConfig.submitTimeout,
       );
-
-      print(" Apply consolidation status: ${response.statusCode}");
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
-      }
-      return false;
+      return ApiResult.fromResponse(response);
     } catch (e) {
-      print("Apply consolidation error: $e");
-      return false;
+      print("applyConsolidation error: $e");
+      return ApiResult.fromException(e);
     }
   }
 
