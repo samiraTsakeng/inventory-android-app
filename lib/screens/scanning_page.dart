@@ -372,7 +372,22 @@ class _ScanningPageState extends State<ScanningPage>
       countingSheetId: widget.countingSheetId,
       adjustmentId: widget.adjustmentId,
     );
-    if (lookup.alreadyInErp) {
+    // A lot already on the sheet in Odoo (typed on the web or sent before)
+    // may be counted again: the phone's quantity replaces Odoo's when sent.
+    // A serial number always counts 1, so it stays blocked.
+    final isLot = (lookup.product?['tracking'] ?? 'serial') == 'lot';
+    if (lookup.alreadyInErp && isLot) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Lot déjà présent sur la feuille dans Odoo : la quantité saisie '
+            'remplacera celle d\'Odoo à l\'envoi.',
+          ),
+          backgroundColor: AppColors.warningColor,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } else if (lookup.alreadyInErp) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Cet article a déjà été envoyé à l\'ERP'),

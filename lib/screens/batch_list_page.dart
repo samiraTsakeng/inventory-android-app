@@ -260,8 +260,11 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Lot envoyé à Odoo et retiré du téléphone'),
+            SnackBar(
+              content: Text(
+                'Lot envoyé à Odoo et retiré du téléphone'
+                '${result.message != null ? ' (${result.message})' : ''}',
+              ),
               backgroundColor: AppColors.successColor,
             ),
           );

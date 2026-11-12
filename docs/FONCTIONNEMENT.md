@@ -103,7 +103,11 @@ pas encore confirmée par Odoo.
   - suivi par **numéro de série** : quantité 1 ;
   - suivi par **lot** : l'application demande la quantité.
 - Contrôles anti-doublon : déjà dans la liste (proposition d'ajouter une
-  quantité), déjà dans un lot sauvegardé, déjà envoyé à l'ERP.
+  quantité), déjà dans un lot sauvegardé, déjà envoyé à l'ERP. Un **numéro de
+  série** déjà sur la feuille dans Odoo est refusé. Un **lot** déjà sur la
+  feuille (saisi sur le web ou envoyé plus tôt) est accepté avec un
+  avertissement : **la quantité du mobile est prioritaire** et remplacera
+  celle d'Odoo à l'envoi.
 - **Deux téléphones peuvent scanner la même feuille** : la liste est partagée
   par Odoo (modèle `counting.sheet.live.line`) et rafraîchie toutes les 4 s.
   Deux scans simultanés sont traités l'un après l'autre : jamais de doublon
@@ -214,8 +218,12 @@ F2 : refusé : Veuillez terminer le comptage précédent sur cette zone
 Route `/wise_inventory/api/counting/submit` du module, **une transaction**
 (deux envois de la même feuille sont traités l'un après l'autre) :
 - démarre la feuille si elle est encore « Nouveau » ;
-- **ignore les numéros déjà présents** sur la feuille : renvoyer un lot ne crée
-  jamais de doublon (protégé aussi par la contrainte `unique(sheet_id, number)`) ;
+- ne crée **jamais de doublon** pour un numéro déjà présent sur la feuille
+  (protégé aussi par la contrainte `unique(sheet_id, number)`) : **la quantité
+  du mobile est prioritaire** et remplace celle de la ligne existante, qu'elle
+  vienne du web ou d'un envoi précédent. À quantité égale (renvoi après une
+  réponse perdue), rien ne change. Les quantités remplacées sont renvoyées
+  (`updated_items`) et annoncées dans le message d'envoi ;
 - identifie l'article à partir du numéro (y compris les numéros « à vérifier ») ;
 - crée les lignes ; une ligne refusée est signalée avec la raison d'Odoo, les
   autres sont gardées ;

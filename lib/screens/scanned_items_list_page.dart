@@ -235,7 +235,9 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
         barcodes: validItems.map((item) => item.barcode).toList(),
       );
       for (final item in validItems) {
-        if (existing.contains(item.barcode)) {
+        // Lots already in Odoo are sent anyway: the phone's quantity
+        // replaces Odoo's. Serial numbers already there are skipped.
+        if (existing.contains(item.barcode) && item.tracking != 'lot') {
           alreadyInErp.add(item.barcode);
         } else {
           toSubmit.add(item);
@@ -273,9 +275,11 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
           await _clearAllAfterSubmit();
         }
 
+        // Odoo's message also counts the quantities replaced by the phone's.
+        final sent = result.message ?? 'Envoyé avec succès !';
         final msg = alreadyInErp.isEmpty
-            ? 'Envoyé avec succès !'
-            : 'Envoyé : ${toSubmit.length} • Ignorés (déjà dans l\'ERP) : ${alreadyInErp.length}';
+            ? sent
+            : '$sent • Ignorés (déjà dans l\'ERP) : ${alreadyInErp.length}';
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
