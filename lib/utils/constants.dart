@@ -29,6 +29,16 @@ class AppColors {
   );
 }
 
+// Shared look of every card / panel of the app (AppCard, Card theme).
+class AppDecor {
+  static const double cardRadius = 14;
+  static const double badgeRadius = 6;
+
+  static const List<BoxShadow> cardShadow = [
+    BoxShadow(color: Color(0x0F0B1F3A), blurRadius: 8, offset: Offset(0, 2)),
+  ];
+}
+
 class AppStrings {
   static const appName = 'Inventory Scanner';
   static const login = 'Login';

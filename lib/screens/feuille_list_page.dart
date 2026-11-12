@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
+import '../widgets/app_card.dart';
 import '../services/feuille_service.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/batch_storage_service.dart';
 import '../services/offline_actions_service.dart';
+import '../services/offline_prep_service.dart';
 import '../services/sync_service.dart';
 import 'scanning_page.dart';
 
@@ -38,11 +41,14 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     super.initState();
     fetchFeuilles();
     SyncService.revision.addListener(fetchFeuilles);
+    // Offline copy refreshed: show the sheets it brought.
+    OfflinePrepService.revision.addListener(fetchFeuilles);
   }
 
   @override
   void dispose() {
     SyncService.revision.removeListener(fetchFeuilles);
+    OfflinePrepService.revision.removeListener(fetchFeuilles);
     super.dispose();
   }
 
@@ -398,11 +404,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text("Feuilles"),
-        backgroundColor: AppColors.secondaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
+        title: const Text("Feuilles de comptage"),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -450,15 +452,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
               child: Icon(Icons.more_vert, size: 22),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Image.asset(
-              "assets/images/image266622.png",
-              height: 25,
-              errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.inventory, color: Colors.white, size: 20),
-            ),
-          ),
+          const AppLogo(),
         ],
       ),
       body: isLoading
@@ -482,7 +476,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                 onPressed: () {
                   fetchFeuilles();
                 },
-                child: const Text("Réessayer", style: TextStyle(fontSize: 12)),
+                child: const Text("Réessayer"),
               ),
             ],
           ),
@@ -495,16 +489,17 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           children: [
             Icon(Icons.inventory, size: 40, color: AppColors.textSecondary),
             SizedBox(height: 8),
-            Text("Aucune feuille trouvée", style: TextStyle(fontSize: 12)),
+            Text("Aucune feuille de comptage", style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
           ],
         ),
       )
-          : Padding(
-        padding: const EdgeInsets.all(6.0),
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: List.generate(feuilles.length, (index) {
+          : RefreshIndicator(
+        onRefresh: () async => fetchFeuilles(),
+        child: ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: feuilles.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
             final f = feuilles[index];
             final zoneName = getName(f["zone_id"]);
             final sheetName = f["name"] ?? "Feuille ${f["id"]}";
@@ -519,250 +514,179 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             final unsyncedBatches = _unsyncedBatches[countingSheetId] ?? 0;
             final hasWorkToSend = waitingSync || unsyncedBatches > 0;
             final isSending = _sendingSheetId == countingSheetId;
+            final color = getStatusColor(sheetState);
 
-
-            // Teams can start counting at the same time - that's the whole point of having 2 teams!
-
-            final cardWidth = (MediaQuery.of(context).size.width - 18) / 2;
-
-            return SizedBox(
-              width: cardWidth,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      spreadRadius: 1,
-                      blurRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Status bar
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: getStatusColor(sheetState).withOpacity(0.15),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(8),
-                          topRight: Radius.circular(8),
+            return AppCard(
+              accentColor: color,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      AppBadge(
+                        text: waitingSync
+                            ? '${getStatusText(sheetState)} · à synchroniser'
+                            : getStatusText(sheetState),
+                        color: waitingSync ? AppColors.warningColor : color,
+                      ),
+                      const Spacer(),
+                      if (pendingCount > 0)
+                        AppBadge(
+                          text: '$pendingCount en attente',
+                          color: AppColors.warningColor,
+                          icon: Icons.hourglass_bottom,
                         ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            waitingSync
-                                ? '${getStatusText(sheetState)} · à synchroniser'
-                                : getStatusText(sheetState),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: getStatusColor(sheetState),
-                            ),
-                          ),
-
-                          if (pendingCount > 0)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.warningColor,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.hourglass_bottom, size: 8, color: Colors.white),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '$pendingCount en attente',
-                                    style: const TextStyle(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    sheetName,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textColor,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  _SheetInfo(icon: Icons.location_on_outlined, text: zoneName),
+                  const SizedBox(height: 2),
+                  _SheetInfo(icon: Icons.person_outline, text: getName(f["user_id"])),
+                  if (unsyncedBatches > 0) ...[
+                    const SizedBox(height: 2),
+                    _SheetInfo(
+                      icon: Icons.inventory_2_outlined,
+                      text: '$unsyncedBatches lot(s) à envoyer',
+                      color: AppColors.secondaryColor,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  if (isNew)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _startingSheetId == countingSheetId ? null : () => _startSheet(countingSheetId),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.successColor,
+                          minimumSize: const Size(0, 44),
+                        ),
+                        icon: _startingSheetId == countingSheetId
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.play_arrow_rounded, size: 20),
+                        label: const Text('Commencer'),
                       ),
                     ),
-                    // Content
-                    Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            sheetName,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+                  if (isProgress)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ScanningPage(
+                                    countingSheetId: countingSheetId,
+                                    adjustmentId: widget.adjustmentId,
+                                    zoneName: zoneName,
+                                    sheetName: sheetName,
+                                  ),
+                                ),
+                              );
+                              _loadPendingCounts();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.secondaryColor,
+                              minimumSize: const Size(0, 44),
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                            icon: const Icon(Icons.qr_code_scanner, size: 20),
+                            label: const Text('Scanner'),
                           ),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              Icon(Icons.location_on, size: 9, color: AppColors.textSecondary),
-                              const SizedBox(width: 2),
-                              Expanded(
-                                child: Text(
-                                  zoneName,
-                                  style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(width: 10),
+                        // Finish this sheet (works offline: done in Odoo
+                        // at the sync, after its batches).
+                        OutlinedButton(
+                          onPressed: _validatingSheetId == countingSheetId
+                              ? null
+                              : () => _confirmAndValidate(countingSheetId, sheetName),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.errorColor,
+                            side: const BorderSide(color: AppColors.errorColor),
+                            minimumSize: const Size(0, 44),
                           ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Icon(Icons.person, size: 9, color: AppColors.textSecondary),
-                              const SizedBox(width: 2),
-                              Expanded(
-                                child: Text(
-                                  getName(f["user_id"]),
-                                  style: TextStyle(fontSize: 9, color: AppColors.textSecondary),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                          child: const Text('Terminer'),
+                        ),
+                      ],
+                    ),
+                  if (isConfirm)
+                    Row(
+                      children: [
+                        Icon(
+                          waitingSync ? Icons.schedule : Icons.check_circle,
+                          size: 18,
+                          color: waitingSync ? AppColors.warningColor : AppColors.successColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          waitingSync ? 'Terminé · validé à la synchronisation' : 'Comptage terminé',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: waitingSync ? AppColors.warningColor : AppColors.successColor,
                           ),
-                          if (unsyncedBatches > 0) ...[
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Icon(Icons.inventory_2, size: 9, color: AppColors.secondaryColor),
-                                const SizedBox(width: 2),
-                                Text(
-                                  '$unsyncedBatches lot(s) à envoyer',
-                                  style: TextStyle(fontSize: 9, color: AppColors.secondaryColor, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ],
-                          const SizedBox(height: 6),
-
-                          if (isNew)
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _startingSheetId == countingSheetId ? null : () => _startSheet(countingSheetId),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.successColor,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                  textStyle: const TextStyle(fontSize: 10),
-                                ),
-                                child: _startingSheetId == countingSheetId
-                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Text('Commencer'),
-                              ),
-                            ),
-                          if (isProgress)
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ScanningPage(
-                                        countingSheetId: countingSheetId,
-                                        adjustmentId: widget.adjustmentId,
-                                        zoneName: zoneName,
-                                        sheetName: sheetName,
-                                      ),
-                                    ),
-                                  );
-
-
-                                  _loadPendingCounts();
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.secondaryColor,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                  textStyle: const TextStyle(fontSize: 9),
-                                ),
-                                child: const Text('Scanner'),
-                              ),
-                            ),
-                          // Finish this sheet (works offline: done in Odoo
-                          // at the sync, after its batches).
-                          if (isProgress)
-                            SizedBox(
-                              width: double.infinity,
-                              height: 24,
-                              child: TextButton(
-                                onPressed: _validatingSheetId == countingSheetId
-                                    ? null
-                                    : () => _confirmAndValidate(countingSheetId, sheetName),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppColors.errorColor,
-                                  padding: EdgeInsets.zero,
-                                  textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600),
-                                ),
-                                child: const Text('Terminer'),
-                              ),
-                            ),
-                          if (isConfirm)
-                            SizedBox(
-                              width: double.infinity,
-                              child: Text(
-                                waitingSync ? '⏳ Terminé · validé à la synchro' : '✓ Terminé',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: waitingSync ? AppColors.warningColor : AppColors.successColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          // Manual send of this sheet: start, batches, finish.
-                          if (hasWorkToSend) ...[
-                            const SizedBox(height: 4),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: isSending ? null : () => _sendSheet(countingSheetId),
-                                icon: isSending
-                                    ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5))
-                                    : const Icon(Icons.cloud_upload, size: 12),
-                                label: Text(isSending ? 'Envoi…' : 'Envoyer'),
-                                style: OutlinedButton.styleFrom(
-                                  minimumSize: const Size(0, 26),
-                                  padding: const EdgeInsets.symmetric(vertical: 2),
-                                  textStyle: const TextStyle(fontSize: 9),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                        ),
+                      ],
+                    ),
+                  // Manual send of this sheet: start, batches, finish.
+                  if (hasWorkToSend) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: isSending ? null : () => _sendSheet(countingSheetId),
+                        style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+                        icon: isSending
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.cloud_upload_outlined, size: 20),
+                        label: Text(isSending ? 'Envoi…' : 'Envoyer à Odoo'),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
             );
-          }),
+          },
         ),
       ),
+    );
+  }
+}
+
+// One information line of a sheet card (zone, team leader, batches).
+class _SheetInfo extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  const _SheetInfo({required this.icon, required this.text, this.color = AppColors.textSecondary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 13, color: color),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

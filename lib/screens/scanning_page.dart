@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:badges/badges.dart' as badges;
 import 'dart:async';
@@ -982,7 +983,7 @@ class _ScanningPageState extends State<ScanningPage>
           Tooltip(
             message: _offlineCount > 0
                 ? '$_offlineCount numéros disponibles hors ligne'
-                : 'Numéros non disponibles hors ligne : utilisez « Préparer le hors ligne »',
+                : 'Numéros pas encore copiés sur le téléphone : ils le seront au prochain passage avec du réseau',
             triggerMode: TooltipTriggerMode.tap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -1033,6 +1034,7 @@ class _ScanningPageState extends State<ScanningPage>
               child: Icon(Icons.more_vert, size: 22, color: Colors.white),
             ),
           ),
+          const AppLogo(),
         ],
       ),
       drawer: Drawer(

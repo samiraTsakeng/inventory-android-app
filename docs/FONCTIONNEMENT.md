@@ -78,10 +78,10 @@ enregistrés, puis l'appel est rejoué.
   Les autres ajustements n'apparaissent pas, même pour un administrateur.
 - Écran de choix :
   - **Feuille de comptage** : le travail des équipes ;
-  - **Mode hors ligne** : état de la copie gardée sur le téléphone pour
-    compter sans réseau (préparée automatiquement, voir §4) ; un appui la
-    rafraîchit ;
   - **Gestion des consolidations** : le travail du responsable.
+
+  Pas de bouton pour le hors ligne : une fois connecté, l'application
+  travaille avec ou sans réseau (voir §4).
 
 ### 3.3 Comptage (responsables d'équipe)
 
@@ -141,17 +141,21 @@ pour **chaque inventaire** qui le concerne (`OfflinePrepService`) :
 - les feuilles de l'utilisateur pour chaque inventaire ;
 - tous les **numéros de série / lots en stock** dans l'emplacement inventorié,
   avec leur article (seulement si l'utilisateur a une feuille à compter) ;
-- pour chaque feuille, les **numéros déjà envoyés** à Odoo.
+- pour chaque feuille, les **numéros déjà envoyés** à Odoo ;
+- pour la consolidation : l'état de l'inventaire, les feuilles de
+  consolidation, les zones et le détail de chaque feuille (consultables sans
+  réseau ; les actions qui modifient le stock restent en ligne).
 
 Elle se lance :
 - après la connexion ;
 - à chaque démarrage de l'application quand Odoo répond ;
+- dès qu'un inventaire apparaît dans la liste sans être encore sur le
+  téléphone (créé ou attribué après la connexion), ou qu'on l'ouvre ;
 - au retour du réseau, si la dernière préparation a plus de 15 minutes.
 
 Un message confirme la fin (« Mode hors ligne prêt : N feuille(s), M
-numéros »). La carte **Mode hors ligne** de l'écran de choix indique la
-fraîcheur de la copie (« Prêt sans réseau : N numéros · mis à jour le … ») ;
-un appui la rafraîchit pour cet inventaire.
+numéros »). Le bandeau « Hors ligne » n'apparaît qu'une fois connecté, jamais
+sur la page de connexion.
 
 Il suffit donc de s'être connecté une fois avec du réseau : ensuite, le
 comptage complet (commencer, scanner, enregistrer en lots, terminer) se fait

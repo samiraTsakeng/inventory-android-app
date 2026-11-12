@@ -8,7 +8,7 @@ import 'local_storage_service.dart';
 //  - per adjustment: the lot/serial numbers in stock in the inventoried
 //    location, with their product (shared by all the adjustment's sheets);
 //  - per sheet: the numbers already sent to the ERP.
-// Downloaded while online ("Préparer le hors ligne", sheet list, scanning
+// Downloaded while online (automatic offline preparation, scanning
 // page); every scan reads it, so scanning needs no network.
 class SheetCacheService {
   static const String _lotsPrefix = 'adj_lots_';

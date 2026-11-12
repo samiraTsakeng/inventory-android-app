@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
 import '../models/batch.dart';
 import '../services/batch_storage_service.dart';
 import '../services/counting_service.dart';
@@ -376,10 +377,6 @@ class _BatchesListPageState extends State<BatchesListPage> {
         title: _isSelectionMode
             ? Text('$selectedCount lot(s) sélectionné(s)')
             : const Text('Lots sauvegardés'),
-        backgroundColor: AppColors.secondaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
         leading: _isSelectionMode
             ? IconButton(
           icon: const Icon(Icons.close, size: 22),
@@ -412,6 +409,7 @@ class _BatchesListPageState extends State<BatchesListPage> {
               ),
               onPressed: _selectAll,
             ),
+          const AppLogo(),
         ],
       ),
       body: _isLoading
@@ -492,18 +490,13 @@ class _BatchesListPageState extends State<BatchesListPage> {
                   },
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isSelected ? AppColors.secondaryColor.withOpacity(0.08) : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: isSelected
-                          ? Border.all(color: AppColors.secondaryColor, width: 2)
-                          : null,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          spreadRadius: 1,
-                          blurRadius: 4,
-                        ),
-                      ],
+                      color: isSelected ? AppColors.secondaryColor.withOpacity(0.08) : AppColors.surfaceColor,
+                      borderRadius: BorderRadius.circular(AppDecor.cardRadius),
+                      border: Border.all(
+                        color: isSelected ? AppColors.secondaryColor : AppColors.borderColor,
+                        width: isSelected ? 2 : 1,
+                      ),
+                      boxShadow: AppDecor.cardShadow,
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,

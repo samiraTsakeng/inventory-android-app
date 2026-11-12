@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'local_storage_service.dart';
@@ -33,6 +34,10 @@ class AuthService {
     final raw = '${host}_$email'.toLowerCase();
     return raw.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
   }
+
+  // true while a session is open on the phone (online or offline). The
+  // offline banner and messages only make sense then, not on the login page.
+  static final ValueNotifier<bool> loggedIn = ValueNotifier(false);
 
   // A login is running: the session saved on the phone is not final yet.
   static bool get loginInProgress => _loginsInProgress > 0;
@@ -228,6 +233,7 @@ class AuthService {
     await prefs.setInt(_sessionUidKey, uid);
     await prefs.setString(_sessionNameKey, name);
     await prefs.setBool('is_logged_in', true);
+    loggedIn.value = true;
   }
 
   static Future<Map<String, String?>?> getSession() async {
@@ -274,6 +280,7 @@ class AuthService {
     await prefs.remove(_sessionUidKey);
     await prefs.remove(_sessionNameKey);
     await prefs.remove('is_logged_in');
+    loggedIn.value = false;
     ApiClient.clearSession();
 
     // ✅ Clear all local data for this session

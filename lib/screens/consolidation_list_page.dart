@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
+import '../widgets/app_card.dart';
 import '../services/consolidation_service.dart';
 import 'consolidation_detail_page.dart';
 
@@ -123,15 +125,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Image.asset(
-              "assets/images/image266622.png",
-              height: 25,
-              errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.inventory, color: Colors.white, size: 20),
-            ),
-          ),
+          const AppLogo(),
         ],
       ),
       body: isLoading
@@ -179,7 +173,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
               const SizedBox(height: 6),
               const Text(
                 "Les consolidations sont créées après validation des comptages",
-                style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -218,12 +212,10 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
                   );
                 }
               },
-              child: Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: getStatusColor(state).withOpacity(0.3), width: 1.5),
-                ),
+              child: AppCard(
+                margin: const EdgeInsets.only(bottom: 12),
+                accentColor: getStatusColor(state),
+                padding: EdgeInsets.zero,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(

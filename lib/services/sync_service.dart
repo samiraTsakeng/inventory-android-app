@@ -35,7 +35,10 @@ class SyncService {
     ApiClient.reauthenticate = AuthService.reauthenticate;
     // Sent batches are deleted; older versions kept them as "synced".
     BatchStorageService.purgeSent().whenComplete(refreshPendingCount);
-    if (startOffline) _setOnline(false);
+    if (startOffline) {
+      ApiClient.markUnreachable();
+      _setOnline(false);
+    }
   }
 
   static void _setOnline(bool value) {

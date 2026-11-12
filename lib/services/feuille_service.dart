@@ -18,7 +18,11 @@ class FeuilleService {
         // Offline: last list received for this adjustment, if any.
         final cached = await LocalStorageService.getCachedResponse(cacheName);
         if (cached is List) return cached;
-        rethrow;
+        print("Feuilles $adjustmentId offline, no copy: $e");
+        throw Exception(
+          "Hors ligne : les feuilles de cet inventaire n'ont pas encore été "
+          "copiées sur ce téléphone. Ouvrez-le une fois avec du réseau.",
+        );
       }
 
       print("feuilles status: ${response.statusCode}");

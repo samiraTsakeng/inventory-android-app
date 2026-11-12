@@ -79,6 +79,9 @@ class ApiClient {
   static String? _host;
   // Value of the Odoo session_id cookie.
   static String? _sessionId;
+  // Whether the last call reached the server (shortens the default
+  // timeout while offline).
+  static bool _reachable = true;
 
   // Server used before the first login of this run (saved session).
   static Future<String?> _currentHost() async {
@@ -98,6 +101,10 @@ class ApiClient {
     }
     return value;
   }
+
+  // App started without network: the first screens use the phone's copy
+  // after [ApiConfig.offlineTimeout] instead of the full timeout.
+  static void markUnreachable() => _reachable = false;
 
   static void clearSession() {
     _sessionId = null;
@@ -232,12 +239,18 @@ class ApiClient {
               'params': params,
             }),
           )
-          .timeout(timeout ?? ApiConfig.timeout);
+          .timeout(
+            timeout ??
+                (_reachable ? ApiConfig.timeout : ApiConfig.offlineTimeout),
+          );
+      _reachable = true;
       onNetworkStatus?.call(true);
     } on TimeoutException {
+      _reachable = false;
       onNetworkStatus?.call(false);
       throw Exception('Le serveur ne répond pas (délai dépassé)');
     } catch (_) {
+      _reachable = false;
       onNetworkStatus?.call(false);
       rethrow;
     }

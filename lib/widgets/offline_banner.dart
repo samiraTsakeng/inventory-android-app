@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../services/sync_service.dart';
 import '../utils/constants.dart';
 
@@ -13,9 +14,11 @@ class OfflineBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: SyncService.online,
-      builder: (context, online, _) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([SyncService.online, AuthService.loggedIn]),
+      builder: (context, _) {
+        // Offline only matters once logged in: never on the login page.
+        final online = SyncService.online.value || !AuthService.loggedIn.value;
         return Column(
           children: [
             if (!online)

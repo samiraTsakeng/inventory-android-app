@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
 import '../services/consolidation_service.dart';
 
 class ConsolidationDetailPage extends StatefulWidget {
@@ -277,6 +278,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
             icon: const Icon(Icons.arrow_back, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
+          actions: const [AppLogo()],
         ),
         body: Center(
           child: Padding(
@@ -339,6 +341,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
               ),
             ),
           ),
+          const AppLogo(),
         ],
       ),
       body: Column(
@@ -498,7 +501,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                       final team2Qty = line['counted_qty_2'] ?? '?';
 
                       return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
+                        margin: const EdgeInsets.only(bottom: 10),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Column(
@@ -576,7 +579,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                           Text(
                                             "Équipe 1",
                                             style: TextStyle(
-                                              fontSize: 9,
+                                              fontSize: 10,
                                               color: AppColors.primaryColor,
                                               fontWeight: FontWeight.w500,
                                             ),
@@ -619,7 +622,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                           Text(
                                             "Équipe 2",
                                             style: TextStyle(
-                                              fontSize: 9,
+                                              fontSize: 10,
                                               color: AppColors.secondaryColor,
                                               fontWeight: FontWeight.w500,
                                             ),
@@ -655,7 +658,7 @@ class _ConsolidationDetailPageState extends State<ConsolidationDetailPage> {
                                             Text(
                                               "Quantité vérifiée",
                                               style: TextStyle(
-                                                fontSize: 9,
+                                                fontSize: 10,
                                                 color: isVerified ? AppColors.successColor : AppColors.textSecondary,
                                                 fontWeight: FontWeight.w500,
                                               ),

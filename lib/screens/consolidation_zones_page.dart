@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
 import '../services/consolidation_service.dart';
 
 class ConsolidationZonesPage extends StatefulWidget {
@@ -134,15 +135,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Image.asset(
-              "assets/images/image266622.png",
-              height: 25,
-              errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.inventory, color: Colors.white, size: 20),
-            ),
-          ),
+          const AppLogo(),
         ],
       ),
       body: isLoading

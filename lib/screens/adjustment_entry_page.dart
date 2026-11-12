@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
 
 class AdjustmentEntryPage extends StatefulWidget {
   const AdjustmentEntryPage({super.key});
@@ -54,15 +55,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Image.asset(
-              "assets/images/image266622.png",
-              height: 30,
-              errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.inventory, color: Colors.white, size: 24),
-            ),
-          ),
+          const AppLogo(),
         ],
       ),
       drawer: Drawer(
@@ -74,16 +67,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
               decoration: const BoxDecoration(gradient: AppColors.brandGradient),
               child: Row(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.asset(
-                      "assets/images/image266622.png",
-                      height: 42,
-                      width: 42,
-                      errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.inventory, color: Colors.white),
-                    ),
-                  ),
+                  const AppLogo(size: 46, padding: EdgeInsets.zero),
                   const SizedBox(width: 12),
                   const Text(
                     'Wise Inventory',
@@ -150,7 +134,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             const SizedBox(height: 6),
             const Text(
               "Gérez vos ajustements de stock en quelques taps",
-              style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             ),
             const Spacer(),
             Padding(

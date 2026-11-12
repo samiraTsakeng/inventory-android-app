@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
@@ -351,13 +352,14 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                         : const Icon(Icons.send, size: 15, color: Colors.white),
                     label: Text(
                       _isSending ? 'Envoi...' : 'Envoyer',
-                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
                     ),
                     onPressed: _isSending ? null : _sendToERP,
                   ),
                 ),
               ),
             ),
+          const AppLogo(),
         ],
       ),
       body: _items.isEmpty
@@ -421,7 +423,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                     const Icon(Icons.qr_code, size: 15, color: AppColors.primaryColor),
                     const SizedBox(width: 5),
                     Text('${_items.length} articles',
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
                   ],
                 ),
                 Container(width: 1, height: 14, color: AppColors.primaryColor.withOpacity(0.2)),
@@ -430,7 +432,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                     const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.primaryColor),
                     const SizedBox(width: 5),
                     Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces',
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
                   ],
                 ),
               ],
@@ -499,7 +501,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                                         ),
                                         child: Text(
                                           trackingText,
-                                          style: TextStyle(fontSize: 9, color: trackingColor, fontWeight: FontWeight.w600),
+                                          style: TextStyle(fontSize: 10, color: trackingColor, fontWeight: FontWeight.w600),
                                         ),
                                       ),
                                     ],
@@ -516,13 +518,13 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                           children: [
                             Text(
                               isSerial ? 'Quantité fixe: ' : 'Quantité: ',
-                              style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                             ),
                             if (isSerial)
                               Expanded(
                                 child: Text(
                                   '1 (N° Série)',
-                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.secondaryColor),
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.secondaryColor),
                                 ),
                               )
                             else if (isEditing)
@@ -544,7 +546,7 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                               Expanded(
                                 child: Text(
                                   '${item.quantity}',
-                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.textColor),
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textColor),
                                 ),
                               ),
                             const SizedBox(width: 4),

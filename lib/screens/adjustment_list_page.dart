@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../services/adjustment_service.dart';
+import '../services/offline_prep_service.dart';
 import '../utils/constants.dart';
+import '../widgets/app_logo.dart';
+import '../widgets/app_card.dart';
 import 'choice_page.dart';
 
 class AdjustmentsListPage extends StatefulWidget {
@@ -25,11 +28,16 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
   void fetchAdjustments() async {
     try {
       final data = await AdjustmentService.getAdjustments();
+      if (!mounted) return;
       setState(() {
         adjustments = data;
         isLoading = false;
       });
+      // A new adjustment (created since login) is copied to the phone at
+      // once, so its counting also works offline.
+      OfflinePrepService.ensurePrepared(data);
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         errorMessage = friendlyError(e);
         isLoading = false;
@@ -167,15 +175,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
           onPressed: () => Navigator.pushReplacementNamed(context, '/adjustment-entry'),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Image.asset(
-              "assets/images/image266622.png",
-              height: 28,
-              errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.inventory, color: Colors.white, size: 22),
-            ),
-          ),
+          const AppLogo(),
         ],
       ),
       body: isLoading
@@ -197,7 +197,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
                   fetchAdjustments();
                 });
               },
-              child: const Text("Réessayer", style: TextStyle(fontSize: 12)),
+              child: const Text("Réessayer"),
             ),
           ],
         ),
@@ -209,120 +209,66 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
           children: [
             Icon(Icons.inventory, size: 40, color: AppColors.textSecondary),
             SizedBox(height: 8),
-            Text("Aucun ajustement trouvé", style: TextStyle(fontSize: 12)),
+            Text("Aucun ajustement en cours", style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
           ],
         ),
       )
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(6.0),
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: List.generate(adjustments.length, (index) {
+          : RefreshIndicator(
+        onRefresh: () async => fetchAdjustments(),
+        child: GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            mainAxisExtent: 128,
+          ),
+          itemCount: adjustments.length,
+          itemBuilder: (context, index) {
             final adj = adjustments[index];
-            final cardWidth = (MediaQuery.of(context).size.width - 18) / 2;
-
-            return GestureDetector(
+            final color = getStatusColor(adj["state"]);
+            return AppCard(
               onTap: () => _showAdjustmentDetails(adj),
-              child: SizedBox(
-                width: cardWidth,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min, // ← shrink to content
+              accentColor: color,
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      // Status bar
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: getStatusColor(adj["state"]).withOpacity(0.15),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(10),
-                            topRight: Radius.circular(10),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              getStatusText(adj["state"]),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: getStatusColor(adj["state"]),
-                              ),
-                            ),
-                            Icon(Icons.chevron_right, size: 14, color: AppColors.textSecondary.withOpacity(0.7)),
-                          ],
-                        ),
+                      AppBadge(text: getStatusText(adj["state"]), color: color),
+                      const Spacer(),
+                      const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Text(
+                      adj["name"] ?? "Sans nom",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textColor,
+                        height: 1.25,
                       ),
-                      // Content
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              adj["name"] ?? "Sans nom",
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(Icons.calendar_today, size: 10, color: AppColors.textSecondary),
-                                const SizedBox(width: 2),
-                                Text(
-                                  formatDate(adj["date"]),
-                                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.secondaryColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    "Voir",
-                                    style: TextStyle(fontSize: 12, color: AppColors.secondaryColor),
-                                  ),
-                                  SizedBox(width: 2),
-                                  Icon(Icons.arrow_forward, size: 8, color: AppColors.secondaryColor),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.textSecondary),
+                      const SizedBox(width: 4),
+                      Text(
+                        formatDate(adj["date"]),
+                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             );
-          }),
+          },
         ),
       ),
     );

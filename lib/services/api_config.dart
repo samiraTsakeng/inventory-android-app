@@ -3,6 +3,9 @@
 class ApiConfig {
   // Default network timeout; long operations pass their own.
   static const Duration timeout = Duration(seconds: 20);
+  // Default timeout while Odoo is known unreachable: screens fall back to
+  // the phone's copy quickly instead of waiting [timeout] each time.
+  static const Duration offlineTimeout = Duration(seconds: 5);
   // A scan shouldn't wait longer: past this the number is kept "to verify".
   static const Duration lookupTimeout = Duration(seconds: 8);
   // Sending a batch creates many lines in Odoo.

@@ -38,6 +38,7 @@ void main() async {
     await AuthService.clearSession();
   }
 
+  AuthService.loggedIn.value = loggedIn;
   SyncService.start(startOffline: autoLogin == AutoLoginResult.offline);
 
   runApp(MyApp(initialRoute: loggedIn ? '/adjustment-entry' : '/'));
@@ -140,14 +141,16 @@ class MyApp extends StatelessWidget {
           ),
           labelStyle: const TextStyle(color: AppColors.textSecondary),
         ),
+        // Same look as AppCard for the remaining Material cards.
         cardTheme: CardThemeData(
-          elevation: 1.5,
+          elevation: 0.5,
           margin: EdgeInsets.zero,
           color: AppColors.surfaceColor,
           surfaceTintColor: Colors.transparent,
+          shadowColor: const Color(0x330B1F3A),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: AppColors.borderColor),
+            borderRadius: BorderRadius.circular(AppDecor.cardRadius),
+            side: const BorderSide(color: AppColors.borderColor),
           ),
         ),
         chipTheme: ChipThemeData(
