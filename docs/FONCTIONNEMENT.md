@@ -282,12 +282,23 @@ reconnu ni par la copie du téléphone ni à l'envoi.
 Une étiquette porte **plusieurs codes** : le numéro de série, et souvent la
 référence interne, le code-barres ou le numéro du fabricant (MPN, champ
 `w_mpn_code` de `wise_sale`) de l'article. Avec les numéros en stock, Odoo
-envoie au téléphone ces références (`refs`). Parmi les codes lus par la
-caméra, un numéro de l'inventaire est retenu en priorité et les références
-sont écartées, même hors ligne. Viser seulement une référence affiche « C'est
-la référence de l'article : visez le code du numéro de série » et rien n'est
-ajouté. Sans cela, hors ligne, la référence était prise pour un numéro « à
-vérifier » et bloquait l'envoi.
+envoie au téléphone ces références (`refs`).
+
+**La recherche se fait sur le téléphone, en ligne comme hors ligne**, sans
+requête au scan :
+- les 2 ou 3 codes lus sur l'étiquette sont comparés à la copie du téléphone ;
+- **un** numéro de l'inventaire trouvé : il est ajouté ;
+- **plusieurs** trouvés : une fenêtre les propose, tous cochés, et
+  l'utilisateur décoche celui qui ne convient pas ;
+- **aucun** trouvé : les références de l'article sont écartées et ce qui
+  reste est gardé « à vérifier » (avec la même fenêtre s'il reste plusieurs
+  codes) ; viser seulement une référence affiche « C'est la référence de
+  l'article : visez le code du numéro de série » ;
+- les numéros « à vérifier » sont identifiés à l'envoi, tous ensemble en une
+  seule recherche (`lookup_products`).
+
+Le serveur n'est interrogé au scan que si la copie du téléphone n'existe pas
+encore (inventaire jamais préparé).
 
 | Donnée | Effacée quand |
 |---|---|

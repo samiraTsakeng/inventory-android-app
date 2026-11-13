@@ -63,9 +63,10 @@ class _ScanningPageState extends State<ScanningPage>
 
   // ✅ Track last scan time per barcode (to detect accidental re-scans)
   final Map<String, DateTime> _lastScanTime = {};
-  // Codes Odoo didn't know, and when: not asked again for a while.
+  // Codes Odoo didn't know, and when: not asked again while the label is
+  // still in front of the camera (only without the phone's copy).
   final Map<String, DateTime> _notFound = {};
-  static const Duration _notFoundMemory = Duration(seconds: 30);
+  static const Duration _notFoundMemory = Duration(seconds: 3);
 
   // For scan flash effect
   bool _showScanZone = true;
@@ -392,6 +393,17 @@ class _ScanningPageState extends State<ScanningPage>
       return;
     }
 
+    // The adjustment's numbers are on the phone: the search is done there
+    // only, online or offline, without waiting for the server. A number
+    // not in stock in the location (nor looked up before) is kept "to
+    // verify" and identified at the send, all at once.
+    if (await SheetCacheService.hasCopy(widget.adjustmentId) &&
+        await SheetCacheService.findLot(widget.adjustmentId, barcode) == null &&
+        await LocalStorageService.getCachedProduct(barcode) == null) {
+      await _addOfflineItem(barcode);
+      return;
+    }
+
     final lookup = await CountingService.lookupProduct(
       barcode,
       countingSheetId: widget.countingSheetId,
@@ -489,11 +501,16 @@ class _ScanningPageState extends State<ScanningPage>
     }
   }
 
-  // Offline and the number isn't among the sheet's numbers kept on the
-  // phone: it's kept "to verify" and identified when the list is sent
-  // (an unknown number then blocks the send so it can be removed).
+  // The number isn't among the numbers kept on the phone (or it couldn't
+  // be checked offline): it's kept "to verify" and identified when the list
+  // is sent (an unknown number then blocks the send so it can be removed).
   Future<void> _addOfflineItem(String barcode) async {
-    final qty = await _showQuantityDialog('Hors ligne : numéro à vérifier', barcode);
+    final qty = await _showQuantityDialog(
+      SyncService.online.value
+          ? "Absent du stock de l'emplacement : à vérifier"
+          : 'Hors ligne : numéro à vérifier',
+      barcode,
+    );
     if (!_isMounted) return;
     if (qty == null) {
       setState(() {
@@ -505,7 +522,7 @@ class _ScanningPageState extends State<ScanningPage>
 
     final newItem = ScannedItem(
       barcode: barcode,
-      productName: 'À vérifier (hors ligne)',
+      productName: 'À vérifier',
       productId: 0,
       quantity: qty,
       lotNumber: barcode,
@@ -523,7 +540,7 @@ class _ScanningPageState extends State<ScanningPage>
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Hors ligne : $barcode ajouté, vérifié à l\'envoi'),
+        content: Text('$barcode ajouté, vérifié à l\'envoi'),
         backgroundColor: AppColors.warningColor,
         duration: const Duration(seconds: 2),
       ),
@@ -802,31 +819,113 @@ class _ScanningPageState extends State<ScanningPage>
     }
   }
 
-  // A label carries several codes: the serial number, and the product's
-  // internal reference, barcode or manufacturer number (MPN). Among the
-  // codes the camera read, a number of the inventory (phone's copy) wins;
-  // the product's references are skipped. Returns '' when only references
-  // were read (a hint asks to aim at the serial).
-  Future<String> _pickSerial(BarcodeCapture capture) async {
-    final codes = <String>{
-      for (final b in capture.barcodes) cleanBarcode(b.rawValue ?? ''),
-    }..remove('');
-    if (codes.isEmpty) return '';
-
+  // A label carries 2 or 3 codes: the lot/serial number, and the product's
+  // internal reference or manufacturer number (MPN). They're sorted on
+  // the phone, without any request:
+  //  - numbers of the inventory found: one is added, several are offered
+  //    to choose from (all ticked, the user unticks the wrong one);
+  //  - none found: the product's references are skipped, what's left is
+  //    kept "to verify" (a choice too if several codes are left).
+  Future<void> _processLabel(List<String> codes) async {
+    final adjId = widget.adjustmentId;
+    final found = <String, Map<String, dynamic>>{};
     for (final code in codes) {
-      final lot = await SheetCacheService.findLot(widget.adjustmentId, code);
-      if (lot != null) return code;
+      final lot = await SheetCacheService.findLot(adjId, code);
+      if (lot != null) found[code] = lot;
     }
-    final others = <String>[
-      for (final code in codes)
-        if (!await SheetCacheService.isReference(widget.adjustmentId, code))
-          code,
-    ];
-    if (others.isEmpty) {
-      _showReferenceHint();
-      return '';
+
+    List<String> toAdd;
+    if (found.isNotEmpty) {
+      toAdd = found.length == 1
+          ? [found.keys.first]
+          : await _chooseNumbers({
+              for (final e in found.entries)
+                e.key: (e.value['name'] ?? '').toString(),
+            });
+    } else {
+      final others = <String>[
+        for (final code in codes)
+          if (!await SheetCacheService.isReference(adjId, code)) code,
+      ];
+      if (others.isEmpty) {
+        _showReferenceHint();
+        toAdd = const [];
+      } else {
+        toAdd = others.length == 1
+            ? others
+            : await _chooseNumbers({for (final c in others) c: 'À vérifier'});
+      }
     }
-    return others.first;
+
+    if (toAdd.isEmpty) {
+      if (_isMounted) {
+        setState(() {
+          isLookingUp = false;
+          isScanning = true;
+        });
+      }
+      return;
+    }
+    for (final code in toAdd) {
+      if (!_isMounted) return;
+      await _processBarcode(code);
+    }
+  }
+
+  // Several numbers on one label: all ticked, the user unticks the ones
+  // that aren't the article's. Returns the numbers kept.
+  Future<List<String>> _chooseNumbers(Map<String, String> numbers) async {
+    final kept = numbers.keys.toSet();
+    final result = await showDialog<List<String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text("Plusieurs numéros sur l'étiquette",
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Décochez ceux qui ne sont pas le numéro de série.',
+                  style: TextStyle(
+                      fontSize: 13, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              for (final entry in numbers.entries)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: kept.contains(entry.key),
+                  onChanged: (checked) => setDialogState(() {
+                    if (checked == true) {
+                      kept.add(entry.key);
+                    } else {
+                      kept.remove(entry.key);
+                    }
+                  }),
+                  title: Text(entry.key,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: entry.value.isEmpty ? null : Text(entry.value),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, <String>[]),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: kept.isEmpty
+                  ? null
+                  : () => Navigator.pop(context, [
+                        for (final n in numbers.keys)
+                          if (kept.contains(n)) n,
+                      ]),
+              child: const Text('Ajouter'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return result ?? const [];
   }
 
   DateTime? _referenceHintAt;
@@ -862,10 +961,14 @@ class _ScanningPageState extends State<ScanningPage>
     _isProcessingScan = true;
 
     try {
-      final String barcode = await _pickSerial(capture);
-      if (barcode.isEmpty) return;
-      if (barcode == lastScannedBarcode) return;
-      final unknownSince = _notFound[barcode];
+      final codes = <String>{
+        for (final b in capture.barcodes) cleanBarcode(b.rawValue ?? ''),
+      }..remove('');
+      if (codes.isEmpty) return;
+      // Same label still in front of the camera: not processed again.
+      final label = (codes.toList()..sort()).join('|');
+      if (label == lastScannedBarcode) return;
+      final unknownSince = _notFound[label];
       if (unknownSince != null &&
           DateTime.now().difference(unknownSince) < _notFoundMemory) {
         return;
@@ -876,8 +979,12 @@ class _ScanningPageState extends State<ScanningPage>
         isLookingUp = true;
       });
 
-      lastScannedBarcode = barcode;
-      await _processBarcode(barcode);
+      lastScannedBarcode = label;
+      if (codes.length == 1) {
+        await _processBarcode(codes.first);
+      } else {
+        await _processLabel(codes.toList());
+      }
     } finally {
       Future.delayed(const Duration(milliseconds: 150), () {
         if (_isMounted) setState(() => _showScanZone = true);

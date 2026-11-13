@@ -113,6 +113,11 @@ class SheetCacheService {
     return (await _loadLots(adjustmentId))?.lots[barcode];
   }
 
+  // Whether the adjustment's numbers are on the phone: scans are then
+  // looked up on the phone only, online or offline.
+  static Future<bool> hasCopy(int adjustmentId) async =>
+      await _loadLots(adjustmentId) != null;
+
   // Whether the code is a product's reference (internal reference,
   // barcode or MPN printed next to the serial) rather than a number.
   static Future<bool> isReference(int adjustmentId, String code) async {
