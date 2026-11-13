@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
@@ -82,6 +83,18 @@ class ApiClient {
   // Whether the last call reached the server (shortens the default
   // timeout while offline).
   static bool _reachable = true;
+  // When the server was last found unreachable. While offline, calls fail
+  // at once (screens use the phone's copy) and the server is tried again
+  // at most every [_retryOfflineAfter].
+  static DateTime? _unreachableSince;
+  static const Duration _retryOfflineAfter = Duration(seconds: 20);
+
+  // Login with the saved session running at startup: calls wait for it a
+  // little, so they carry the new session instead of being refused.
+  static Future<void>? startupLogin;
+
+  // Above this size, the answer is decoded in a background isolate.
+  static const int _bigBody = 50000;
 
   // Server used before the first login of this run (saved session).
   static Future<String?> _currentHost() async {
@@ -104,7 +117,17 @@ class ApiClient {
 
   // App started without network: the first screens use the phone's copy
   // after [ApiConfig.offlineTimeout] instead of the full timeout.
-  static void markUnreachable() => _reachable = false;
+  static void markUnreachable() {
+    _reachable = false;
+    _unreachableSince = DateTime.now();
+  }
+
+  // Decoded JSON body of a response, off the UI thread when it is large
+  // (offline copy of an adjustment).
+  static Future<dynamic> decode(http.Response response) {
+    final body = response.body;
+    return body.length > _bigBody ? compute(_decodeJson, body) : Future.value(jsonDecode(body));
+  }
 
   static void clearSession() {
     _sessionId = null;
@@ -112,11 +135,31 @@ class ApiClient {
   }
 
   // Calls a JSON route of the Odoo server.
+  // [force]: try the server even while offline (connection check).
   static Future<http.Response> call(
     String route, {
     Map<String, dynamic> params = const {},
     Duration? timeout,
+    bool force = false,
   }) async {
+    final login = startupLogin;
+    if (login != null) {
+      // Still logging in after 3 s: the server is probably out of reach,
+      // so this call doesn't wait the full timeout either.
+      var loggedIn = true;
+      await login.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => loggedIn = false,
+      );
+      if (!loggedIn) timeout ??= ApiConfig.offlineTimeout;
+    }
+    final since = _unreachableSince;
+    if (!force &&
+        !_reachable &&
+        since != null &&
+        DateTime.now().difference(since) < _retryOfflineAfter) {
+      throw Exception('Hors ligne : serveur injoignable');
+    }
     var response = await _attempt(route, params, timeout);
 
     if (response.statusCode == 401 && reauthenticate != null) {
@@ -154,12 +197,15 @@ class ApiClient {
           )
           .timeout(timeout ?? ApiConfig.timeout);
     } on TimeoutException {
+      markUnreachable();
       onNetworkStatus?.call(false);
       throw Exception('Le serveur ne répond pas (délai dépassé)');
     } catch (_) {
+      markUnreachable();
       onNetworkStatus?.call(false);
       rethrow;
     }
+    _reachable = true;
     onNetworkStatus?.call(true);
 
     final Map<String, dynamic> data;
@@ -246,11 +292,11 @@ class ApiClient {
       _reachable = true;
       onNetworkStatus?.call(true);
     } on TimeoutException {
-      _reachable = false;
+      markUnreachable();
       onNetworkStatus?.call(false);
       throw Exception('Le serveur ne répond pas (délai dépassé)');
     } catch (_) {
-      _reachable = false;
+      markUnreachable();
       onNetworkStatus?.call(false);
       rethrow;
     }
@@ -271,34 +317,17 @@ class ApiClient {
       });
     }
 
-    final dynamic data;
-    try {
-      data = jsonDecode(raw.body);
-    } catch (_) {
-      return _json(502, {
-        'success': false,
-        'message': 'Réponse invalide du serveur Odoo',
-      });
-    }
-
-    final error = data is Map ? data['error'] : null;
-    if (error is Map) {
-      final name =
-          (error['data'] is Map ? error['data']['name'] : null)?.toString() ??
-          '';
-      if (name.contains('SessionExpired')) {
-        _sessionId = null;
-        return _json(401, {'success': false, 'message': 'Session expirée'});
-      }
-      return _json(400, {'success': false, 'message': _errorMessage(error)});
-    }
-
-    final result = data is Map ? data['result'] : null;
-    var status = 200;
-    if (result is Map && result['_status'] is int) {
-      status = result.remove('_status') as int;
-    }
-    return _json(status, result);
+    // Large answers (offline copy) are unwrapped off the UI thread.
+    final body = raw.body;
+    final unwrapped = body.length > _bigBody
+        ? await compute(_unwrapRpc, body)
+        : _unwrapRpc(body);
+    if (unwrapped.sessionExpired) _sessionId = null;
+    return http.Response.bytes(
+      utf8.encode(unwrapped.body),
+      unwrapped.status,
+      headers: const {'content-type': 'application/json; charset=utf-8'},
+    );
   }
 
   // Message to show for a failed response: Odoo's reason when there is
@@ -312,11 +341,8 @@ class ApiClient {
     return 'Erreur du serveur Odoo (${response.statusCode}).';
   }
 
-  static String _errorMessage(Map error) {
-    final details = error['data'];
-    final message = details is Map ? details['message'] : null;
-    return (message ?? error['message'] ?? 'Erreur Odoo').toString();
-  }
+  static String _errorMessage(Map error) => _rpcErrorMessage(error);
+
 
   static String? _sessionCookie(http.Response response) {
     final header = response.headers['set-cookie'];
@@ -338,4 +364,53 @@ class OdooAuthException implements Exception {
 
   @override
   String toString() => message;
+}
+
+dynamic _decodeJson(String body) => jsonDecode(body);
+
+String _rpcErrorMessage(Map error) {
+  final details = error['data'];
+  final message = details is Map ? details['message'] : null;
+  return (message ?? error['message'] ?? 'Erreur Odoo').toString();
+}
+
+// JSON-RPC answer of Odoo turned into the app's body and status (see
+// ApiClient). A plain function so it can run in an isolate.
+({int status, String body, bool sessionExpired}) _unwrapRpc(String raw) {
+  String encode(Object? value) => jsonEncode(value);
+  final dynamic data;
+  try {
+    data = jsonDecode(raw);
+  } catch (_) {
+    return (
+      status: 502,
+      body: encode({'success': false, 'message': 'Réponse invalide du serveur Odoo'}),
+      sessionExpired: false,
+    );
+  }
+
+  final error = data is Map ? data['error'] : null;
+  if (error is Map) {
+    final name =
+        (error['data'] is Map ? error['data']['name'] : null)?.toString() ?? '';
+    if (name.contains('SessionExpired')) {
+      return (
+        status: 401,
+        body: encode({'success': false, 'message': 'Session expirée'}),
+        sessionExpired: true,
+      );
+    }
+    return (
+      status: 400,
+      body: encode({'success': false, 'message': _rpcErrorMessage(error)}),
+      sessionExpired: false,
+    );
+  }
+
+  final result = data is Map ? data['result'] : null;
+  var status = 200;
+  if (result is Map && result['_status'] is int) {
+    status = result.remove('_status') as int;
+  }
+  return (status: status, body: encode(result), sessionExpired: false);
 }

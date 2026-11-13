@@ -5,7 +5,6 @@ import '../services/offline_prep_service.dart';
 import '../utils/constants.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/app_card.dart';
-import 'choice_page.dart';
 
 class AdjustmentsListPage extends StatefulWidget {
   const AdjustmentsListPage({Key? key}) : super(key: key);

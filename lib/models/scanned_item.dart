@@ -1,3 +1,5 @@
+import '../utils/barcode.dart';
+
 class ScannedItem {
   // Scanned offline and unknown to the phone: product not identified yet,
   // checked against Odoo when the list or batch is sent.
@@ -13,7 +15,7 @@ class ScannedItem {
   String tracking; // 'none', 'lot', or 'serial' (from Odoo)
 
   ScannedItem({
-    required this.barcode,
+    required String barcode,
     this.productName = '',
     this.productId = 0,
     this.quantity = 1,
@@ -21,7 +23,10 @@ class ScannedItem {
     this.lotId,
     this.isSynced = false,
     this.tracking = 'none',
-  });
+  }) : barcode = cleanBarcode(barcode) {
+    final lot = lotNumber;
+    if (lot != null) lotNumber = cleanBarcode(lot);
+  }
 
   bool get isPendingLookup => tracking == pendingTracking;
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'api_config.dart';
+import '../utils/barcode.dart';
 import '../models/scanned_item.dart';
 import 'local_storage_service.dart';
 import 'sheet_cache_service.dart';
@@ -19,6 +20,7 @@ class CountingService {
     required int countingSheetId,
     required int adjustmentId,
   }) async {
+    barcode = cleanBarcode(barcode);
     // 1. Numbers of the adjustment kept on the phone: no network at all.
     final sheetLot = await SheetCacheService.findLot(adjustmentId, barcode);
     if (sheetLot != null) {
@@ -82,6 +84,7 @@ class CountingService {
       final response = await ApiClient.call(
         ApiConfig.lookupProducts,
         params: {'barcodes': barcodes},
+        force: true,
       );
       if (response.statusCode != 200) return null;
       final data = jsonDecode(response.body);
@@ -195,6 +198,7 @@ class CountingService {
           'items': toSend.map((e) => e.toJson()).toList(),
         },
         timeout: ApiConfig.submitTimeout,
+        force: true,
       );
       final result = ApiResult.fromResponse(response);
       if (result.success) {
@@ -211,9 +215,6 @@ class CountingService {
     }
   }
 
-  static Future<int> getCachedProductsCount() async {
-    return await LocalStorageService.getCachedProductsCount();
-  }
 
   // SHARED LIVE SESSION (two phones, same sheet)
 
@@ -388,6 +389,7 @@ class CountingService {
       final response = await ApiClient.call(
         ApiConfig.checkErpScans,
         params: {'counting_sheet_id': countingSheetId, 'barcodes': barcodes},
+        force: true,
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

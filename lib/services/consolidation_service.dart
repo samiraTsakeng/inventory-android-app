@@ -235,7 +235,8 @@ class ConsolidationService {
     final text = e.toString();
     if (text.contains('SocketException') ||
         text.contains('ClientException') ||
-        text.contains('délai dépassé')) {
+        text.contains('délai dépassé') ||
+        text.contains('Hors ligne')) {
       return const ApiResult.error(
         'Hors ligne : cette action modifie le stock dans Odoo et a besoin '
         'du réseau. Réessayez une fois la connexion revenue.',

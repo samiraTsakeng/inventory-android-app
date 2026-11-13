@@ -76,6 +76,7 @@ class SyncService {
       await ApiClient.call(
         ApiConfig.versionInfo,
         timeout: const Duration(seconds: 5),
+        force: true,
       );
     } catch (_) {}
     return online.value;

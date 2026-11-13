@@ -1,7 +1,6 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'api_config.dart';
+import 'file_store.dart';
 import 'local_storage_service.dart';
 
 // Offline counting: kept on the phone per account,
@@ -9,7 +8,8 @@ import 'local_storage_service.dart';
 //    location, with their product (shared by all the adjustment's sheets);
 //  - per sheet: the numbers already sent to the ERP.
 // Downloaded while online (automatic offline preparation, scanning
-// page); every scan reads it, so scanning needs no network.
+// page); every scan reads it, so scanning needs no network. Kept in files
+// (FileStore), decoded once and then answered from memory.
 class SheetCacheService {
   static const String _lotsPrefix = 'adj_lots_';
   static const String _sentPrefix = 'sheet_sent_';
@@ -17,6 +17,19 @@ class SheetCacheService {
   // Decoded copies, so a scan doesn't decode the stored JSON again.
   static final Map<String, _LotCache> _lots = {};
   static final Map<String, Set<String>> _sent = {};
+
+  // Opening a sheet: reads the adjustment's numbers in the background, so
+  // the first scan doesn't wait for the file.
+  static Future<void> warmUp(int adjustmentId, int sheetId) async {
+    await _loadLots(adjustmentId);
+    await _loadSent(sheetId);
+  }
+
+  // Forgets the decoded copies (logout).
+  static void clearMemory() {
+    _lots.clear();
+    _sent.clear();
+  }
 
   static Future<String> _lotsKey(int adjustmentId) async =>
       '$_lotsPrefix${await LocalStorageService.getSessionId()}_$adjustmentId';
@@ -37,7 +50,7 @@ class SheetCacheService {
         timeout: ApiConfig.cacheTimeout,
       );
       if (response.statusCode != 200) return null;
-      final data = jsonDecode(response.body);
+      final data = await ApiClient.decode(response);
       if (data['success'] != true ||
           data['lots'] is! List ||
           data['feuilles'] is! List) {
@@ -78,7 +91,7 @@ class SheetCacheService {
         timeout: ApiConfig.cacheTimeout,
       );
       if (response.statusCode != 200) return null;
-      final data = jsonDecode(response.body);
+      final data = await ApiClient.decode(response);
       if (data['success'] != true || data['lots'] is! List) return null;
 
       await _storeSent(sheetId, List<String>.from(data['sent'] ?? const []));
@@ -115,8 +128,7 @@ class SheetCacheService {
   static Future<void> markSent(int sheetId, Iterable<String> numbers) async {
     final sent = await _loadSent(sheetId);
     sent.addAll(numbers);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(await _sentKey(sheetId), sent.toList());
+    await FileStore.write(await _sentKey(sheetId), sent.toList());
   }
 
   static Future<int> _storeLots(int adjustmentId, List lots) async {
@@ -130,16 +142,14 @@ class SheetCacheService {
     );
     final key = await _lotsKey(adjustmentId);
     _lots[key] = cache;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, jsonEncode(cache.toJson()));
+    await FileStore.write(key, cache.toJson());
     return cache.lots.length;
   }
 
   static Future<void> _storeSent(int sheetId, List<String> numbers) async {
     final key = await _sentKey(sheetId);
     _sent[key] = numbers.toSet();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(key, numbers);
+    await FileStore.write(key, numbers);
   }
 
   static Future<_LotCache?> _loadLots(int adjustmentId) async {
@@ -147,11 +157,19 @@ class SheetCacheService {
     final cached = _lots[key];
     if (cached != null) return cached;
 
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(key);
-    if (raw == null) return null;
+    // Several scans right after opening share one read of the file.
+    final cache = await (_lotsLoading[key] ??= _readLots(key));
+    _lotsLoading.remove(key);
+    return cache;
+  }
+
+  static final Map<String, Future<_LotCache?>> _lotsLoading = {};
+
+  static Future<_LotCache?> _readLots(String key) async {
+    final raw = await FileStore.read(key);
+    if (raw is! Map) return null;
     try {
-      final cache = _LotCache.fromJson(jsonDecode(raw));
+      final cache = _LotCache.fromJson(Map<String, dynamic>.from(raw));
       _lots[key] = cache;
       return cache;
     } catch (e) {
@@ -165,8 +183,8 @@ class SheetCacheService {
     final cached = _sent[key];
     if (cached != null) return cached;
 
-    final prefs = await SharedPreferences.getInstance();
-    final sent = (prefs.getStringList(key) ?? const []).toSet();
+    final raw = await FileStore.read(key);
+    final sent = raw is List ? raw.whereType<String>().toSet() : <String>{};
     _sent[key] = sent;
     return sent;
   }

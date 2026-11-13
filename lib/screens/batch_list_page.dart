@@ -5,10 +5,8 @@ import '../widgets/app_logo.dart';
 import '../models/batch.dart';
 import '../services/batch_storage_service.dart';
 import '../services/counting_service.dart';
-import '../services/local_storage_service.dart';
 import '../services/offline_actions_service.dart';
 import '../services/sync_service.dart';
-import '../models/scanned_item.dart';
 import 'scanned_items_list_page.dart';
 
 class BatchesListPage extends StatefulWidget {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import '../utils/barcode.dart';
 import '../utils/constants.dart';
 import '../widgets/app_logo.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:badges/badges.dart' as badges;
 import 'dart:async';
-import '../utils/constants.dart';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
@@ -63,6 +63,9 @@ class _ScanningPageState extends State<ScanningPage>
 
   // ✅ Track last scan time per barcode (to detect accidental re-scans)
   final Map<String, DateTime> _lastScanTime = {};
+  // Codes Odoo didn't know, and when: not asked again for a while.
+  final Map<String, DateTime> _notFound = {};
+  static const Duration _notFoundMemory = Duration(seconds: 30);
 
   // For scan flash effect
   bool _showScanZone = true;
@@ -75,13 +78,15 @@ class _ScanningPageState extends State<ScanningPage>
     _loadSavedItems();
     _prepareOffline();
     _liveSyncTimer =
-        Timer.periodic(const Duration(seconds: 4), (_) => _syncLiveSession());
+        Timer.periodic(const Duration(seconds: 8), (_) => _syncLiveSession());
   }
 
   // Numbers of the adjustment available on the phone (offline scanning).
   // Only shown here: they are downloaded automatically once connected
   // (OfflinePrepService).
   Future<void> _prepareOffline() async {
+    // Reads the numbers now, so the first scan answers at once.
+    await SheetCacheService.warmUp(widget.adjustmentId, widget.countingSheetId);
     final cached = await SheetCacheService.info(widget.adjustmentId);
     if (_isMounted) setState(() => _offlineCount = cached.count);
   }
@@ -339,7 +344,15 @@ class _ScanningPageState extends State<ScanningPage>
     }
   }
 
-  Future<void> _processBarcode(String barcode) async {
+  Future<void> _processBarcode(String scanned) async {
+    final barcode = cleanBarcode(scanned);
+    if (barcode.isEmpty) {
+      setState(() {
+        isLookingUp = false;
+        isScanning = true;
+      });
+      return;
+    }
     setState(() {
       isLookingUp = true;
       isScanning = false;
@@ -446,11 +459,13 @@ class _ScanningPageState extends State<ScanningPage>
         // Not "not found": it couldn't be checked.
         await _addOfflineItem(barcode);
       } else {
+        _notFound[barcode] = DateTime.now();
         setState(() {
           isLookingUp = false;
           isScanning = true;
         });
 
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Code non trouvé: $barcode'),
@@ -784,9 +799,14 @@ class _ScanningPageState extends State<ScanningPage>
     _isProcessingScan = true;
 
     try {
-      final String? barcode = capture.barcodes.first.rawValue;
-      if (barcode == null || barcode.isEmpty) return;
+      final String barcode = cleanBarcode(capture.barcodes.first.rawValue ?? '');
+      if (barcode.isEmpty) return;
       if (barcode == lastScannedBarcode) return;
+      final unknownSince = _notFound[barcode];
+      if (unknownSince != null &&
+          DateTime.now().difference(unknownSince) < _notFoundMemory) {
+        return;
+      }
 
       setState(() {
         _showScanZone = false;
@@ -1163,9 +1183,11 @@ class _ScanningPageState extends State<ScanningPage>
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             color: Colors.white,
-            child: Column(
+            child: SafeArea(
+              top: false,
+              child: Column(
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1196,24 +1218,32 @@ class _ScanningPageState extends State<ScanningPage>
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.list, size: 18),
-                  label: Text('Voir la liste (${scannedItems.length})',
-                      style: const TextStyle(fontSize: 12)),
-                  onPressed: navigateToSummary,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.list, size: 20),
+                    label: Text('Voir la liste (${scannedItems.length})',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
+                    onPressed: navigateToSummary,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
                 ),
+                const SizedBox(height: 4),
               ],
+            ),
             ),
           ),
         ],
       ),
+      // Torch at the top of the camera, away from the list button.
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
       floatingActionButton: FloatingActionButton(
         mini: true,
         backgroundColor: Colors.white,

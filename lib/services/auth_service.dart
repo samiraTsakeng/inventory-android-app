@@ -27,6 +27,12 @@ class AuthService {
   static const String _sessionPasswordKey = 'session_password';
   static const String _sessionUidKey = 'session_uid';
   static const String _sessionNameKey = 'session_name';
+  // Kept after logout: the server is typed once (first connection) and the
+  // last account only gives its password to reconnect.
+  static const String _savedHostKey = 'saved_host';
+  static const String _savedDbKey = 'saved_db';
+  static const String _savedEmailKey = 'saved_email';
+  static const String _savedNameKey = 'saved_name';
 
   // ✅ Deterministic session id: same host+email always -> same id.
   // Sanitized so it stays a safe, readable SharedPreferences key fragment.
@@ -160,6 +166,11 @@ class AuthService {
   // Without network the saved session is kept and the app opens offline:
   // scanned items and batches stay on the phone. The session is only
   // cleared when Odoo explicitly rejects the credentials.
+  // A session saved on the phone, complete enough to log in again.
+  static Future<bool> hasSavedSession() async {
+    return await isLoggedIn() && await getFullSession() != null;
+  }
+
   static Future<AutoLoginResult> autoLogin() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -233,6 +244,10 @@ class AuthService {
     await prefs.setInt(_sessionUidKey, uid);
     await prefs.setString(_sessionNameKey, name);
     await prefs.setBool('is_logged_in', true);
+    await prefs.setString(_savedHostKey, host);
+    await prefs.setString(_savedDbKey, db);
+    await prefs.setString(_savedEmailKey, email);
+    await prefs.setString(_savedNameKey, name);
     loggedIn.value = true;
   }
 
@@ -287,17 +302,45 @@ class AuthService {
     await LocalStorageService.clearAllSessionData();
   }
 
+  // Server and last account remembered on the phone (also after logout).
+  // Versions before these keys only had the session ones.
+  static Future<({String host, String db, String email, String name})?>
+  getSavedConnection() async {
+    final prefs = await SharedPreferences.getInstance();
+    final host =
+        prefs.getString(_savedHostKey) ?? prefs.getString(_sessionHostKey);
+    if (host == null || host.trim().isEmpty) return null;
+    return (
+      host: host,
+      db: prefs.getString(_savedDbKey) ?? prefs.getString(_sessionDbKey) ?? '',
+      email: prefs.getString(_savedEmailKey) ??
+          prefs.getString(_sessionEmailKey) ??
+          '',
+      name: prefs.getString(_savedNameKey) ??
+          prefs.getString(_sessionNameKey) ??
+          '',
+    );
+  }
+
+  // "Changer de compte": the next login asks for the email again.
+  static Future<void> forgetAccount() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_savedEmailKey);
+    await prefs.remove(_savedNameKey);
+  }
+
+  // Reconnection of the remembered account with its password only.
   static Future<bool> secondAuthentication(String password) async {
     try {
-      final session = await getFullSession();
-      if (session == null) {
-        throw Exception("Aucune session enregistrée : veuillez vous reconnecter.");
+      final saved = await getSavedConnection();
+      if (saved == null || saved.email.isEmpty) {
+        throw Exception("Aucun compte enregistré : veuillez vous reconnecter.");
       }
 
       return await login(
-        host: session['host']!,
-        db: session['db'] ?? '',
-        email: session['email']!,
+        host: saved.host,
+        db: saved.db,
+        email: saved.email,
         password: password,
       );
     } catch (e) {

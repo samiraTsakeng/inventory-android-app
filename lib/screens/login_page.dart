@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/offline_prep_service.dart';
-import '../services/product_cache_service.dart';
 import '../utils/constants.dart';
-import '../utils/storage.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -20,9 +17,15 @@ class _LoginPageState extends State<LoginPage> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
+  // Which fields are asked:
+  //  - first connection (no server saved): server, database, email, password;
+  //  - server saved: email and password ("Changer de serveur" goes back);
+  //  - account saved too: password only ("Changer de compte").
   bool onlyPassword = false;
+  bool _hasServer = false;
+  bool _editServer = false;
+  String _savedName = '';
   bool isLoading = false;
-  bool _isCaching = false;
 
   @override
   void initState() {
@@ -31,51 +34,35 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _checkSession() async {
-    final session = await AuthService.getFullSession();
-    if (session != null && session['host'] != null && session['email'] != null) {
-      setState(() {
-        hostController.text = session['host'] ?? '';
-        emailController.text = session['email'] ?? '';
-        dbController.text = session['db'] ?? '';
-        onlyPassword = true;
-      });
-    }
+    final saved = await AuthService.getSavedConnection();
+    if (!mounted || saved == null) return;
+    setState(() {
+      hostController.text = saved.host;
+      dbController.text = saved.db;
+      emailController.text = saved.email;
+      _savedName = saved.name;
+      _hasServer = true;
+      onlyPassword = saved.email.isNotEmpty;
+    });
   }
 
   void _resetToFullLogin() {
+    AuthService.forgetAccount();
     setState(() {
       onlyPassword = false;
+      emailController.clear();
       passwordController.clear();
     });
   }
 
-  //  Cache products after successful login
-  Future<void> _cacheProductsAfterLogin() async {
-    if (_isCaching) return;
-
-    setState(() => _isCaching = true);
-
-    try {
-      final count = await ProductCacheService.cacheAllProducts();
-      print("Cached $count products for offline use");
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$count produits chargés pour le mode hors ligne'),
-            backgroundColor: AppColors.successColor,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      print("Product caching error: $e");
-    } finally {
-      if (mounted) {
-        setState(() => _isCaching = false);
-      }
-    }
+  void _changeServer() {
+    setState(() {
+      onlyPassword = false;
+      _editServer = true;
+    });
   }
+
+  bool get _showServerFields => !_hasServer || _editServer;
 
   void login() async {
     setState(() => isLoading = true);
@@ -89,8 +76,7 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       if (success && mounted) {
-        // Cache products and prepare offline work in the background
-        _cacheProductsAfterLogin();
+        // Prepares offline work in the background.
         OfflinePrepService.prepareAll();
 
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
@@ -118,8 +104,7 @@ class _LoginPageState extends State<LoginPage> {
       final success = await AuthService.secondAuthentication(passwordController.text);
 
       if (success && mounted) {
-        // Cache products and prepare offline work in the background
-        _cacheProductsAfterLogin();
+        // Prepares offline work in the background.
         OfflinePrepService.prepareAll();
 
         Navigator.pushReplacementNamed(context, '/adjustment-entry');
@@ -259,17 +244,24 @@ class _LoginPageState extends State<LoginPage> {
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 5),
-                const Text(
-                  "Connectez-vous pour continuer",
-                  style: TextStyle(color: AppColors.textSecondary),
+                Text(
+                  onlyPassword
+                      ? "Bonjour ${_savedName.isNotEmpty ? _savedName : emailController.text}, entrez votre mot de passe"
+                      : _showServerFields
+                          ? "Première connexion : indiquez le serveur Odoo"
+                          : "Connectez-vous pour continuer",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 40),
 
-                if (!onlyPassword) ...[
+                if (!onlyPassword && _showServerFields) ...[
                   _buildTextField(hostController, "URL du serveur", "http://your-odoo-server:8069"),
                   const SizedBox(height: 16),
                   _buildTextField(dbController, "Nom de la base (optionnel)", "Nom de la base"),
                   const SizedBox(height: 16),
+                ],
+                if (!onlyPassword) ...[
                   _buildTextField(emailController, "Email", "admin@example.com", isEmail: true),
                   const SizedBox(height: 16),
                 ],
@@ -278,26 +270,6 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 30),
 
-                // Loading indicator
-                if (_isCaching)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          "Chargement des produits...",
-                          style: TextStyle(fontSize: 12, color: AppColors.primaryColor),
-                        ),
-                      ],
-                    ),
-                  ),
 
                 SizedBox(
                   width: double.infinity,
@@ -357,6 +329,19 @@ class _LoginPageState extends State<LoginPage> {
                     child: const Text(
                       "Changer de compte",
                       style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                if (_hasServer && !_showServerFields)
+                  TextButton.icon(
+                    onPressed: _changeServer,
+                    icon: const Icon(Icons.dns_outlined, size: 16),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                    ),
+                    label: Text(
+                      "Serveur : ${hostController.text} · Changer",
+                      style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
               ],

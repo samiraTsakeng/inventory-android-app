@@ -37,21 +37,11 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
       final data = await ConsolidationService.getConsolidationSheets(widget.adjustmentId);
       print("Data received: $data");
 
-      // Ensure data is a list
-      if (data is List) {
-        setState(() {
-          consolidationSheets = data;
-          isLoading = false;
-        });
-        print("Loaded ${consolidationSheets.length} consolidation sheets");
-      } else {
-        print("Data is not a list: ${data.runtimeType}");
-        setState(() {
-          consolidationSheets = [];
-          isLoading = false;
-          errorMessage = "Format de données invalide";
-        });
-      }
+      setState(() {
+        consolidationSheets = data;
+        isLoading = false;
+      });
+      print("Loaded ${consolidationSheets.length} consolidation sheets");
     } catch (e) {
       print("Error fetching consolidation sheets: $e");
       setState(() {

@@ -7,45 +7,60 @@ import 'screens/adjustment_entry_page.dart';
 import 'screens/adjustment_list_page.dart';
 import 'screens/choice_page.dart';
 import 'screens/feuille_list_page.dart';
-import 'screens/scanning_page.dart';
-import 'screens/scanned_items_list_page.dart';
-import 'screens/batch_list_page.dart';
 import 'screens/consolidation_list_page.dart';
+import 'services/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/local_storage_service.dart';
 import 'services/sync_service.dart';
 import 'services/offline_prep_service.dart';
 import 'widgets/offline_banner.dart';
 import 'screens/adjustment_action_page.dart';
 
+// Lets main() go back to the login page once the app is shown.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Try auto-login on app start
-  var autoLogin = AutoLoginResult.noSession;
-  try {
-    autoLogin = await AuthService.autoLogin();
-    print("Auto-login result: $autoLogin");
-  } catch (e) {
-    print("Auto-login error: $e");
-  }
+  // Once, after an update: offline copies leave SharedPreferences.
+  await LocalStorageService.migrateLargeData();
 
-  // Without network the saved session is kept: the app opens offline and
-  // scanned items stay on the phone. A rejected session was already
-  // cleared by autoLogin.
-  final loggedIn = autoLogin == AutoLoginResult.success ||
-      autoLogin == AutoLoginResult.offline;
-  if (autoLogin == AutoLoginResult.noSession) {
-    await AuthService.clearSession();
-  }
+  // With a saved session the app opens at once, online or not, and logs in
+  // again in the background: offline, nothing waits for the server.
+  final hasSession = await AuthService.hasSavedSession();
+  if (!hasSession) await AuthService.clearSession();
 
-  AuthService.loggedIn.value = loggedIn;
-  SyncService.start(startOffline: autoLogin == AutoLoginResult.offline);
+  AuthService.loggedIn.value = hasSession;
+  SyncService.start(startOffline: false);
 
-  runApp(MyApp(initialRoute: loggedIn ? '/adjustment-entry' : '/'));
+  runApp(MyApp(initialRoute: hasSession ? '/adjustment-entry' : '/'));
+  if (!hasSession) return;
 
-  // Connected: downloads what's needed to work offline, in the background.
-  if (autoLogin == AutoLoginResult.success) {
-    unawaited(OfflinePrepService.prepareAll());
+  final login = AuthService.autoLogin();
+  ApiClient.startupLogin = login.then((_) {});
+  final result = await login;
+  ApiClient.startupLogin = null;
+  print("Auto-login result: $result");
+
+  switch (result) {
+    case AutoLoginResult.success:
+      // Connected: downloads what's needed to work offline.
+      unawaited(OfflinePrepService.prepareAll());
+    case AutoLoginResult.offline:
+      // Server unreachable (already reported by ApiClient): the app keeps
+      // working on the phone's copy.
+      break;
+    case AutoLoginResult.rejected:
+    case AutoLoginResult.noSession:
+      // Odoo refused the saved credentials: back to the login page.
+      AuthService.loggedIn.value = false;
+      appNavigatorKey.currentState?.pushNamedAndRemoveUntil('/', (_) => false);
+      SyncService.messengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('Session expirée : veuillez vous reconnecter.'),
+          backgroundColor: AppColors.errorColor,
+        ),
+      );
   }
 }
 
@@ -59,6 +74,7 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       scaffoldMessengerKey: SyncService.messengerKey,
+      navigatorKey: appNavigatorKey,
       builder: (context, child) => OfflineBanner(child: child!),
       debugShowCheckedModeBanner: false,
       title: 'Wise Inventory',

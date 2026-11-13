@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/scanned_item.dart';
+import 'file_store.dart';
+import 'sheet_cache_service.dart';
 
 class LocalStorageService {
   static const String _scannedItemsKey = 'scanned_items_';
@@ -8,13 +11,6 @@ class LocalStorageService {
   static const String _productCacheKey = 'product_cache_';
   static const String _cachedBarcodesKey = 'cached_barcodes_';
   static const String _sessionIdKey = 'session_id';
-
-  // Get session-specific cache key
-  static Future<String> _getSessionKey(String baseKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    final sessionId = prefs.getString(_sessionIdKey) ?? 'default';
-    return '${baseKey}_$sessionId';
-  }
 
   //  Save session ID (called on login)
   static Future<void> setSessionId(String sessionId) async {
@@ -128,31 +124,27 @@ class LocalStorageService {
       final prefs = await SharedPreferences.getInstance();
       final sessionId = await getSessionId();
 
-      // Clear all product cache for this session
-      final barcodesKey = '${_cachedBarcodesKey}$sessionId';
-      final barcodes = prefs.getStringList(barcodesKey) ?? [];
-      for (final barcode in barcodes) {
-        await prefs.remove('${_productCacheKey}$barcode');
-      }
-      await prefs.remove(barcodesKey);
-
-      // Clear all scanned items for this session
+      // Scanned items not saved in a batch yet.
       final allKeys = prefs.getKeys();
-      final scannedKeys = allKeys.where((key) => key.startsWith('${_scannedItemsKey}${sessionId}_'));
+      final scannedKeys = allKeys
+          .where((key) => key.startsWith('${_scannedItemsKey}${sessionId}_'))
+          .toList();
       for (final key in scannedKeys) {
         await prefs.remove(key);
       }
 
-      // Offline copies: lists, the adjustments' numbers and what each sheet
-      // sent (re-downloaded at the next login). Batches and sheet actions
-      // not replayed yet are kept, like the batches.
-      final offlineKeys = allKeys.where((key) =>
-          key.startsWith('$_responseCacheKey${sessionId}_') ||
-          key.startsWith('adj_lots_${sessionId}_') ||
-          key.startsWith('sheet_sent_${sessionId}_'));
-      for (final key in offlineKeys.toList()) {
-        await prefs.remove(key);
-      }
+      // Offline copies: lists, the adjustments' numbers, what each sheet
+      // sent and the numbers looked up (re-downloaded at the next login).
+      // Batches and sheet actions not replayed yet are kept.
+      await FileStore.removePrefixes([
+        '$_responseCacheKey${sessionId}_',
+        'adj_lots_${sessionId}_',
+        'sheet_sent_${sessionId}_',
+        '$_lookupsKey$sessionId',
+      ]);
+      _lookups = null;
+      _lookupsSession = null;
+      SheetCacheService.clearMemory();
 
       // Reset session ID for next login
       await prefs.remove(_sessionIdKey);
@@ -169,111 +161,137 @@ class LocalStorageService {
   static const String _responseCacheKey = 'response_cache_';
 
   static Future<void> cacheResponse(String name, Object data) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = await getSessionId();
-      await prefs.setString('$_responseCacheKey${sessionId}_$name', jsonEncode(data));
-    } catch (e) {
-      print("Error caching response $name: $e");
-    }
+    final sessionId = await getSessionId();
+    await FileStore.write('$_responseCacheKey${sessionId}_$name', data);
   }
 
   static Future<dynamic> getCachedResponse(String name) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = await getSessionId();
-      final raw = prefs.getString('$_responseCacheKey${sessionId}_$name');
-      return raw == null ? null : jsonDecode(raw);
-    } catch (e) {
-      print("Error reading cached response $name: $e");
-      return null;
-    }
+    final sessionId = await getSessionId();
+    return FileStore.read('$_responseCacheKey${sessionId}_$name');
   }
 
-  // Save product to cache for offline use
+  // Numbers looked up on the server (number -> product), so a rescan of a
+  // number outside the offline copy needs no network. One file per
+  // account, kept in memory and saved a moment after the last change.
+  static const String _lookupsKey = 'lookups_';
+  static Map<String, dynamic>? _lookups;
+  static String? _lookupsSession;
+  static Timer? _lookupsSave;
+
+  static Future<Map<String, dynamic>> _loadLookups() async {
+    final sessionId = await getSessionId();
+    if (_lookups != null && _lookupsSession == sessionId) return _lookups!;
+    final raw = await FileStore.read('$_lookupsKey$sessionId');
+    _lookupsSession = sessionId;
+    return _lookups = raw is Map ? Map<String, dynamic>.from(raw) : {};
+  }
+
   static Future<void> cacheProduct(String barcode, Map<String, dynamic> productData) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = await getSessionId();
-      final productJson = jsonEncode(productData);
-      await prefs.setString('${_productCacheKey}$barcode', productJson);
-
-      // Track which barcodes are cached for this session
-      final barcodesKey = '${_cachedBarcodesKey}$sessionId';
-      final cachedBarcodes = prefs.getStringList(barcodesKey) ?? [];
-      if (!cachedBarcodes.contains(barcode)) {
-        cachedBarcodes.add(barcode);
-        await prefs.setStringList(barcodesKey, cachedBarcodes);
-      }
-    } catch (e) {
-      print(" Error caching product: $e");
-    }
+    final lookups = await _loadLookups();
+    lookups[barcode] = productData;
+    final key = '$_lookupsKey$_lookupsSession';
+    _lookupsSave?.cancel();
+    _lookupsSave = Timer(const Duration(seconds: 2), () {
+      FileStore.write(key, lookups);
+    });
   }
 
-  // Get cached product
   static Future<Map<String, dynamic>?> getCachedProduct(String barcode) async {
+    final product = (await _loadLookups())[barcode];
+    return product is Map ? Map<String, dynamic>.from(product) : null;
+  }
+
+  // Before this version, offline copies and every product of the catalog
+  // were stored in SharedPreferences, which made each write (every scan)
+  // rewrite megabytes. Runs once: the copies move to files, the catalog is
+  // dropped. The other values are put back after a single clear() (one
+  // removal per key would rewrite the big file thousands of times); they
+  // are saved to a file first so a crash in between loses nothing.
+  static const String _migratedKey = 'storage_files_v1';
+  static const String _backupKey = 'prefs_backup';
+
+  static Future<void> migrateLargeData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final productJson = prefs.getString('${_productCacheKey}$barcode');
-      if (productJson != null) {
-        return jsonDecode(productJson);
+      final backup = await FileStore.read(_backupKey);
+      if (backup is Map) {
+        // Interrupted last time: finish putting the values back.
+        await _restore(prefs, backup);
+        return;
       }
-      return null;
-    } catch (e) {
-      print("Error getting cached product: $e");
-      return null;
-    }
-  }
+      if (prefs.getBool(_migratedKey) == true) return;
 
-  // Get all cached barcodes for current session
-  static Future<List<String>> getCachedBarcodes() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = await getSessionId();
-      final barcodesKey = '${_cachedBarcodesKey}$sessionId';
-      return prefs.getStringList(barcodesKey) ?? [];
-    } catch (e) {
-      print("Error getting cached barcodes: $e");
-      return [];
-    }
-  }
+      bool isLarge(String key) =>
+          key.startsWith(_productCacheKey) ||
+          key.startsWith(_cachedBarcodesKey) ||
+          key.startsWith(_responseCacheKey) ||
+          key.startsWith('adj_lots_') ||
+          key.startsWith('sheet_sent_');
 
-  // Get cached products count for current session
-  static Future<int> getCachedProductsCount() async {
-    try {
-      final barcodes = await getCachedBarcodes();
-      return barcodes.length;
-    } catch (e) {
-      print("Error getting cached products count: $e");
-      return 0;
-    }
-  }
-
-  // Check if product exists in cache
-  static Future<bool> isProductCached(String barcode) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.containsKey('${_productCacheKey}$barcode');
-    } catch (e) {
-      print("Error checking product cache: $e");
-      return false;
-    }
-  }
-
-  // Clear ALL product cache (for full reset)
-  static Future<void> clearAllProductCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = await getSessionId();
-      final barcodesKey = '${_cachedBarcodesKey}$sessionId';
-      final barcodes = prefs.getStringList(barcodesKey) ?? [];
-      for (final barcode in barcodes) {
-        await prefs.remove('${_productCacheKey}$barcode');
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith(_responseCacheKey) || key.startsWith('adj_lots_')) {
+          final raw = prefs.getString(key);
+          if (raw != null) {
+            try {
+              await FileStore.write(key, jsonDecode(raw));
+            } catch (_) {}
+          }
+        } else if (key.startsWith('sheet_sent_')) {
+          final list = prefs.getStringList(key);
+          if (list != null) await FileStore.write(key, list);
+        }
       }
-      await prefs.remove(barcodesKey);
-      print("Cleared all product cache");
+
+      final kept = <String, Object?>{};
+      for (final key in keys) {
+        if (isLarge(key)) continue;
+        final value = prefs.get(key);
+        kept[key] = {
+          'type': value is bool
+              ? 'bool'
+              : value is int
+                  ? 'int'
+                  : value is double
+                      ? 'double'
+                      : value is List
+                          ? 'list'
+                          : 'string',
+          'value': value,
+        };
+      }
+      if (kept.length == keys.length) {
+        await prefs.setBool(_migratedKey, true);
+        return;
+      }
+      await FileStore.write(_backupKey, kept);
+      await _restore(prefs, kept);
     } catch (e) {
-      print("Error clearing product cache: $e");
+      print("Storage migration error: $e");
     }
+  }
+
+  static Future<void> _restore(SharedPreferences prefs, Map backup) async {
+    await prefs.clear();
+    for (final entry in backup.entries) {
+      final key = entry.key as String;
+      final item = entry.value;
+      if (item is! Map) continue;
+      final value = item['value'];
+      switch (item['type']) {
+        case 'bool':
+          await prefs.setBool(key, value as bool);
+        case 'int':
+          await prefs.setInt(key, value as int);
+        case 'double':
+          await prefs.setDouble(key, (value as num).toDouble());
+        case 'list':
+          await prefs.setStringList(key, List<String>.from(value as List));
+        default:
+          await prefs.setString(key, value.toString());
+      }
+    }
+    await prefs.setBool(_migratedKey, true);
+    await FileStore.remove(_backupKey);
   }
 }

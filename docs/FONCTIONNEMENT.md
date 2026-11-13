@@ -60,13 +60,18 @@ enregistrés, puis l'appel est rejoué.
 ## 3. Parcours de l'utilisateur
 
 ### 3.1 Connexion
-- Saisie de l'adresse Odoo, de l'email et du mot de passe. Si le nom de la
-  base n'est pas saisi, l'application essaie les bases du serveur jusqu'à
-  celle qui accepte les identifiants.
-- À chaque lancement, l'application se reconnecte avec la session enregistrée.
-- **Sans réseau au lancement**, la session est conservée et l'application
-  s'ouvre en mode hors ligne (les scans et les lots restent sur le téléphone).
-  La session n'est effacée que si Odoo refuse les identifiants.
+- **Première connexion** : adresse Odoo, nom de la base (facultatif), email et
+  mot de passe. Si le nom de la base n'est pas saisi, l'application essaie les
+  bases du serveur jusqu'à celle qui accepte les identifiants.
+- **Ensuite**, le serveur est retenu, même après une déconnexion : la page
+  demande seulement l'email et le mot de passe (lien « Serveur : … · Changer »
+  pour en changer).
+- **Reconnexion** : le dernier compte est retenu aussi, la page demande
+  seulement le mot de passe (« Bonjour … »), avec un lien « Changer de compte ».
+- À chaque lancement avec une session enregistrée, l'application **s'ouvre
+  tout de suite** et se reconnecte en arrière-plan. Sans réseau, elle reste en
+  mode hors ligne (les scans et les lots restent sur le téléphone). Si Odoo
+  refuse les identifiants, elle revient à la page de connexion.
 
 ### 3.2 Choix de l'inventaire
 - Liste des ajustements **en brouillon ou en cours** qui concernent
@@ -181,6 +186,10 @@ sans connexion, et est envoyé à Odoo au retour du réseau (§5).
   (immédiat sans réseau ; jusqu'à 8 à 20 s si le Wi-Fi est connecté mais le
   serveur injoignable). Un **bandeau orange** apparaît en haut de tous les
   écrans : « Hors ligne · N lot(s) en attente d'envoi ».
+- **Hors ligne, les écrans n'attendent plus le serveur** : ils affichent tout
+  de suite la copie du téléphone. Le serveur est réessayé au plus toutes les
+  20 s, à l'occasion d'une action de l'utilisateur. Les envois (« Envoyer »,
+  vérification des numéros scannés hors ligne) essaient toujours le serveur.
 - L'application **n'interroge pas le serveur en tâche de fond** pour savoir si
   le réseau est revenu. L'utilisateur touche **« Réessayer »** sur le bandeau.
 - Au retour du réseau, un message rappelle ce qui attend, **sans rien envoyer**.
@@ -256,6 +265,19 @@ Route `/wise_inventory/api/counting/submit` du module, **une transaction**
 
 Toutes les données sont séparées **par compte** (adresse Odoo + email).
 
+Les copies hors ligne (numéros de l'inventaire, numéros déjà envoyés, listes,
+numéros recherchés) sont dans des **fichiers séparés**, lus une fois puis
+gardés en mémoire ; seuls les petits réglages restent dans
+`SharedPreferences`. Avant, tout y était (y compris le catalogue produits
+complet copié à chaque connexion), et chaque scan réécrivait ce gros fichier :
+c'était la cause principale de la lenteur. La mise à jour déplace les copies
+existantes au premier lancement et supprime le catalogue, devenu inutile.
+
+Les numéros lus par la caméra sont **nettoyés** (espaces, retours à la ligne,
+séparateur GS1 des étiquettes DataMatrix) comme une saisie manuelle, dans
+l'application et dans Odoo : sans cela, un numéro scanné hors ligne n'était
+reconnu ni par la copie du téléphone ni à l'envoi.
+
 | Donnée | Effacée quand |
 |---|---|
 | Liste en cours de scan (par feuille) | Enregistrement en lot, envoi direct, déconnexion |
@@ -265,6 +287,7 @@ Toutes les données sont séparées **par compte** (adresse Odoo + email).
 | Numéros déjà envoyés par feuille | Déconnexion |
 | Dernières listes d'inventaires et de feuilles | Déconnexion |
 | Identifiants de connexion | Déconnexion, ou identifiants refusés par Odoo |
+| Serveur et dernier compte (sans mot de passe) | « Changer de compte » / nouveau serveur |
 
 ---
 
@@ -320,5 +343,5 @@ affiche « Le module wise_inventory n'est pas à jour sur le serveur Odoo ».
   Odoo) ; préférer Odoo en HTTPS hors du réseau local.
 - L'application ne fonctionne pas en version web (navigateur) : le navigateur
   interdit de transmettre le cookie de session Odoo.
-- Un très grand emplacement (dizaines de milliers de numéros) rend la
-  préparation hors ligne lourde (stockage `SharedPreferences`).
+- Un très grand emplacement (dizaines de milliers de numéros) allonge la
+  préparation hors ligne (téléchargement), sans ralentir les scans.
