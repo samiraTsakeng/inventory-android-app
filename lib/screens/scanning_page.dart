@@ -380,6 +380,18 @@ class _ScanningPageState extends State<ScanningPage>
       return;
     }
 
+    // Typed reference of the product (not a serial): it would otherwise be
+    // kept "to verify" offline and block the send.
+    if (await SheetCacheService.isReference(widget.adjustmentId, barcode)) {
+      setState(() {
+        isLookingUp = false;
+        isScanning = true;
+      });
+      _referenceHintAt = null;
+      _showReferenceHint();
+      return;
+    }
+
     final lookup = await CountingService.lookupProduct(
       barcode,
       countingSheetId: widget.countingSheetId,
@@ -790,6 +802,57 @@ class _ScanningPageState extends State<ScanningPage>
     }
   }
 
+  // A label carries several codes: the serial number, and the product's
+  // internal reference, barcode or manufacturer number (MPN). Among the
+  // codes the camera read, a number of the inventory (phone's copy) wins;
+  // the product's references are skipped. Returns '' when only references
+  // were read (a hint asks to aim at the serial).
+  Future<String> _pickSerial(BarcodeCapture capture) async {
+    final codes = <String>{
+      for (final b in capture.barcodes) cleanBarcode(b.rawValue ?? ''),
+    }..remove('');
+    if (codes.isEmpty) return '';
+
+    for (final code in codes) {
+      final lot = await SheetCacheService.findLot(widget.adjustmentId, code);
+      if (lot != null) return code;
+    }
+    final others = <String>[
+      for (final code in codes)
+        if (!await SheetCacheService.isReference(widget.adjustmentId, code))
+          code,
+    ];
+    if (others.isEmpty) {
+      _showReferenceHint();
+      return '';
+    }
+    return others.first;
+  }
+
+  DateTime? _referenceHintAt;
+
+  // The camera keeps reading the reference while aimed at it: the hint
+  // shows at most every 3 seconds.
+  void _showReferenceHint() {
+    final now = DateTime.now();
+    if (_referenceHintAt != null &&
+        now.difference(_referenceHintAt!) < const Duration(seconds: 3)) {
+      return;
+    }
+    _referenceHintAt = now;
+    if (!_isMounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "C'est la référence de l'article : visez le code du numéro de série.",
+        ),
+        backgroundColor: AppColors.warningColor,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   void onBarcodeDetected(BarcodeCapture capture) async {
     if (!isScanning || isLookingUp || _isProcessingScan) return;
     if (_scanDebounceTimer?.isActive ?? false) return;
@@ -799,7 +862,7 @@ class _ScanningPageState extends State<ScanningPage>
     _isProcessingScan = true;
 
     try {
-      final String barcode = cleanBarcode(capture.barcodes.first.rawValue ?? '');
+      final String barcode = await _pickSerial(capture);
       if (barcode.isEmpty) return;
       if (barcode == lastScannedBarcode) return;
       final unknownSince = _notFound[barcode];

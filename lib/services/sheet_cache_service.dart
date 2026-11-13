@@ -7,6 +7,8 @@ import 'local_storage_service.dart';
 // Offline counting: kept on the phone per account,
 //  - per adjustment: the lot/serial numbers in stock in the inventoried
 //    location, with their product (shared by all the adjustment's sheets);
+//    plus the products' references (internal reference, barcode, MPN),
+//    also printed on the labels, so they're not taken for a serial;
 //  - per sheet: the numbers already sent to the ERP.
 // Downloaded while online (automatic offline preparation, scanning
 // page); every scan reads it, so scanning needs no network. Kept in files
@@ -63,7 +65,7 @@ class SheetCacheService {
         'feuilles_$adjustmentId',
         feuilles,
       );
-      final lotCount = await _storeLots(adjustmentId, data['lots']);
+      final lotCount = await _storeLots(adjustmentId, data['lots'], data['refs']);
 
       final sent = (data['sent'] as Map?) ?? const {};
       for (final sheet in feuilles) {
@@ -96,7 +98,7 @@ class SheetCacheService {
       if (data['success'] != true || data['lots'] is! List) return null;
 
       await _storeSent(sheetId, List<String>.from(data['sent'] ?? const []));
-      return await _storeLots(adjustmentId, data['lots']);
+      return await _storeLots(adjustmentId, data['lots'], data['refs']);
     } catch (e) {
       debugPrint("Sheet cache refresh error: $e");
       return null;
@@ -109,6 +111,15 @@ class SheetCacheService {
     String barcode,
   ) async {
     return (await _loadLots(adjustmentId))?.lots[barcode];
+  }
+
+  // Whether the code is a product's reference (internal reference,
+  // barcode or MPN printed next to the serial) rather than a number.
+  static Future<bool> isReference(int adjustmentId, String code) async {
+    final cache = await _loadLots(adjustmentId);
+    return cache != null &&
+        cache.refs.contains(code) &&
+        !cache.lots.containsKey(code);
   }
 
   // Whether this number was already sent to the ERP for the sheet (as of
@@ -132,13 +143,19 @@ class SheetCacheService {
     await FileStore.write(await _sentKey(sheetId), sent.toList());
   }
 
-  static Future<int> _storeLots(int adjustmentId, List lots) async {
+  static Future<int> _storeLots(
+    int adjustmentId,
+    List lots,
+    Object? refs,
+  ) async {
     final cache = _LotCache(
       lots: {
         for (final lot in lots)
           if (lot['lot_name'] is String)
             lot['lot_name'] as String: Map<String, dynamic>.from(lot),
       },
+      // An older server sends no references: none are filtered.
+      refs: refs is List ? refs.whereType<String>().toSet() : <String>{},
       updatedAt: DateTime.now(),
     );
     final key = await _lotsKey(adjustmentId);
@@ -193,12 +210,14 @@ class SheetCacheService {
 
 class _LotCache {
   final Map<String, Map<String, dynamic>> lots;
+  final Set<String> refs;
   final DateTime updatedAt;
 
-  _LotCache({required this.lots, required this.updatedAt});
+  _LotCache({required this.lots, required this.refs, required this.updatedAt});
 
   Map<String, dynamic> toJson() => {
     'lots': lots.values.toList(),
+    'refs': refs.toList(),
     'updated_at': updatedAt.toIso8601String(),
   };
 
@@ -207,6 +226,7 @@ class _LotCache {
       for (final lot in json['lots'] as List)
         lot['lot_name'] as String: Map<String, dynamic>.from(lot),
     },
+    refs: (json['refs'] as List?)?.whereType<String>().toSet() ?? <String>{},
     updatedAt: DateTime.tryParse(json['updated_at'] ?? '') ?? DateTime.now(),
   );
 }

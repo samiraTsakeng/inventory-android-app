@@ -279,6 +279,16 @@ séparateur GS1 des étiquettes DataMatrix) comme une saisie manuelle, dans
 l'application et dans Odoo : sans cela, un numéro scanné hors ligne n'était
 reconnu ni par la copie du téléphone ni à l'envoi.
 
+Une étiquette porte **plusieurs codes** : le numéro de série, et souvent la
+référence interne, le code-barres ou le numéro du fabricant (MPN, champ
+`w_mpn_code` de `wise_sale`) de l'article. Avec les numéros en stock, Odoo
+envoie au téléphone ces références (`refs`). Parmi les codes lus par la
+caméra, un numéro de l'inventaire est retenu en priorité et les références
+sont écartées, même hors ligne. Viser seulement une référence affiche « C'est
+la référence de l'article : visez le code du numéro de série » et rien n'est
+ajouté. Sans cela, hors ligne, la référence était prise pour un numéro « à
+vérifier » et bloquait l'envoi.
+
 | Donnée | Effacée quand |
 |---|---|
 | Liste en cours de scan (par feuille) | Enregistrement en lot, envoi direct, déconnexion |
