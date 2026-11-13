@@ -60,9 +60,10 @@ enregistrés, puis l'appel est rejoué.
 ## 3. Parcours de l'utilisateur
 
 ### 3.1 Connexion
-- **Première connexion** : adresse Odoo, nom de la base (facultatif), email et
-  mot de passe. Si le nom de la base n'est pas saisi, l'application essaie les
-  bases du serveur jusqu'à celle qui accepte les identifiants.
+- **Première connexion** : adresse Odoo, email et mot de passe. Une adresse
+  sans `http://` ni `https://` est complétée par `http://`. Il n'y a pas de
+  champ pour la base : l'application essaie les bases du serveur jusqu'à
+  celle qui accepte les identifiants.
 - **Ensuite**, le serveur est retenu, même après une déconnexion : la page
   demande seulement l'email et le mot de passe (lien « Serveur : … · Changer »
   pour en changer).

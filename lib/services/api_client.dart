@@ -109,7 +109,8 @@ class ApiClient {
     while (value.endsWith('/')) {
       value = value.substring(0, value.length - 1);
     }
-    if (!value.startsWith('http://') && !value.startsWith('https://')) {
+    final lower = value.toLowerCase();
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
       value = 'http://$value';
     }
     return value;

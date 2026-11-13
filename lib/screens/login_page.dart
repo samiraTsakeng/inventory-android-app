@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
+import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../services/offline_prep_service.dart';
 import '../utils/constants.dart';
@@ -18,7 +19,7 @@ class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
 
   // Which fields are asked:
-  //  - first connection (no server saved): server, database, email, password;
+  //  - first connection (no server saved): server, email, password;
   //  - server saved: email and password ("Changer de serveur" goes back);
   //  - account saved too: password only ("Changer de compte").
   bool onlyPassword = false;
@@ -65,12 +66,19 @@ class _LoginPageState extends State<LoginPage> {
   bool get _showServerFields => !_hasServer || _editServer;
 
   void login() async {
-    setState(() => isLoading = true);
+    // "192.168.1.10:8069" -> "http://192.168.1.10:8069", shown in the field.
+    final host = ApiClient.normalizeHost(hostController.text);
+    setState(() {
+      if (host != 'http://') hostController.text = host;
+      isLoading = true;
+    });
 
     try {
       final success = await AuthService.login(
         host: hostController.text.trim(),
-        db: dbController.text.trim(),
+        // No database field: the saved one while the server is unchanged,
+        // otherwise the one where these credentials are accepted.
+        db: _showServerFields ? '' : dbController.text.trim(),
         email: emailController.text.trim(),
         password: passwordController.text,
       );
@@ -256,9 +264,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 40),
 
                 if (!onlyPassword && _showServerFields) ...[
-                  _buildTextField(hostController, "URL du serveur", "http://your-odoo-server:8069"),
-                  const SizedBox(height: 16),
-                  _buildTextField(dbController, "Nom de la base (optionnel)", "Nom de la base"),
+                  _buildTextField(hostController, "URL du serveur", "http://adresse-du-serveur:8069"),
                   const SizedBox(height: 16),
                 ],
                 if (!onlyPassword) ...[
