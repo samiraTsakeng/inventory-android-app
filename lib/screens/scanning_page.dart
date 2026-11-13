@@ -1183,12 +1183,32 @@ class _ScanningPageState extends State<ScanningPage>
             ),
           ),
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             color: Colors.white,
             child: SafeArea(
               top: false,
               child: Column(
               children: [
+                // Button first, right under the camera: easy to reach,
+                // away from the phone's bottom edge.
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.list, size: 20),
+                    label: Text('Voir la liste (${scannedItems.length})',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
+                    onPressed: navigateToSummary,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1217,25 +1237,6 @@ class _ScanningPageState extends State<ScanningPage>
                       : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.list, size: 20),
-                    label: Text('Voir la liste (${scannedItems.length})',
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
-                    onPressed: navigateToSummary,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
               ],
             ),
             ),
