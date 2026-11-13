@@ -7,7 +7,7 @@ import '../widgets/app_logo.dart';
 import '../widgets/app_card.dart';
 
 class AdjustmentsListPage extends StatefulWidget {
-  const AdjustmentsListPage({Key? key}) : super(key: key);
+  const AdjustmentsListPage({super.key});
 
   @override
   State<AdjustmentsListPage> createState() => _AdjustmentsListPageState();
@@ -56,21 +56,31 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
 
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'draft': return AppColors.warningColor;
-      case 'confirm': return AppColors.successColor;
-      case 'done': return AppColors.primaryColor;
-      case 'cancel': return AppColors.errorColor;
-      default: return AppColors.textSecondary;
+      case 'draft':
+        return AppColors.warningColor;
+      case 'confirm':
+        return AppColors.successColor;
+      case 'done':
+        return AppColors.primaryColor;
+      case 'cancel':
+        return AppColors.errorColor;
+      default:
+        return AppColors.textSecondary;
     }
   }
 
   String getStatusText(String? state) {
     switch (state) {
-      case 'draft': return 'En cours';
-      case 'confirm': return 'Confirmé';
-      case 'done': return 'Terminé';
-      case 'cancel': return 'Annulé';
-      default: return state ?? 'Inconnu';
+      case 'draft':
+        return 'En cours';
+      case 'confirm':
+        return 'Confirmé';
+      case 'done':
+        return 'Terminé';
+      case 'cancel':
+        return 'Annulé';
+      default:
+        return state ?? 'Inconnu';
     }
   }
 
@@ -89,7 +99,10 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
             Icon(Icons.inventory_2, color: getStatusColor(state), size: 20),
             const SizedBox(width: 8),
             const Expanded(
-              child: Text("Détails de l'ajustement", style: TextStyle(fontSize: 16)),
+              child: Text(
+                "Détails de l'ajustement",
+                style: TextStyle(fontSize: 16),
+              ),
             ),
           ],
         ),
@@ -105,9 +118,12 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
-                    color: getStatusColor(state).withOpacity(0.15),
+                    color: getStatusColor(state).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -124,11 +140,18 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.calendar_today, size: 12, color: AppColors.textSecondary),
+                Icon(
+                  Icons.calendar_today,
+                  size: 12,
+                  color: AppColors.textSecondary,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   formatDate(adj["date"]),
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -171,105 +194,139 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, size: 22),
-          onPressed: () => Navigator.pushReplacementNamed(context, '/adjustment-entry'),
+          onPressed: () =>
+              Navigator.pushReplacementNamed(context, '/adjustment-entry'),
         ),
-        actions: [
-          const AppLogo(),
-        ],
+        actions: [const AppLogo()],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
           ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 40, color: AppColors.errorColor),
-            const SizedBox(height: 8),
-            Padding(padding: const EdgeInsets.symmetric(horizontal: 32), child: Text(errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14))),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  isLoading = true;
-                  errorMessage = null;
-                  fetchAdjustments();
-                });
-              },
-              child: const Text("Réessayer"),
-            ),
-          ],
-        ),
-      )
-          : adjustments.isEmpty
-          ? const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory, size: 40, color: AppColors.textSecondary),
-            SizedBox(height: 8),
-            Text("Aucun ajustement en cours", style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-          ],
-        ),
-      )
-          : RefreshIndicator(
-        onRefresh: () async => fetchAdjustments(),
-        child: GridView.builder(
-          padding: const EdgeInsets.all(16),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            mainAxisExtent: 128,
-          ),
-          itemCount: adjustments.length,
-          itemBuilder: (context, index) {
-            final adj = adjustments[index];
-            final color = getStatusColor(adj["state"]);
-            return AppCard(
-              onTap: () => _showAdjustmentDetails(adj),
-              accentColor: color,
-              padding: const EdgeInsets.all(12),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      AppBadge(text: getStatusText(adj["state"]), color: color),
-                      const Spacer(),
-                      const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
-                    ],
+                  const Icon(
+                    Icons.error_outline,
+                    size: 40,
+                    color: AppColors.errorColor,
                   ),
                   const SizedBox(height: 8),
-                  Expanded(
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      adj["name"] ?? "Sans nom",
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textColor,
-                        height: 1.25,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14),
                     ),
                   ),
-                  Row(
-                    children: [
-                      const Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(
-                        formatDate(adj["date"]),
-                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        isLoading = true;
+                        errorMessage = null;
+                        fetchAdjustments();
+                      });
+                    },
+                    child: const Text("Réessayer"),
                   ),
                 ],
               ),
-            );
-          },
-        ),
-      ),
+            )
+          : adjustments.isEmpty
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.inventory,
+                    size: 40,
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "Aucun ajustement en cours",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async => fetchAdjustments(),
+              child: GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: 128,
+                ),
+                itemCount: adjustments.length,
+                itemBuilder: (context, index) {
+                  final adj = adjustments[index];
+                  final color = getStatusColor(adj["state"]);
+                  return AppCard(
+                    onTap: () => _showAdjustmentDetails(adj),
+                    accentColor: color,
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            AppBadge(
+                              text: getStatusText(adj["state"]),
+                              color: color,
+                            ),
+                            const Spacer(),
+                            const Icon(
+                              Icons.chevron_right,
+                              size: 18,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Text(
+                            adj["name"] ?? "Sans nom",
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textColor,
+                              height: 1.25,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 13,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              formatDate(adj["date"]),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

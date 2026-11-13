@@ -19,14 +19,14 @@ class ScannedItemsListPage extends StatefulWidget {
   final String? batchId;
 
   const ScannedItemsListPage({
-    Key? key,
+    super.key,
     required this.items,
     required this.sheetName,
     required this.countingSheetId,
     required this.adjustmentId,
     required this.onItemsUpdated,
     this.batchId,
-  }) : super(key: key);
+  });
 
   @override
   State<ScannedItemsListPage> createState() => _ScannedItemsListPageState();
@@ -53,10 +53,13 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       if (query.isEmpty) {
         _filteredItems = List.from(_items);
       } else {
-        _filteredItems = _items.where((item) =>
-        item.productName.toLowerCase().contains(_searchQuery) ||
-            item.barcode.contains(_searchQuery)
-        ).toList();
+        _filteredItems = _items
+            .where(
+              (item) =>
+                  item.productName.toLowerCase().contains(_searchQuery) ||
+                  item.barcode.contains(_searchQuery),
+            )
+            .toList();
       }
     });
   }
@@ -108,7 +111,10 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
     if (widget.batchId != null) {
       await BatchStorageService.updateBatchItems(widget.batchId!, _items);
     } else {
-      await LocalStorageService.saveScannedItems(widget.countingSheetId, _items);
+      await LocalStorageService.saveScannedItems(
+        widget.countingSheetId,
+        _items,
+      );
     }
   }
 
@@ -176,24 +182,32 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   void _startEditing(int filteredIndex) {
     setState(() {
       _editingIndex = filteredIndex;
-      _quantityController.text = _filteredItems[filteredIndex].quantity.toString();
+      _quantityController.text = _filteredItems[filteredIndex].quantity
+          .toString();
     });
   }
 
   String _getTrackingText(String tracking) {
     switch (tracking) {
-      case 'serial': return 'N° Série';
-      case 'lot': return 'Lot';
-      case 'none': return 'Sans traçabilité';
-      default: return 'Aucune traçabilité';
+      case 'serial':
+        return 'N° Série';
+      case 'lot':
+        return 'Lot';
+      case 'none':
+        return 'Sans traçabilité';
+      default:
+        return 'Aucune traçabilité';
     }
   }
 
   Color _getTrackingColor(String tracking) {
     switch (tracking) {
-      case 'serial': return AppColors.secondaryColor;
-      case 'lot': return AppColors.warningColor;
-      default: return AppColors.textSecondary;
+      case 'serial':
+        return AppColors.secondaryColor;
+      case 'lot':
+        return AppColors.warningColor;
+      default:
+        return AppColors.textSecondary;
     }
   }
 
@@ -204,9 +218,9 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
   // starts fresh and cannot double-submit.
   Future<void> _sendToERP() async {
     if (_items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucun article à envoyer')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Aucun article à envoyer')));
       return;
     }
 
@@ -246,14 +260,16 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
 
       if (toSubmit.isEmpty) {
         setState(() => _isSending = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Tous les articles (${alreadyInErp.length}) existent déjà dans l\'ERP. Rien à envoyer.',
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Tous les articles (${alreadyInErp.length}) existent déjà dans l\'ERP. Rien à envoyer.',
+              ),
+              backgroundColor: AppColors.warningColor,
             ),
-            backgroundColor: AppColors.warningColor,
-          ),
-        );
+          );
+        }
         // ✅ Still clear the local list — those items ARE in the ERP.
         await _clearAllAfterSubmit();
         return;
@@ -281,13 +297,15 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
             ? sent
             : '$sent • Ignorés (déjà dans l\'ERP) : ${alreadyInErp.length}';
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: AppColors.successColor,
-          ),
-        );
-        Navigator.pop(context, true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: AppColors.successColor,
+            ),
+          );
+        }
+        if (mounted) Navigator.pop(context, true);
       } else if (mounted) {
         setState(() => _isSending = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -347,16 +365,27 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: TextButton.icon(
                     icon: _isSending
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
                         : const Icon(Icons.send, size: 15, color: Colors.white),
                     label: Text(
                       _isSending ? 'Envoi...' : 'Envoyer',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                     onPressed: _isSending ? null : _sendToERP,
                   ),
@@ -368,224 +397,329 @@ class _ScannedItemsListPageState extends State<ScannedItemsListPage> {
       ),
       body: _items.isEmpty
           ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.primaryColor.withOpacity(0.06),
-                shape: BoxShape.circle,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryColor.withValues(alpha: 0.06),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 44,
+                      color: AppColors.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Aucun article scanné',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.qr_code_scanner, size: 18),
+                    label: const Text(
+                      'Retour au scan',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(180, 44),
+                    ),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.inventory_2_outlined, size: 44, color: AppColors.primaryColor),
-            ),
-            const SizedBox(height: 16),
-            const Text('Aucun article scanné', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.qr_code_scanner, size: 18),
-              label: const Text('Retour au scan', style: TextStyle(fontSize: 13)),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(180, 44)),
-            ),
-          ],
-        ),
-      )
+            )
           : Column(
-        children: [
-          // Search bar
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderColor),
-            ),
-            child: TextField(
-              onChanged: (value) => _filterItems(value),
-              decoration: const InputDecoration(
-                hintText: 'Rechercher un article...',
-                border: InputBorder.none,
-                icon: Icon(Icons.search, color: AppColors.textSecondary, size: 20),
-              ),
-            ),
-          ),
-
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.primaryColor.withOpacity(0.06),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.qr_code, size: 15, color: AppColors.primaryColor),
-                    const SizedBox(width: 5),
-                    Text('${_items.length} articles',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
-                  ],
+                // Search bar
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderColor),
+                  ),
+                  child: TextField(
+                    onChanged: (value) => _filterItems(value),
+                    decoration: const InputDecoration(
+                      hintText: 'Rechercher un article...',
+                      border: InputBorder.none,
+                      icon: Icon(
+                        Icons.search,
+                        color: AppColors.textSecondary,
+                        size: 20,
+                      ),
+                    ),
+                  ),
                 ),
-                Container(width: 1, height: 14, color: AppColors.primaryColor.withOpacity(0.2)),
-                Row(
-                  children: [
-                    const Icon(Icons.inventory_2_outlined, size: 15, color: AppColors.primaryColor),
-                    const SizedBox(width: 5),
-                    Text('${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryColor)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _filteredItems.length,
-              itemBuilder: (context, index) {
-                final item = _filteredItems[index];
-                final isEditing = _editingIndex == index;
-                final isSerial = item.tracking == 'serial';
-                final trackingText = _getTrackingText(item.tracking);
-                final trackingColor = _getTrackingColor(item.tracking);
 
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${index + 1}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primaryColor),
-                                ),
-                              ),
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryColor.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.qr_code,
+                            size: 15,
+                            color: AppColors.primaryColor,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '${_items.length} articles',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryColor,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
+                          ),
+                        ],
+                      ),
+                      Container(
+                        width: 1,
+                        height: 14,
+                        color: AppColors.primaryColor.withValues(alpha: 0.2),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.inventory_2_outlined,
+                            size: 15,
+                            color: AppColors.primaryColor,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '${_items.fold<int>(0, (sum, item) => sum + item.quantity)} pièces',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: _filteredItems.length,
+                    itemBuilder: (context, index) {
+                      final item = _filteredItems[index];
+                      final isEditing = _editingIndex == index;
+                      final isSerial = item.tracking == 'serial';
+                      final trackingText = _getTrackingText(item.tracking);
+                      final trackingColor = _getTrackingColor(item.tracking);
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    item.productName,
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textColor),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryColor.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '${index + 1}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: AppColors.primaryColor,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.qr_code_2, size: 11, color: AppColors.textSecondary),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        item.barcode,
-                                        style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: trackingColor.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(5),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.productName,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textColor,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        child: Text(
-                                          trackingText,
-                                          style: TextStyle(fontSize: 10, color: trackingColor, fontWeight: FontWeight.w600),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.qr_code_2,
+                                              size: 11,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              item.barcode,
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 5,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: trackingColor.withValues(
+                                                  alpha: 0.12,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(5),
+                                              ),
+                                              child: Text(
+                                                trackingText,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: trackingColor,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Divider(height: 1),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Text(
-                              isSerial ? 'Quantité fixe: ' : 'Quantité: ',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                            ),
-                            if (isSerial)
-                              Expanded(
-                                child: Text(
-                                  '1 (N° Série)',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.secondaryColor),
-                                ),
-                              )
-                            else if (isEditing)
-                              Expanded(
-                                child: SizedBox(
-                                  height: 34,
-                                  child: TextField(
-                                    controller: _quantityController,
-                                    keyboardType: TextInputType.number,
-                                    autofocus: true,
-                                    decoration: const InputDecoration(
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              const SizedBox(height: 8),
+                              const Divider(height: 1),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Text(
+                                    isSerial ? 'Quantité fixe: ' : 'Quantité: ',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
                                     ),
-                                    style: const TextStyle(fontSize: 12),
                                   ),
-                                ),
-                              )
-                            else
-                              Expanded(
-                                child: Text(
-                                  '${item.quantity}',
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textColor),
-                                ),
+                                  if (isSerial)
+                                    Expanded(
+                                      child: Text(
+                                        '1 (N° Série)',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.secondaryColor,
+                                        ),
+                                      ),
+                                    )
+                                  else if (isEditing)
+                                    Expanded(
+                                      child: SizedBox(
+                                        height: 34,
+                                        child: TextField(
+                                          controller: _quantityController,
+                                          keyboardType: TextInputType.number,
+                                          autofocus: true,
+                                          decoration: const InputDecoration(
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 6,
+                                                ),
+                                          ),
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Expanded(
+                                      child: Text(
+                                        '${item.quantity}',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textColor,
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(width: 4),
+                                  if (!isSerial && !isEditing)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit_outlined,
+                                        size: 18,
+                                        color: AppColors.primaryColor,
+                                      ),
+                                      onPressed: () => _startEditing(index),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  if (!isSerial && isEditing)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.check_circle,
+                                        size: 20,
+                                        color: AppColors.successColor,
+                                      ),
+                                      onPressed: () => _saveItemQuantity(index),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                      color: AppColors.errorColor,
+                                    ),
+                                    onPressed: () => _deleteItem(item),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
                               ),
-                            const SizedBox(width: 4),
-                            if (!isSerial && !isEditing)
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primaryColor),
-                                onPressed: () => _startEditing(index),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                            if (!isSerial && isEditing)
-                              IconButton(
-                                icon: const Icon(Icons.check_circle, size: 20, color: AppColors.successColor),
-                                onPressed: () => _saveItemQuantity(index),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
-                              onPressed: () => _deleteItem(item),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }

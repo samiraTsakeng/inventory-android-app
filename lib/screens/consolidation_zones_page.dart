@@ -9,10 +9,10 @@ class ConsolidationZonesPage extends StatefulWidget {
   final String adjustmentName;
 
   const ConsolidationZonesPage({
-    Key? key,
+    super.key,
     required this.adjustmentId,
     required this.adjustmentName,
-  }) : super(key: key);
+  });
 
   @override
   State<ConsolidationZonesPage> createState() => _ConsolidationZonesPageState();
@@ -37,7 +37,9 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
     });
 
     try {
-      final data = await ConsolidationService.getConsolidationZones(widget.adjustmentId);
+      final data = await ConsolidationService.getConsolidationZones(
+        widget.adjustmentId,
+      );
       setState(() {
         zones = data;
         isLoading = false;
@@ -97,29 +99,35 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
       setState(() => isProcessing = false);
 
       if (sheetId != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Consolidation créée avec succès.'),
-            backgroundColor: AppColors.successColor,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Consolidation créée avec succès.'),
+              backgroundColor: AppColors.successColor,
+            ),
+          );
+        }
         await fetchZones();
       } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Erreur lors de la création de la consolidation'),
+              backgroundColor: AppColors.errorColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => isProcessing = false);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erreur lors de la création de la consolidation'),
+          SnackBar(
+            content: Text(friendlyError(e)),
             backgroundColor: AppColors.errorColor,
           ),
         );
       }
-    } catch (e) {
-      setState(() => isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyError(e)),
-          backgroundColor: AppColors.errorColor,
-        ),
-      );
     }
   }
 
@@ -134,180 +142,205 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
           icon: const Icon(Icons.arrow_back, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          const AppLogo(),
-        ],
+        actions: [const AppLogo()],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
           ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
-              const SizedBox(height: 16),
-              Text(
-                errorMessage!,
-                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
-                textAlign: TextAlign.center,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 50,
+                      color: AppColors.errorColor,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.errorColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: fetchZones,
+                      child: const Text(
+                        "Réessayer",
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: fetchZones,
-                child: const Text("Réessayer", style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-        ),
-      )
+            )
           : zones.isEmpty
           ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.successColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_circle, size: 44, color: AppColors.successColor),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              "Toutes les zones sont consolidées !",
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textColor),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              "Retournez pour appliquer la consolidation",
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      )
-          : Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.primaryColor.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.info_outline, color: AppColors.primaryColor),
-                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.successColor.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      size: 44,
+                      color: AppColors.successColor,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    "Toutes les zones sont consolidées !",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Retournez pour appliquer la consolidation",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryColor.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: AppColors.primaryColor),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${zones.length} zone(s) prête(s) à être consolidée(s)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.primaryColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Expanded(
-                    child: Text(
-                      '${zones.length} zone(s) prête(s) à être consolidée(s)',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.primaryColor,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: ListView.builder(
+                      itemCount: zones.length,
+                      itemBuilder: (context, index) {
+                        final zone = zones[index];
+                        final zoneName = zone['name'] ?? 'Zone ${zone['id']}';
+                        final sheetCount = zone['sheets']?.length ?? 0;
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryColor.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(25),
+                                  ),
+                                  child: const Icon(
+                                    Icons.merge_type,
+                                    color: AppColors.primaryColor,
+                                    size: 28,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        zoneName,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '$sheetCount feuilles de comptage prêtes',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: isProcessing
+                                      ? null
+                                      : () => consolidateZone(
+                                          zone['id'],
+                                          zoneName,
+                                        ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.successColor,
+                                    foregroundColor: Colors.white,
+                                    minimumSize: Size.zero,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: isProcessing
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Consolider',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: ListView.builder(
-                itemCount: zones.length,
-                itemBuilder: (context, index) {
-                  final zone = zones[index];
-                  final zoneName = zone['name'] ?? 'Zone ${zone['id']}';
-                  final sheetCount = zone['sheets']?.length ?? 0;
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                            child: const Icon(
-                              Icons.merge_type,
-                              color: AppColors.primaryColor,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  zoneName,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$sheetCount feuilles de comptage prêtes',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: isProcessing
-                                ? null
-                                : () => consolidateZone(zone['id'], zoneName),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.successColor,
-                              foregroundColor: Colors.white,
-                              minimumSize: Size.zero,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: isProcessing
-                                ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                                : const Text(
-                              'Consolider',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

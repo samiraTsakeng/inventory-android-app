@@ -76,7 +76,9 @@ class OfflineActionsService {
 
     final sheet = await CountingService.getSheetState(sheetId);
     if (sheet == null) {
-      return SyncService.online.value ? ReplayOutcome.nothing : ReplayOutcome.offline;
+      return SyncService.online.value
+          ? ReplayOutcome.nothing
+          : ReplayOutcome.offline;
     }
     // Already started (by a batch sent meanwhile, or in Odoo): action_begin
     // would refuse it as "comptage en cours".
@@ -103,7 +105,9 @@ class OfflineActionsService {
 
     final sheet = await CountingService.getSheetState(sheetId);
     if (sheet == null) {
-      return SyncService.online.value ? ReplayOutcome.nothing : ReplayOutcome.offline;
+      return SyncService.online.value
+          ? ReplayOutcome.nothing
+          : ReplayOutcome.offline;
     }
     if (sheet['state'] == 'confirm') {
       await _remove(validate, sheetId);
@@ -134,7 +138,8 @@ class ReplayOutcome {
   static const nothing = ReplayOutcome._('nothing');
   static const done = ReplayOutcome._('done');
   static const offline = ReplayOutcome._('offline');
-  static ReplayOutcome refused(String? message) => ReplayOutcome._('refused', message);
+  static ReplayOutcome refused(String? message) =>
+      ReplayOutcome._('refused', message);
 
   bool get isRefused => kind == 'refused';
   bool get isOffline => kind == 'offline';

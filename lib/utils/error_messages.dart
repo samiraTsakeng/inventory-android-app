@@ -22,14 +22,18 @@ String friendlyError(Object error) {
   if (lower.contains('timeout') || lower.contains('timed out')) {
     return 'Le serveur met trop de temps à répondre. Réessayez.';
   }
-  if (lower.contains('401') || lower.contains('session expired') ||
+  if (lower.contains('401') ||
+      lower.contains('session expired') ||
       lower.contains('invalid or expired session')) {
     return 'Votre session a expiré. Veuillez vous reconnecter.';
   }
 
   // Keep messages produced by the app itself, without the Dart prefix.
   final message = raw
-      .replaceFirst(RegExp(r'^(Exception|Error|FormatException|StateError):\s*'), '')
+      .replaceFirst(
+        RegExp(r'^(Exception|Error|FormatException|StateError):\s*'),
+        '',
+      )
       .trim();
   if (message.isEmpty || message.length > 160) {
     return 'Une erreur est survenue. Réessayez.';

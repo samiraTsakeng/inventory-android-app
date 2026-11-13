@@ -124,12 +124,20 @@ class OfflinePrepService {
       }
 
       final result = OfflinePrepResult(
-          adjustments: prepared, sheets: sheets, numbers: numbers, failed: failed);
+        adjustments: prepared,
+        sheets: sheets,
+        numbers: numbers,
+        failed: failed,
+      );
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(
-          await _preparedKey(), [for (final id in done) '$id']);
+      await prefs.setStringList(await _preparedKey(), [
+        for (final id in done) '$id',
+      ]);
       if (failed == 0) {
-        await prefs.setString(await _lastRunKey(), DateTime.now().toIso8601String());
+        await prefs.setString(
+          await _lastRunKey(),
+          DateTime.now().toIso8601String(),
+        );
         // Fresh copies of every adjustment: the numbers looked up one by
         // one before are dropped, so an old answer can't outlive them.
         await LocalStorageService.clearLookups();
@@ -149,17 +157,19 @@ class OfflinePrepService {
     final ok = result.failed == 0;
     final text = result.sheets == 0
         ? (ok
-            ? 'Mode hors ligne prêt : aucune feuille de comptage à préparer.'
-            : 'Préparation du hors ligne incomplète. Réessayez avec une meilleure connexion.')
+              ? 'Mode hors ligne prêt : aucune feuille de comptage à préparer.'
+              : 'Préparation du hors ligne incomplète. Réessayez avec une meilleure connexion.')
         : ok
-            ? 'Mode hors ligne prêt : ${result.sheets} feuille(s), ${result.numbers} numéros.'
-            : 'Hors ligne préparé en partie (${result.sheets} feuille(s)). '
-                'Réessayez avec une meilleure connexion.';
-    messenger.showSnackBar(SnackBar(
-      content: Text(text),
-      backgroundColor: ok ? AppColors.successColor : AppColors.warningColor,
-      duration: const Duration(seconds: 3),
-    ));
+        ? 'Mode hors ligne prêt : ${result.sheets} feuille(s), ${result.numbers} numéros.'
+        : 'Hors ligne préparé en partie (${result.sheets} feuille(s)). '
+              'Réessayez avec une meilleure connexion.';
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: ok ? AppColors.successColor : AppColors.warningColor,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 }
 

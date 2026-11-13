@@ -127,7 +127,9 @@ class ApiClient {
   // (offline copy of an adjustment).
   static Future<dynamic> decode(http.Response response) {
     final body = response.body;
-    return body.length > _bigBody ? compute(_decodeJson, body) : Future.value(jsonDecode(body));
+    return body.length > _bigBody
+        ? compute(_decodeJson, body)
+        : Future.value(jsonDecode(body));
   }
 
   static void clearSession() {
@@ -344,7 +346,6 @@ class ApiClient {
 
   static String _errorMessage(Map error) => _rpcErrorMessage(error);
 
-
   static String? _sessionCookie(http.Response response) {
     final header = response.headers['set-cookie'];
     if (header == null) return null;
@@ -385,7 +386,10 @@ String _rpcErrorMessage(Map error) {
   } catch (_) {
     return (
       status: 502,
-      body: encode({'success': false, 'message': 'Réponse invalide du serveur Odoo'}),
+      body: encode({
+        'success': false,
+        'message': 'Réponse invalide du serveur Odoo',
+      }),
       sessionExpired: false,
     );
   }

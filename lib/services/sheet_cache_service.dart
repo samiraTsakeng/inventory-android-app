@@ -65,7 +65,11 @@ class SheetCacheService {
         'feuilles_$adjustmentId',
         feuilles,
       );
-      final lotCount = await _storeLots(adjustmentId, data['lots'], data['refs']);
+      final lotCount = await _storeLots(
+        adjustmentId,
+        data['lots'],
+        data['refs'],
+      );
 
       final sent = (data['sent'] as Map?) ?? const {};
       for (final sheet in feuilles) {

@@ -12,23 +12,9 @@ dependencies:
   http: ^1.2.0
   shared_preferences: ^2.2.2
   path_provider: ^2.1.5
-  # UI & Design
-  cupertino_icons: ^1.0.8
-  google_fonts: ^8.0.2
-  flutter_svg: ^2.0.10+1
-  badges: ^3.1.2
 
-  # State Management & Storage
-  provider: ^6.1.2
-  flutter_secure_storage: ^10.0.0
-
-  # Validation
-  validators: ^3.0.0  # Correct name (was validators)
-
-  # Barcode Scanning for Web & Mobile
+  # Camera barcode scanning
   mobile_scanner: ^4.0.1
-  #qr_code_scanner: ^1.0.1
-  #google_mlkit_text_recognition: ^0.13.0
 
 dev_dependencies:
   flutter_test:

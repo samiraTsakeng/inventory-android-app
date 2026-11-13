@@ -16,12 +16,12 @@ class BatchesListPage extends StatefulWidget {
   final String sheetName;
 
   const BatchesListPage({
-    Key? key,
+    super.key,
     required this.countingSheetId,
     required this.adjustmentId,
     required this.zoneName,
     required this.sheetName,
-  }) : super(key: key);
+  });
 
   @override
   State<BatchesListPage> createState() => _BatchesListPageState();
@@ -59,7 +59,9 @@ class _BatchesListPageState extends State<BatchesListPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.describe()),
-        backgroundColor: result.error == null ? AppColors.successColor : AppColors.warningColor,
+        backgroundColor: result.error == null
+            ? AppColors.successColor
+            : AppColors.warningColor,
         duration: const Duration(seconds: 6),
       ),
     );
@@ -74,7 +76,9 @@ class _BatchesListPageState extends State<BatchesListPage> {
     final batches = await BatchStorageService.getBatches();
     if (!mounted) return;
     // Filter batches for current counting sheet
-    _batches = batches.where((b) => b.countingSheetId == widget.countingSheetId).toList();
+    _batches = batches
+        .where((b) => b.countingSheetId == widget.countingSheetId)
+        .toList();
     _selectedBatches.clear();
     _isSelectionMode = false;
     setState(() => _isLoading = false);
@@ -128,7 +132,10 @@ class _BatchesListPageState extends State<BatchesListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Supprimer les lots", style: TextStyle(fontSize: 18)),
+          title: const Text(
+            "Supprimer les lots",
+            style: TextStyle(fontSize: 18),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,12 +185,14 @@ class _BatchesListPageState extends State<BatchesListPage> {
 
       await _loadBatches();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$deletedCount lot(s) supprimé(s) avec succès'),
-          backgroundColor: AppColors.successColor,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$deletedCount lot(s) supprimé(s) avec succès'),
+            backgroundColor: AppColors.successColor,
+          ),
+        );
+      }
     }
   }
 
@@ -233,12 +242,14 @@ class _BatchesListPageState extends State<BatchesListPage> {
       await BatchStorageService.removeBatch(batch.id);
       await _loadBatches();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Lot "${batch.name}" supprimé avec succès'),
-          backgroundColor: AppColors.successColor,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lot "${batch.name}" supprimé avec succès'),
+            backgroundColor: AppColors.successColor,
+          ),
+        );
+      }
     }
   }
 
@@ -337,15 +348,21 @@ class _BatchesListPageState extends State<BatchesListPage> {
       setState(() => _isSyncing = false);
       await _loadBatches();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(firstError == null
-              ? ' $successCount lot(s) envoyé(s) et retiré(s) du téléphone, $failCount en échec'
-              : ' $successCount lot(s) envoyé(s) et retiré(s) du téléphone, $failCount en échec\n$firstError'),
-          backgroundColor: failCount > 0 ? AppColors.warningColor : AppColors.successColor,
-          duration: Duration(seconds: failCount > 0 ? 6 : 4),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              firstError == null
+                  ? ' $successCount lot(s) envoyé(s) et retiré(s) du téléphone, $failCount en échec'
+                  : ' $successCount lot(s) envoyé(s) et retiré(s) du téléphone, $failCount en échec\n$firstError',
+            ),
+            backgroundColor: failCount > 0
+                ? AppColors.warningColor
+                : AppColors.successColor,
+            duration: Duration(seconds: failCount > 0 ? 6 : 4),
+          ),
+        );
+      }
     }
   }
 
@@ -380,18 +397,22 @@ class _BatchesListPageState extends State<BatchesListPage> {
             : const Text('Lots sauvegardés'),
         leading: _isSelectionMode
             ? IconButton(
-          icon: const Icon(Icons.close, size: 22),
-          onPressed: _exitSelectionMode,
-        )
+                icon: const Icon(Icons.close, size: 22),
+                onPressed: _exitSelectionMode,
+              )
             : IconButton(
-          icon: const Icon(Icons.arrow_back, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+                icon: const Icon(Icons.arrow_back, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
         actions: [
           if (!_isSelectionMode && _batches.isNotEmpty)
             IconButton(
               icon: _isSyncing
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.sync, size: 20),
               onPressed: _isSyncing ? null : _syncAllBatches,
             ),
@@ -417,210 +438,275 @@ class _BatchesListPageState extends State<BatchesListPage> {
           ? const Center(child: CircularProgressIndicator())
           : _batches.isEmpty
           ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory, size: 64, color: AppColors.textSecondary.withOpacity(0.7)),
-            const SizedBox(height: 16),
-            Text(
-              'Aucun lot sauvegardé',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Scannez et utilisez "Enregistrer" pour créer un lot',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-          ],
-        ),
-      )
-          : Column(
-        children: [
-          // Summary
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.secondaryColor.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    '${_batches.length} lot(s) total',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  Icon(
+                    Icons.inventory,
+                    size: 64,
+                    color: AppColors.textSecondary.withValues(alpha: 0.7),
                   ),
+                  const SizedBox(height: 16),
                   Text(
-                    '$unsyncedCount à synchroniser',
-                    style: const TextStyle(fontSize: 13),
+                    'Aucun lot sauvegardé',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Scannez et utilisez "Enregistrer" pour créer un lot',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
-            ),
-          ),
-          // List
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(8),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 0.85,
-              ),
-              itemCount: _batches.length,
-              itemBuilder: (context, index) {
-                final batch = _batches[index];
-                final isSelected = _selectedBatches.contains(batch);
-                final isSynced = batch.isSynced;
-
-                return GestureDetector(
-                  onTap: () {
-                    if (_isSelectionMode) {
-                      _toggleSelection(batch);
-                    } else {
-                      _viewBatchItems(batch);
-                    }
-                  },
-                  onLongPress: () {
-                    if (!_isSelectionMode) {
-                      _toggleSelection(batch);
-                    }
-                  },
+            )
+          : Column(
+              children: [
+                // Summary
+                Padding(
+                  padding: const EdgeInsets.all(12),
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.secondaryColor.withOpacity(0.08) : AppColors.surfaceColor,
-                      borderRadius: BorderRadius.circular(AppDecor.cardRadius),
-                      border: Border.all(
-                        color: isSelected ? AppColors.secondaryColor : AppColors.borderColor,
-                        width: isSelected ? 2 : 1,
-                      ),
-                      boxShadow: AppDecor.cardShadow,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.secondaryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Checkbox for selection mode
-                        if (_isSelectionMode)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => _toggleSelection(batch),
-                              activeColor: AppColors.secondaryColor,
-                            ),
-                          ),
-                        // Icon
-                        Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: isSynced ? AppColors.successColor.withOpacity(0.12) : AppColors.secondaryColor.withOpacity(0.14),
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          child: Icon(
-                            isSynced ? Icons.check_circle : Icons.save,
-                            color: isSynced ? AppColors.successColor : AppColors.secondaryColor,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
                         Text(
-                          batch.name,
+                          '${_batches.length} lot(s) total',
                           style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${batch.items.length} articles',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          isSynced ? 'Synchronisé' : 'En attente',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isSynced ? AppColors.successColor : AppColors.warningColor,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        // Action buttons (only if not in selection mode)
-                        if (!_isSelectionMode && !isSynced)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ElevatedButton(
-                                  onPressed: _isSyncing ? null : () => _syncBatch(batch),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.successColor,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
-                                  child: const Text('Envoyer', style: TextStyle(fontSize: 10)),
-                                ),
-                                const SizedBox(width: 6),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
-                                  onPressed: () => _deleteSingleBatch(batch),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (!_isSelectionMode && isSynced)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.errorColor),
-                              onPressed: () => _deleteSingleBatch(batch),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ),
+                        Text(
+                          '$unsyncedCount à synchroniser',
+                          style: const TextStyle(fontSize: 13),
+                        ),
                       ],
                     ),
                   ),
-                );
-              },
+                ),
+                // List
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(8),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 0.85,
+                        ),
+                    itemCount: _batches.length,
+                    itemBuilder: (context, index) {
+                      final batch = _batches[index];
+                      final isSelected = _selectedBatches.contains(batch);
+                      final isSynced = batch.isSynced;
+
+                      return GestureDetector(
+                        onTap: () {
+                          if (_isSelectionMode) {
+                            _toggleSelection(batch);
+                          } else {
+                            _viewBatchItems(batch);
+                          }
+                        },
+                        onLongPress: () {
+                          if (!_isSelectionMode) {
+                            _toggleSelection(batch);
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.secondaryColor.withValues(
+                                    alpha: 0.08,
+                                  )
+                                : AppColors.surfaceColor,
+                            borderRadius: BorderRadius.circular(
+                              AppDecor.cardRadius,
+                            ),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.secondaryColor
+                                  : AppColors.borderColor,
+                              width: isSelected ? 2 : 1,
+                            ),
+                            boxShadow: AppDecor.cardShadow,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Checkbox for selection mode
+                              if (_isSelectionMode)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Checkbox(
+                                    value: isSelected,
+                                    onChanged: (_) => _toggleSelection(batch),
+                                    activeColor: AppColors.secondaryColor,
+                                  ),
+                                ),
+                              // Icon
+                              Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: isSynced
+                                      ? AppColors.successColor.withValues(
+                                          alpha: 0.12,
+                                        )
+                                      : AppColors.secondaryColor.withValues(
+                                          alpha: 0.14,
+                                        ),
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                                child: Icon(
+                                  isSynced ? Icons.check_circle : Icons.save,
+                                  color: isSynced
+                                      ? AppColors.successColor
+                                      : AppColors.secondaryColor,
+                                  size: 28,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                batch.name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${batch.items.length} articles',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                isSynced ? 'Synchronisé' : 'En attente',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isSynced
+                                      ? AppColors.successColor
+                                      : AppColors.warningColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              // Action buttons (only if not in selection mode)
+                              if (!_isSelectionMode && !isSynced)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      ElevatedButton(
+                                        onPressed: _isSyncing
+                                            ? null
+                                            : () => _syncBatch(batch),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              AppColors.successColor,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 4,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Envoyer',
+                                          style: TextStyle(fontSize: 10),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                          color: AppColors.errorColor,
+                                        ),
+                                        onPressed: () =>
+                                            _deleteSingleBatch(batch),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (!_isSelectionMode && isSynced)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                      color: AppColors.errorColor,
+                                    ),
+                                    onPressed: () => _deleteSingleBatch(batch),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
       floatingActionButton: _batches.isNotEmpty && !_isSelectionMode
           ? Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          // Delete all button
-          FloatingActionButton.extended(
-            onPressed: _isSyncing ? null : _deleteSelectedBatches,
-            icon: const Icon(Icons.delete, size: 20),
-            label: const Text('Tout supprimer'),
-            backgroundColor: AppColors.errorColor,
-            foregroundColor: Colors.white,
-          ),
-          const SizedBox(width: 12),
-          // Sync all button
-          FloatingActionButton.extended(
-            onPressed: _isSyncing ? null : _syncAllBatches,
-            icon: _isSyncing
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.sync, size: 20),
-            label: const Text('Tout synchroniser'),
-            backgroundColor: AppColors.successColor,
-            foregroundColor: Colors.white,
-          ),
-        ],
-      )
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Delete all button
+                FloatingActionButton.extended(
+                  onPressed: _isSyncing ? null : _deleteSelectedBatches,
+                  icon: const Icon(Icons.delete, size: 20),
+                  label: const Text('Tout supprimer'),
+                  backgroundColor: AppColors.errorColor,
+                  foregroundColor: Colors.white,
+                ),
+                const SizedBox(width: 12),
+                // Sync all button
+                FloatingActionButton.extended(
+                  onPressed: _isSyncing ? null : _syncAllBatches,
+                  icon: _isSyncing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.sync, size: 20),
+                  label: const Text('Tout synchroniser'),
+                  backgroundColor: AppColors.successColor,
+                  foregroundColor: Colors.white,
+                ),
+              ],
+            )
           : null,
     );
   }

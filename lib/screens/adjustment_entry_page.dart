@@ -36,9 +36,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
   @override
   Widget build(BuildContext context) {
     if (_isChecking) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -54,9 +52,7 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             },
           ),
         ),
-        actions: [
-          const AppLogo(),
-        ],
+        actions: [const AppLogo()],
       ),
       drawer: Drawer(
         child: ListView(
@@ -64,21 +60,30 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
           children: [
             Container(
               padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
-              decoration: const BoxDecoration(gradient: AppColors.brandGradient),
+              decoration: const BoxDecoration(
+                gradient: AppColors.brandGradient,
+              ),
               child: Row(
                 children: [
                   const AppLogo(size: 46, padding: EdgeInsets.zero),
                   const SizedBox(width: 12),
                   const Text(
                     'Wise Inventory',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.inventory_2_outlined, color: AppColors.primaryColor),
+              leading: const Icon(
+                Icons.inventory_2_outlined,
+                color: AppColors.primaryColor,
+              ),
               title: const Text('Ajustement de stock'),
               onTap: () {
                 Navigator.pop(context);
@@ -87,7 +92,10 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: AppColors.errorColor),
-              title: const Text('Déconnexion', style: TextStyle(color: AppColors.errorColor)),
+              title: const Text(
+                'Déconnexion',
+                style: TextStyle(color: AppColors.errorColor),
+              ),
               onTap: () {
                 AuthService.clearSession();
                 Navigator.pushReplacementNamed(context, '/');
@@ -113,14 +121,17 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
                   child: Container(
                     padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryColor.withOpacity(0.06),
+                      color: AppColors.primaryColor.withValues(alpha: 0.06),
                       shape: BoxShape.circle,
                     ),
                     child: Image.asset(
                       "assets/images/2037740.png",
                       height: 120,
-                      errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.inventory, size: 120, color: AppColors.primaryColor),
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.inventory,
+                        size: 120,
+                        color: AppColors.primaryColor,
+                      ),
                     ),
                   ),
                 ),
@@ -129,7 +140,11 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
             const SizedBox(height: 24),
             const Text(
               "Inventaire",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textColor),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textColor,
+              ),
             ),
             const SizedBox(height: 6),
             const Text(
@@ -147,7 +162,10 @@ class _AdjustmentEntryPageState extends State<AdjustmentEntryPage> {
                     Navigator.pushNamed(context, '/adjustments-list');
                   },
                   icon: const Icon(Icons.arrow_forward, size: 20),
-                  label: const Text("Continuer", style: TextStyle(fontSize: 16)),
+                  label: const Text(
+                    "Continuer",
+                    style: TextStyle(fontSize: 16),
+                  ),
                 ),
               ),
             ),

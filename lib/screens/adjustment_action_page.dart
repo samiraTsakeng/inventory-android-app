@@ -11,10 +11,10 @@ class AdjustmentActionPage extends StatefulWidget {
   final String adjustmentName;
 
   const AdjustmentActionPage({
-    Key? key,
+    super.key,
     required this.adjustmentId,
     required this.adjustmentName,
-  }) : super(key: key);
+  });
 
   @override
   State<AdjustmentActionPage> createState() => _AdjustmentActionPageState();
@@ -40,7 +40,9 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
     });
 
     try {
-      final status = await ConsolidationService.getAdjustmentStatus(widget.adjustmentId);
+      final status = await ConsolidationService.getAdjustmentStatus(
+        widget.adjustmentId,
+      );
       setState(() {
         if (status != null) {
           isConsolidated = status['consolidated'] ?? false;
@@ -63,15 +65,24 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: AppColors.warningColor, size: 22),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: AppColors.warningColor,
+              size: 22,
+            ),
             SizedBox(width: 8),
-            Expanded(child: Text("Appliquer la consolidation", style: TextStyle(fontSize: 18))),
+            Expanded(
+              child: Text(
+                "Appliquer la consolidation",
+                style: TextStyle(fontSize: 18),
+              ),
+            ),
           ],
         ),
         content: const Text(
           "Voulez-vous appliquer toutes les consolidations à l'ajustement ?\n\n"
-              "Cette action va mettre à jour les quantités réelles dans l'ajustement de stock.\n\n"
-              "Cette action est irréversible !",
+          "Cette action va mettre à jour les quantités réelles dans l'ajustement de stock.\n\n"
+          "Cette action est irréversible !",
           style: TextStyle(fontSize: 14),
         ),
         actions: [
@@ -96,34 +107,45 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
     setState(() => isApplying = true);
 
     try {
-      final result = await ConsolidationService.applyConsolidation(widget.adjustmentId);
+      final result = await ConsolidationService.applyConsolidation(
+        widget.adjustmentId,
+      );
 
       setState(() => isApplying = false);
 
       if (result.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Consolidation appliquée avec succès.'),
-            backgroundColor: AppColors.successColor,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Consolidation appliquée avec succès.'),
+              backgroundColor: AppColors.successColor,
+            ),
+          );
+        }
         await fetchStatus();
       } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                result.message ??
+                    'Erreur lors de l\'application de la consolidation.',
+              ),
+              backgroundColor: AppColors.errorColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => isApplying = false);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.message ?? 'Erreur lors de l\'application de la consolidation.'),
+            content: Text(friendlyError(e)),
             backgroundColor: AppColors.errorColor,
           ),
         );
       }
-    } catch (e) {
-      setState(() => isApplying = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyError(e)),
-          backgroundColor: AppColors.errorColor,
-        ),
-      );
     }
   }
 
@@ -138,224 +160,259 @@ class _AdjustmentActionPageState extends State<AdjustmentActionPage> {
           icon: const Icon(Icons.arrow_back, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          const AppLogo(),
-        ],
+        actions: [const AppLogo()],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
           ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
-              const SizedBox(height: 16),
-              Text(
-                errorMessage!,
-                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: fetchStatus,
-                child: const Text("Réessayer", style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-        ),
-      )
-          : Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isConsolidated ? AppColors.successColor.withOpacity(0.08) : AppColors.primaryColor.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isConsolidated ? AppColors.successColor.withOpacity(0.35) : AppColors.primaryColor.withOpacity(0.35),
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    isConsolidated ? Icons.check_circle : Icons.info_outline,
-                    color: isConsolidated ? AppColors.successColor : AppColors.primaryColor,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      isConsolidated
-                          ? "Consolidation déjà appliquée"
-                          : canApplyConsolidation
-                          ? "Consolidations prêtes à être appliquées"
-                          : "En attente de consolidations...",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: isConsolidated ? AppColors.successColor : AppColors.primaryColor,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 50,
+                      color: AppColors.errorColor,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.errorColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: fetchStatus,
+                      child: const Text(
+                        "Réessayer",
+                        style: TextStyle(fontSize: 12),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status card
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isConsolidated
+                          ? AppColors.successColor.withValues(alpha: 0.08)
+                          : AppColors.primaryColor.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isConsolidated
+                            ? AppColors.successColor.withValues(alpha: 0.35)
+                            : AppColors.primaryColor.withValues(alpha: 0.35),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isConsolidated
+                              ? Icons.check_circle
+                              : Icons.info_outline,
+                          color: isConsolidated
+                              ? AppColors.successColor
+                              : AppColors.primaryColor,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            isConsolidated
+                                ? "Consolidation déjà appliquée"
+                                : canApplyConsolidation
+                                ? "Consolidations prêtes à être appliquées"
+                                : "En attente de consolidations...",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: isConsolidated
+                                  ? AppColors.successColor
+                                  : AppColors.primaryColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+
+                  const SizedBox(height: 20),
+
+                  // Action buttons
+                  if (!isConsolidated) ...[
+                    // Consolidate Zones Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ConsolidationZonesPage(
+                                adjustmentId: widget.adjustmentId,
+                                adjustmentName: widget.adjustmentName,
+                              ),
+                            ),
+                          ).then((_) => fetchStatus());
+                        },
+                        icon: const Icon(Icons.merge_type, size: 20),
+                        label: const Text(
+                          'Consolider les zones',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // View Consolidations Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ConsolidationListPage(
+                                adjustmentId: widget.adjustmentId,
+                              ),
+                            ),
+                          ).then((_) => fetchStatus());
+                        },
+                        icon: const Icon(Icons.list, size: 20),
+                        label: const Text(
+                          'Voir les consolidations',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.secondaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Apply Consolidation Button (only shows when ready)
+                    if (canApplyConsolidation)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton.icon(
+                          onPressed: isApplying ? null : applyConsolidation,
+                          icon: isApplying
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.check_circle, size: 20),
+                          label: Text(
+                            isApplying
+                                ? 'Application en cours...'
+                                : 'Appliquer la consolidation',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.successColor,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+
+                  if (isConsolidated) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.successColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'L\'ajustement a été consolidé avec succès.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ConsolidationListPage(
+                                adjustmentId: widget.adjustmentId,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.list, size: 20),
+                        label: const Text(
+                          'Voir les consolidations',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // Action buttons
-            if (!isConsolidated) ...[
-              // Consolidate Zones Button
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ConsolidationZonesPage(
-                          adjustmentId: widget.adjustmentId,
-                          adjustmentName: widget.adjustmentName,
-                        ),
-                      ),
-                    ).then((_) => fetchStatus());
-                  },
-                  icon: const Icon(Icons.merge_type, size: 20),
-                  label: const Text(
-                    'Consolider les zones',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // View Consolidations Button
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ConsolidationListPage(
-                          adjustmentId: widget.adjustmentId,
-                        ),
-                      ),
-                    ).then((_) => fetchStatus());
-                  },
-                  icon: const Icon(Icons.list, size: 20),
-                  label: const Text(
-                    'Voir les consolidations',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.secondaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Apply Consolidation Button (only shows when ready)
-              if (canApplyConsolidation)
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton.icon(
-                    onPressed: isApplying ? null : applyConsolidation,
-                    icon: isApplying
-                        ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                        : const Icon(Icons.check_circle, size: 20),
-                    label: Text(
-                      isApplying ? 'Application en cours...' : 'Appliquer la consolidation',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.successColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-
-            if (isConsolidated) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.successColor.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Text(
-                    'L\'ajustement a été consolidé avec succès.',
-                    style: TextStyle(fontSize: 14, color: AppColors.textColor),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ConsolidationListPage(
-                          adjustmentId: widget.adjustmentId,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.list, size: 20),
-                  label: const Text(
-                    'Voir les consolidations',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

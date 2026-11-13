@@ -313,10 +313,12 @@ class AuthService {
     return (
       host: host,
       db: prefs.getString(_savedDbKey) ?? prefs.getString(_sessionDbKey) ?? '',
-      email: prefs.getString(_savedEmailKey) ??
+      email:
+          prefs.getString(_savedEmailKey) ??
           prefs.getString(_sessionEmailKey) ??
           '',
-      name: prefs.getString(_savedNameKey) ??
+      name:
+          prefs.getString(_savedNameKey) ??
           prefs.getString(_sessionNameKey) ??
           '',
     );

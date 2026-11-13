@@ -341,7 +341,7 @@ Odoo remonte en erreur JSON-RPC avec son message.
 | `/counting/lookup_products` | Identification des numéros scannés hors ligne |
 | `/counting/submit` | Envoi d'un lot |
 | `/counting/start_sheet`, `/counting/validate_sheet` | Commencer / terminer une feuille |
-| `/counting/live_items`, `/live_scan`, `/live_remove`, `/live_clear` | Liste partagée entre deux téléphones |
+| `/counting/live_items`, `/live_push`, `/live_remove`, `/live_clear` | Liste partagée entre deux téléphones. Les scans partent ensemble, 0,8 s après le dernier, en un seul appel `live_push` (`live_scan`, un scan par appel, reste pour les anciennes versions) |
 | `/counting/check_erp_scan(s)` | Numéros déjà envoyés sur une feuille |
 | `/products/cache`, `/products/by_barcode` | Articles gardés sur le téléphone |
 | `/consolidation/...` | Zones à consolider, consolidations, lignes contradictoires, application |

@@ -12,7 +12,8 @@ class ChoicePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final adjId = ModalRoute.of(context)?.settings.arguments as int? ?? adjustmentId;
+    final adjId =
+        ModalRoute.of(context)?.settings.arguments as int? ?? adjustmentId;
 
     if (adjId == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -30,9 +31,7 @@ class ChoicePage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          const AppLogo(),
-        ],
+        actions: [const AppLogo()],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
@@ -98,7 +97,10 @@ class ChoicePage extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       child: Row(
         children: [
-          _IconTile(icon: icon, color: enabled ? color : AppColors.textSecondary),
+          _IconTile(
+            icon: icon,
+            color: enabled ? color : AppColors.textSecondary,
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -110,7 +112,10 @@ class ChoicePage extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_right, color: enabled ? color : AppColors.textSecondary),
+          Icon(
+            Icons.chevron_right,
+            color: enabled ? color : AppColors.textSecondary,
+          ),
         ],
       ),
     );
@@ -122,7 +127,11 @@ const _titleStyle = TextStyle(
   fontWeight: FontWeight.w600,
   color: AppColors.textColor,
 );
-const _subtitleStyle = TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.3);
+const _subtitleStyle = TextStyle(
+  fontSize: 13,
+  color: AppColors.textSecondary,
+  height: 1.3,
+);
 
 // Colored square behind a card's icon, same on every card.
 class _IconTile extends StatelessWidget {
@@ -161,7 +170,9 @@ class _AutoPrepareState extends State<_AutoPrepare> {
   @override
   void initState() {
     super.initState();
-    OfflinePrepService.ensurePrepared([{'id': widget.adjustmentId}]);
+    OfflinePrepService.ensurePrepared([
+      {'id': widget.adjustmentId},
+    ]);
   }
 
   @override

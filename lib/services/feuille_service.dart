@@ -32,7 +32,9 @@ class FeuilleService {
         final errorData = jsonDecode(response.body);
         debugPrint("Error response: $errorData");
         // Return empty list and let the UI handle the error via exception
-        throw Exception(errorData['message'] ?? ApiClient.errorMessage(response));
+        throw Exception(
+          errorData['message'] ?? ApiClient.errorMessage(response),
+        );
       }
 
       final data = jsonDecode(response.body);

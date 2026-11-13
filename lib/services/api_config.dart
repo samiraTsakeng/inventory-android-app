@@ -30,6 +30,7 @@ class ApiConfig {
   static const String offlinePack = '$_api/counting/offline_pack';
   static const String liveItems = '$_api/counting/live_items';
   static const String liveScan = '$_api/counting/live_scan';
+  static const String livePush = '$_api/counting/live_push';
   static const String liveClear = '$_api/counting/live_clear';
   static const String liveRemove = '$_api/counting/live_remove';
 

@@ -29,21 +29,28 @@ class LocalStorageService {
   //  Save scanned items with better error handling
   // local_storage_service.dart - Update saveScannedItems with better logging
 
-  static Future<void> saveScannedItems(int sheetId, List<ScannedItem> items) async {
+  static Future<void> saveScannedItems(
+    int sheetId,
+    List<ScannedItem> items,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionId = await getSessionId();
-      final key = '${_scannedItemsKey}${sessionId}_$sheetId';
+      final key = '$_scannedItemsKey${sessionId}_$sheetId';
 
-      final itemsJson = items.map((item) => jsonEncode({
-        'barcode': item.barcode,
-        'productName': item.productName,
-        'productId': item.productId,
-        'quantity': item.quantity,
-        'lotNumber': item.lotNumber,
-        'lotId': item.lotId,
-        'tracking': item.tracking,
-      })).toList();
+      final itemsJson = items
+          .map(
+            (item) => jsonEncode({
+              'barcode': item.barcode,
+              'productName': item.productName,
+              'productId': item.productId,
+              'quantity': item.quantity,
+              'lotNumber': item.lotNumber,
+              'lotId': item.lotId,
+              'tracking': item.tracking,
+            }),
+          )
+          .toList();
 
       // setStringList completes once the value is written to disk, so no
       // reload or read-back is needed.
@@ -59,7 +66,7 @@ class LocalStorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionId = await getSessionId();
-      final key = '${_scannedItemsKey}${sessionId}_$sheetId';
+      final key = '$_scannedItemsKey${sessionId}_$sheetId';
 
       debugPrint("Loading items from key: $key");
 
@@ -73,15 +80,17 @@ class LocalStorageService {
       for (final json in itemsJson) {
         try {
           final data = jsonDecode(json);
-          items.add(ScannedItem(
-            barcode: data['barcode'] ?? '',
-            productName: data['productName'] ?? '',
-            productId: data['productId'] ?? 0,
-            quantity: data['quantity'] ?? 1,
-            lotNumber: data['lotNumber'],
-            lotId: data['lotId'],
-            tracking: data['tracking'] ?? 'none',
-          ));
+          items.add(
+            ScannedItem(
+              barcode: data['barcode'] ?? '',
+              productName: data['productName'] ?? '',
+              productId: data['productId'] ?? 0,
+              quantity: data['quantity'] ?? 1,
+              lotNumber: data['lotNumber'],
+              lotId: data['lotId'],
+              tracking: data['tracking'] ?? 'none',
+            ),
+          );
         } catch (e) {
           debugPrint("Error parsing item: $e");
         }
@@ -100,7 +109,7 @@ class LocalStorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionId = await getSessionId();
-      final key = '${_scannedItemsKey}${sessionId}_$sheetId';
+      final key = '$_scannedItemsKey${sessionId}_$sheetId';
       await prefs.remove(key);
       debugPrint("Cleared items for key: $key");
     } catch (e) {
@@ -128,7 +137,7 @@ class LocalStorageService {
       // Scanned items not saved in a batch yet.
       final allKeys = prefs.getKeys();
       final scannedKeys = allKeys
-          .where((key) => key.startsWith('${_scannedItemsKey}${sessionId}_'))
+          .where((key) => key.startsWith('$_scannedItemsKey${sessionId}_'))
           .toList();
       for (final key in scannedKeys) {
         await prefs.remove(key);
@@ -190,7 +199,10 @@ class LocalStorageService {
   // At most this many numbers: the oldest looked up are dropped first.
   static const int _lookupsMax = 2000;
 
-  static Future<void> cacheProduct(String barcode, Map<String, dynamic> productData) async {
+  static Future<void> cacheProduct(
+    String barcode,
+    Map<String, dynamic> productData,
+  ) async {
     final lookups = await _loadLookups();
     // Removed then added: the map keeps insertion order, newest last.
     lookups.remove(barcode);
@@ -273,12 +285,12 @@ class LocalStorageService {
           'type': value is bool
               ? 'bool'
               : value is int
-                  ? 'int'
-                  : value is double
-                      ? 'double'
-                      : value is List
-                          ? 'list'
-                          : 'string',
+              ? 'int'
+              : value is double
+              ? 'double'
+              : value is List
+              ? 'list'
+              : 'string',
           'value': value,
         };
       }

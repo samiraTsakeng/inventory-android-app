@@ -216,7 +216,6 @@ class CountingService {
     }
   }
 
-
   // SHARED LIVE SESSION (two phones, same sheet)
 
   // Returns the shared list and its version, or null when the server still
@@ -226,10 +225,7 @@ class CountingService {
     try {
       final response = await ApiClient.call(
         ApiConfig.liveItems,
-        params: {
-          'sheet_id': countingSheetId,
-          if (since != null) 'since': since,
-        },
+        params: {'sheet_id': countingSheetId, 'since': ?since},
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -243,6 +239,43 @@ class CountingService {
       return null;
     } catch (e) {
       debugPrint("Get live items error: $e");
+      return null;
+    }
+  }
+
+  // The scans made since the last push, in one call (instead of one call
+  // per scan). Returns the shared list as it is now, or null if it
+  // couldn't be sent (the scans stay queued). A server without this route
+  // (module not updated yet) gets them one by one, as before.
+  static Future<List<Map<String, dynamic>>?> pushLiveScans({
+    required int countingSheetId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      final response = await ApiClient.call(
+        ApiConfig.livePush,
+        params: {'counting_sheet_id': countingSheetId, 'items': items},
+      );
+      if (response.statusCode == 404) {
+        List<Map<String, dynamic>>? last;
+        for (final item in items) {
+          last = await pushLiveScan(
+            countingSheetId: countingSheetId,
+            item: item,
+          );
+          if (last == null) return null;
+        }
+        return last;
+      }
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['items'] is List) {
+          return List<Map<String, dynamic>>.from(data['items']);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint("Push live scans error: $e");
       return null;
     }
   }

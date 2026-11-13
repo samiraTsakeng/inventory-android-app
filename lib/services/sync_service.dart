@@ -94,8 +94,9 @@ class SyncService {
             .toList()
           ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     for (final batch in batches) {
-      if (!order.contains(batch.countingSheetId))
+      if (!order.contains(batch.countingSheetId)) {
         order.add(batch.countingSheetId);
+      }
     }
     return order;
   }
@@ -248,6 +249,6 @@ class SheetSyncResult {
         ? 'connexion perdue, reprise plus tard'
         : null;
     if (done.isEmpty && problem == null) return '$sheetName : rien à envoyer';
-    return '$sheetName : ${[...done, if (problem != null) problem].join(', ')}';
+    return '$sheetName : ${[...done, ?problem].join(', ')}';
   }
 }

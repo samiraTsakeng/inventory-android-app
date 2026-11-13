@@ -26,7 +26,11 @@ class AppLogo extends StatelessWidget {
             color: Colors.white,
             shape: BoxShape.circle,
             boxShadow: [
-              BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 1)),
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 4,
+                offset: Offset(0, 1),
+              ),
             ],
           ),
           child: ClipOval(

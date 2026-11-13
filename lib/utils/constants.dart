@@ -57,5 +57,4 @@ class AppStrings {
   static const registerSuccess = 'Registration Successful!';
   static const testMode = 'Test mode';
   static const erpMode = 'ERP Mode';
-
 }

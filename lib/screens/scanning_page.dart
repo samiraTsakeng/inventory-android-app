@@ -3,7 +3,6 @@ import '../utils/barcode.dart';
 import '../utils/constants.dart';
 import '../widgets/app_logo.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:badges/badges.dart' as badges;
 import 'dart:async';
 import '../models/scanned_item.dart';
 import '../services/counting_service.dart';
@@ -23,12 +22,12 @@ class ScanningPage extends StatefulWidget {
   final String sheetName;
 
   const ScanningPage({
-    Key? key,
+    super.key,
     required this.countingSheetId,
     required this.adjustmentId,
     required this.zoneName,
     required this.sheetName,
-  }) : super(key: key);
+  });
 
   @override
   State<ScanningPage> createState() => _ScanningPageState();
@@ -57,6 +56,10 @@ class _ScanningPageState extends State<ScanningPage>
   // while the server is still at this version.
   int? _liveVersion;
   bool _liveSyncRunning = false;
+  // Scans go out together shortly after the last one (one request for a
+  // burst of scans instead of one per scan).
+  Timer? _livePushTimer;
+  static const Duration _livePushDelay = Duration(milliseconds: 800);
 
   // Numbers of this sheet kept on the phone for offline scanning.
   int _offlineCount = 0;
@@ -78,8 +81,10 @@ class _ScanningPageState extends State<ScanningPage>
     WidgetsBinding.instance.addObserver(this);
     _loadSavedItems();
     _prepareOffline();
-    _liveSyncTimer =
-        Timer.periodic(const Duration(seconds: 8), (_) => _syncLiveSession());
+    _liveSyncTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _syncLiveSession(),
+    );
   }
 
   // Numbers of the adjustment available on the phone (scans are looked up
@@ -96,7 +101,9 @@ class _ScanningPageState extends State<ScanningPage>
     // meanwhile, and the new one replaces it when it arrives.
     if (!SyncService.online.value) return;
     final count = await SheetCacheService.refresh(
-        widget.countingSheetId, widget.adjustmentId);
+      widget.countingSheetId,
+      widget.adjustmentId,
+    );
     if (count != null && _isMounted) setState(() => _offlineCount = count);
   }
 
@@ -106,6 +113,14 @@ class _ScanningPageState extends State<ScanningPage>
     WidgetsBinding.instance.removeObserver(this);
     _scanDebounceTimer?.cancel();
     _liveSyncTimer?.cancel();
+    _livePushTimer?.cancel();
+    // Scans not pushed yet leave with the page (fire and forget).
+    if (_pendingDeltas.isNotEmpty && SyncService.online.value) {
+      CountingService.pushLiveScans(
+        countingSheetId: widget.countingSheetId,
+        items: _pendingItems(Map.of(_pendingDeltas)),
+      );
+    }
     scannerController.dispose();
     super.dispose();
   }
@@ -121,8 +136,9 @@ class _ScanningPageState extends State<ScanningPage>
     try {
       setState(() => isLoading = true);
 
-      final savedItems =
-      await LocalStorageService.loadScannedItems(widget.countingSheetId);
+      final savedItems = await LocalStorageService.loadScannedItems(
+        widget.countingSheetId,
+      );
 
       if (_isMounted) {
         setState(() {
@@ -135,7 +151,9 @@ class _ScanningPageState extends State<ScanningPage>
             if (mounted && scannedItems.isNotEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${scannedItems.length} articles scannés restaurés'),
+                  content: Text(
+                    '${scannedItems.length} articles scannés restaurés',
+                  ),
                   backgroundColor: AppColors.primaryColor,
                   duration: const Duration(seconds: 2),
                 ),
@@ -157,7 +175,9 @@ class _ScanningPageState extends State<ScanningPage>
   Future<void> _saveItems() async {
     if (_isMounted) {
       await LocalStorageService.saveScannedItems(
-          widget.countingSheetId, scannedItems);
+        widget.countingSheetId,
+        scannedItems,
+      );
     }
   }
 
@@ -179,43 +199,55 @@ class _ScanningPageState extends State<ScanningPage>
     await CountingService.replayPendingClears();
 
     if (_pendingDeltas.isNotEmpty) {
-      final barcodes = List<String>.from(_pendingDeltas.keys);
-      for (final barcode in barcodes) {
-        final index = scannedItems.indexWhere((it) => it.barcode == barcode);
-        if (index == -1) {
+      // What's sent now; scans made during the request stay queued.
+      final sent = Map<String, int>.of(_pendingDeltas);
+      final serverItems = await CountingService.pushLiveScans(
+        countingSheetId: widget.countingSheetId,
+        items: _pendingItems(sent),
+      );
+      if (serverItems == null) return;
+      sent.forEach((barcode, qty) {
+        final left = (_pendingDeltas[barcode] ?? 0) - qty;
+        if (left > 0) {
+          _pendingDeltas[barcode] = left;
+        } else {
           _pendingDeltas.remove(barcode);
-          continue;
         }
-        final delta = _pendingDeltas[barcode]!;
-        final item = scannedItems[index];
-        final serverItems = await CountingService.pushLiveScan(
-          countingSheetId: widget.countingSheetId,
-          item: {
-            'barcode': barcode,
-            'quantity': delta,
-            'product_name': item.productName,
-            'product_id': item.productId,
-            'lot_number': item.lotNumber,
-            'lot_id': item.lotId,
-            'tracking': item.tracking,
-          },
-        );
-        if (serverItems != null) {
-          _pendingDeltas.remove(barcode);
-          _mergeServerItems(serverItems);
-        }
-      }
+      });
+      _mergeServerItems(serverItems);
       await _saveItems();
+      return;
     }
 
-    final live = await CountingService.getLiveItems(widget.countingSheetId,
-        since: _liveVersion);
+    final live = await CountingService.getLiveItems(
+      widget.countingSheetId,
+      since: _liveVersion,
+    );
     if (live != null) {
       _liveVersion = live.version;
       if (live.items.isNotEmpty) {
         _mergeServerItems(live.items);
       }
     }
+  }
+
+  // Queued quantities as items for the server, with what the phone knows
+  // of each number.
+  List<Map<String, dynamic>> _pendingItems(Map<String, int> deltas) {
+    final byBarcode = {for (final it in scannedItems) it.barcode: it};
+    return [
+      for (final entry in deltas.entries)
+        if (byBarcode[entry.key] case final item?)
+          {
+            'barcode': entry.key,
+            'quantity': entry.value,
+            'product_name': item.productName,
+            'product_id': item.productId,
+            'lot_number': item.lotNumber,
+            'lot_id': item.lotId,
+            'tracking': item.tracking,
+          },
+    ];
   }
 
   void _mergeServerItems(List<Map<String, dynamic>> serverItems) {
@@ -233,15 +265,17 @@ class _ScanningPageState extends State<ScanningPage>
           : int.tryParse('${serverItem['quantity']}') ?? 1;
 
       if (index == -1) {
-        scannedItems.add(ScannedItem(
-          barcode: barcode,
-          productName: serverItem['product_name'] ?? '',
-          productId: serverItem['product_id'] ?? 0,
-          quantity: serverQty,
-          lotNumber: serverItem['lot_number'],
-          lotId: serverItem['lot_id'],
-          tracking: serverItem['tracking'] ?? 'none',
-        ));
+        scannedItems.add(
+          ScannedItem(
+            barcode: barcode,
+            productName: serverItem['product_name'] ?? '',
+            productId: serverItem['product_id'] ?? 0,
+            quantity: serverQty,
+            lotNumber: serverItem['lot_number'],
+            lotId: serverItem['lot_id'],
+            tracking: serverItem['tracking'] ?? 'none',
+          ),
+        );
         changed = true;
       } else if (scannedItems[index].quantity != serverQty) {
         scannedItems[index].quantity = serverQty;
@@ -255,37 +289,20 @@ class _ScanningPageState extends State<ScanningPage>
     }
   }
 
+  // Queues the scan; online, the queue goes out shortly after the last
+  // scan in one request. Offline it waits for the connection.
   Future<void> _pushScanOrQueue(ScannedItem item, int addedQuantity) async {
-    // Offline: queue right away instead of waiting for a timeout.
-    if (!SyncService.online.value) {
-      _pendingDeltas[item.barcode] =
-          (_pendingDeltas[item.barcode] ?? 0) + addedQuantity;
-      return;
-    }
-    final serverItems = await CountingService.pushLiveScan(
-      countingSheetId: widget.countingSheetId,
-      item: {
-        'barcode': item.barcode,
-        'quantity': addedQuantity,
-        'product_name': item.productName,
-        'product_id': item.productId,
-        'lot_number': item.lotNumber,
-        'lot_id': item.lotId,
-        'tracking': item.tracking,
-      },
-    );
-
-    if (serverItems != null) {
-      _mergeServerItems(serverItems);
-    } else {
-      _pendingDeltas[item.barcode] =
-          (_pendingDeltas[item.barcode] ?? 0) + addedQuantity;
-    }
+    _pendingDeltas[item.barcode] =
+        (_pendingDeltas[item.barcode] ?? 0) + addedQuantity;
+    if (!SyncService.online.value) return;
+    _livePushTimer?.cancel();
+    _livePushTimer = Timer(_livePushDelay, _syncLiveSession);
   }
 
   Future<int?> _showQuantityDialog(String productName, String barcode) async {
-    final TextEditingController qtyController =
-    TextEditingController(text: '1');
+    final TextEditingController qtyController = TextEditingController(
+      text: '1',
+    );
 
     return showDialog<int>(
       context: context,
@@ -297,17 +314,24 @@ class _ScanningPageState extends State<ScanningPage>
             const Icon(Icons.numbers, color: AppColors.primaryColor, size: 20),
             const SizedBox(width: 8),
             Expanded(
-                child: Text('Quantité pour $productName',
-                    overflow: TextOverflow.ellipsis)),
+              child: Text(
+                'Quantité pour $productName',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Code: $barcode',
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 13)),
+            Text(
+              'Code: $barcode',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
             const SizedBox(height: 14),
             TextField(
               controller: qtyController,
@@ -333,7 +357,8 @@ class _ScanningPageState extends State<ScanningPage>
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                      content: Text('Veuillez entrer une quantité valide')),
+                    content: Text('Veuillez entrer une quantité valide'),
+                  ),
                 );
               }
             },
@@ -347,7 +372,9 @@ class _ScanningPageState extends State<ScanningPage>
   Future<bool> _isInSavedBatches(String barcode) async {
     try {
       return await BatchStorageService.isBarcodeInBatches(
-          widget.countingSheetId, barcode);
+        widget.countingSheetId,
+        barcode,
+      );
     } catch (e) {
       return false;
     }
@@ -367,8 +394,9 @@ class _ScanningPageState extends State<ScanningPage>
       isScanning = false;
     });
 
-    final existingIndex =
-    scannedItems.indexWhere((item) => item.barcode == barcode);
+    final existingIndex = scannedItems.indexWhere(
+      (item) => item.barcode == barcode,
+    );
     if (existingIndex != -1) {
       await _handleDuplicateScan(existingIndex, barcode);
       return;
@@ -376,12 +404,14 @@ class _ScanningPageState extends State<ScanningPage>
 
     final inBatch = await _isInSavedBatches(barcode);
     if (inBatch) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cet article est déjà dans un lot sauvegardé'),
-          backgroundColor: AppColors.warningColor,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cet article est déjà dans un lot sauvegardé'),
+            backgroundColor: AppColors.warningColor,
+          ),
+        );
+      }
       setState(() {
         isLookingUp = false;
         isScanning = true;
@@ -422,23 +452,27 @@ class _ScanningPageState extends State<ScanningPage>
     // A serial number always counts 1, so it stays blocked.
     final isLot = (lookup.product?['tracking'] ?? 'serial') == 'lot';
     if (lookup.alreadyInErp && isLot) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Lot déjà présent sur la feuille dans Odoo : la quantité saisie '
-            'remplacera celle d\'Odoo à l\'envoi.',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Lot déjà présent sur la feuille dans Odoo : la quantité saisie '
+              'remplacera celle d\'Odoo à l\'envoi.',
+            ),
+            backgroundColor: AppColors.warningColor,
+            duration: Duration(seconds: 4),
           ),
-          backgroundColor: AppColors.warningColor,
-          duration: Duration(seconds: 4),
-        ),
-      );
+        );
+      }
     } else if (lookup.alreadyInErp) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cet article a déjà été envoyé à l\'ERP'),
-          backgroundColor: AppColors.warningColor,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cet article a déjà été envoyé à l\'ERP'),
+            backgroundColor: AppColors.warningColor,
+          ),
+        );
+      }
       setState(() {
         isLookingUp = false;
         isScanning = true;
@@ -457,7 +491,13 @@ class _ScanningPageState extends State<ScanningPage>
 
         if (tracking == 'lot') {
           await _handleLotProduct(
-              result, barcode, tracking, lotName, lotIdValue, productIdValue);
+            result,
+            barcode,
+            tracking,
+            lotName,
+            lotIdValue,
+            productIdValue,
+          );
           return;
         }
 
@@ -480,13 +520,15 @@ class _ScanningPageState extends State<ScanningPage>
         _saveItems();
         _pushScanOrQueue(newItem, 1);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ajouté: ${result['name']}'),
-            backgroundColor: AppColors.successColor,
-            duration: const Duration(milliseconds: 800),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ajouté: ${result['name']}'),
+              backgroundColor: AppColors.successColor,
+              duration: const Duration(milliseconds: 800),
+            ),
+          );
+        }
       } else if (lookup.offline) {
         // Not "not found": it couldn't be checked.
         await _addOfflineItem(barcode);
@@ -497,14 +539,18 @@ class _ScanningPageState extends State<ScanningPage>
           isScanning = true;
         });
 
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Code non trouvé: $barcode'),
-            backgroundColor: AppColors.errorColor,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Code non trouvé: $barcode'),
+              backgroundColor: AppColors.errorColor,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
     }
   }
@@ -546,13 +592,15 @@ class _ScanningPageState extends State<ScanningPage>
     _saveItems();
     _pushScanOrQueue(newItem, qty);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$barcode ajouté, vérifié à l\'envoi'),
-        backgroundColor: AppColors.warningColor,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$barcode ajouté, vérifié à l\'envoi'),
+          backgroundColor: AppColors.warningColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Future<void> _handleDuplicateScan(int existingIndex, String barcode) async {
@@ -585,8 +633,11 @@ class _ScanningPageState extends State<ScanningPage>
     }
 
     final newTotal = existingItem.quantity + addedQty;
-    final confirmed =
-    await _confirmQuantityResult(existingItem, addedQty, newTotal);
+    final confirmed = await _confirmQuantityResult(
+      existingItem,
+      addedQty,
+      newTotal,
+    );
     if (!confirmed) {
       if (_isMounted) {
         setState(() {
@@ -607,20 +658,24 @@ class _ScanningPageState extends State<ScanningPage>
       _saveItems();
       _pushScanOrQueue(existingItem, addedQty);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '${existingItem.productName}: +$addedQty (total ${scannedItems[existingIndex].quantity})'),
-          backgroundColor: AppColors.successColor,
-          duration: const Duration(milliseconds: 900),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${existingItem.productName}: +$addedQty (total ${scannedItems[existingIndex].quantity})',
+            ),
+            backgroundColor: AppColors.successColor,
+            duration: const Duration(milliseconds: 900),
+          ),
+        );
+      }
     }
   }
 
   Future<bool> _confirmDuplicateScan(ScannedItem item, String barcode) async {
     final lastScan = _lastScanTime[barcode];
-    final isVeryRecent = lastScan != null &&
+    final isVeryRecent =
+        lastScan != null &&
         DateTime.now().difference(lastScan) < const Duration(seconds: 8);
 
     final String subtitle;
@@ -632,7 +687,7 @@ class _ScanningPageState extends State<ScanningPage>
       subtitle = 'Dernier scan sur ce téléphone : $elapsedText.';
     } else {
       subtitle =
-      'Déjà présent dans la liste (scanné par vous ou un coéquipier).';
+          'Déjà présent dans la liste (scanné par vous ou un coéquipier).';
     }
 
     final result = await showDialog<bool>(
@@ -641,7 +696,8 @@ class _ScanningPageState extends State<ScanningPage>
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
-            isVeryRecent ? '⚠️ Rescanné à l\'instant' : 'Article déjà scanné'),
+          isVeryRecent ? '⚠️ Rescanné à l\'instant' : 'Article déjà scanné',
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -654,8 +710,7 @@ class _ScanningPageState extends State<ScanningPage>
                 color: isVeryRecent
                     ? AppColors.errorColor
                     : AppColors.textSecondary,
-                fontWeight:
-                isVeryRecent ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isVeryRecent ? FontWeight.bold : FontWeight.normal,
               ),
             ),
             if (isVeryRecent) ...[
@@ -689,7 +744,10 @@ class _ScanningPageState extends State<ScanningPage>
   }
 
   Future<bool> _confirmQuantityResult(
-      ScannedItem item, int addedQty, int newTotal) async {
+    ScannedItem item,
+    int addedQty,
+    int newTotal,
+  ) async {
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -700,8 +758,10 @@ class _ScanningPageState extends State<ScanningPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(item.productName,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              item.productName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 10),
             Text('Quantité actuelle : ${item.quantity}'),
             Text('Quantité ajoutée : +$addedQty'),
@@ -709,9 +769,10 @@ class _ScanningPageState extends State<ScanningPage>
             Text(
               'Nouveau total : $newTotal',
               style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: AppColors.primaryColor),
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: AppColors.primaryColor,
+              ),
             ),
           ],
         ),
@@ -734,8 +795,14 @@ class _ScanningPageState extends State<ScanningPage>
     return result ?? false;
   }
 
-  Future<void> _handleLotProduct(Map<String, dynamic> result, String barcode,
-      String tracking, String lotName, int lotIdValue, int productIdValue) async {
+  Future<void> _handleLotProduct(
+    Map<String, dynamic> result,
+    String barcode,
+    String tracking,
+    String lotName,
+    int lotIdValue,
+    int productIdValue,
+  ) async {
     final qty = await _showQuantityDialog(result['name'] ?? 'Unknown', barcode);
     if (qty == null) {
       if (_isMounted) {
@@ -767,13 +834,15 @@ class _ScanningPageState extends State<ScanningPage>
       _saveItems();
       _pushScanOrQueue(newItem, qty);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ajouté: ${result['name']} - Quantité: $qty'),
-          backgroundColor: AppColors.successColor,
-          duration: const Duration(milliseconds: 800),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ajouté: ${result['name']} - Quantité: $qty'),
+            backgroundColor: AppColors.successColor,
+            duration: const Duration(milliseconds: 800),
+          ),
+        );
+      }
     }
   }
 
@@ -784,12 +853,16 @@ class _ScanningPageState extends State<ScanningPage>
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Row(
             children: [
-              Icon(Icons.keyboard_outlined,
-                  color: AppColors.primaryColor, size: 20),
+              Icon(
+                Icons.keyboard_outlined,
+                color: AppColors.primaryColor,
+                size: 20,
+              ),
               SizedBox(width: 8),
               Text("Saisir manuellement", style: TextStyle(fontSize: 18)),
             ],
@@ -889,14 +962,17 @@ class _ScanningPageState extends State<ScanningPage>
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text("Plusieurs numéros sur l'étiquette",
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          title: const Text(
+            "Plusieurs numéros sur l'étiquette",
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Décochez ceux qui ne sont pas le numéro de série.',
-                  style: TextStyle(
-                      fontSize: 13, color: AppColors.textSecondary)),
+              const Text(
+                'Décochez ceux qui ne sont pas le numéro de série.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
               const SizedBox(height: 8),
               for (final entry in numbers.entries)
                 CheckboxListTile(
@@ -909,8 +985,10 @@ class _ScanningPageState extends State<ScanningPage>
                       kept.remove(entry.key);
                     }
                   }),
-                  title: Text(entry.key,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  title: Text(
+                    entry.key,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   subtitle: entry.value.isEmpty ? null : Text(entry.value),
                 ),
             ],
@@ -924,9 +1002,9 @@ class _ScanningPageState extends State<ScanningPage>
               onPressed: kept.isEmpty
                   ? null
                   : () => Navigator.pop(context, [
-                        for (final n in numbers.keys)
-                          if (kept.contains(n)) n,
-                      ]),
+                      for (final n in numbers.keys)
+                        if (kept.contains(n)) n,
+                    ]),
               child: const Text('Ajouter'),
             ),
           ],
@@ -1010,14 +1088,17 @@ class _ScanningPageState extends State<ScanningPage>
         content: const Text("Voulez-vous vraiment vous déconnecter ?"),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Non")),
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Non"),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.errorColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.errorColor,
+            ),
             child: const Text("Oui", style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -1051,11 +1132,10 @@ class _ScanningPageState extends State<ScanningPage>
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (context) => FeuilleListPage(
-          adjustmentId: widget.adjustmentId,
-        ),
+        builder: (context) =>
+            FeuilleListPage(adjustmentId: widget.adjustmentId),
       ),
-          (route) => false,
+      (route) => false,
     );
   }
 
@@ -1082,8 +1162,10 @@ class _ScanningPageState extends State<ScanningPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Voulez-vous sauvegarder ce lot ?",
-                style: TextStyle(fontSize: 14)),
+            const Text(
+              "Voulez-vous sauvegarder ce lot ?",
+              style: TextStyle(fontSize: 14),
+            ),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1094,17 +1176,19 @@ class _ScanningPageState extends State<ScanningPage>
               child: Text(
                 "Articles: ${scannedItems.length}",
                 style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryColor),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryColor,
+                ),
               ),
             ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Non")),
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Non"),
+          ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -1131,26 +1215,31 @@ class _ScanningPageState extends State<ScanningPage>
                 });
                 await _saveItems();
 
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BatchesListPage(
-                      countingSheetId: widget.countingSheetId,
-                      adjustmentId: widget.adjustmentId,
-                      zoneName: widget.zoneName,
-                      sheetName: widget.sheetName,
+                if (context.mounted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => BatchesListPage(
+                        countingSheetId: widget.countingSheetId,
+                        adjustmentId: widget.adjustmentId,
+                        zoneName: widget.zoneName,
+                        sheetName: widget.sheetName,
+                      ),
                     ),
+                  );
+                }
+              }
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '$batchName sauvegardé (${batch.items.length} articles)',
+                    ),
+                    backgroundColor: AppColors.successColor,
                   ),
                 );
               }
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      '$batchName sauvegardé (${batch.items.length} articles)'),
-                  backgroundColor: AppColors.successColor,
-                ),
-              );
             },
             child: const Text("Oui"),
           ),
@@ -1215,13 +1304,13 @@ class _ScanningPageState extends State<ScanningPage>
             icon: const Icon(Icons.save, size: 22, color: Colors.white),
             onPressed: _showSaveConfirmation,
           ),
-          badges.Badge(
-            showBadge: scannedItems.isNotEmpty,
-            badgeContent: Text('${scannedItems.length}',
-                style: const TextStyle(fontSize: 10)),
-            child: IconButton(
-              icon: const Icon(Icons.list, size: 22, color: Colors.white),
-              onPressed: navigateToSummary,
+          IconButton(
+            onPressed: navigateToSummary,
+            icon: Badge(
+              isLabelVisible: scannedItems.isNotEmpty,
+              label: Text('${scannedItems.length}'),
+              backgroundColor: AppColors.errorColor,
+              child: const Icon(Icons.list, size: 22, color: Colors.white),
             ),
           ),
           PopupMenuButton<String>(
@@ -1237,7 +1326,10 @@ class _ScanningPageState extends State<ScanningPage>
                   children: [
                     Icon(Icons.logout, size: 18, color: AppColors.errorColor),
                     SizedBox(width: 8),
-                    Text('Déconnexion', style: TextStyle(color: AppColors.errorColor)),
+                    Text(
+                      'Déconnexion',
+                      style: TextStyle(color: AppColors.errorColor),
+                    ),
                   ],
                 ),
               ),
@@ -1268,14 +1360,18 @@ class _ScanningPageState extends State<ScanningPage>
                   Text(
                     widget.sheetName,
                     style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        fontSize: 12),
+                      color: Colors.white.withValues(alpha: 0.8),
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.inventory, color: AppColors.primaryColor),
+              leading: const Icon(
+                Icons.inventory,
+                color: AppColors.primaryColor,
+              ),
               title: const Text('Feuilles de comptage'),
               onTap: () {
                 Navigator.pop(context);
@@ -1345,14 +1441,15 @@ class _ScanningPageState extends State<ScanningPage>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           SizedBox(
-                              width: 20,
-                              height: 20,
-                              child:
-                              CircularProgressIndicator(strokeWidth: 2)),
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
                           SizedBox(width: 10),
-                          Text('Recherche...',
-                              style: TextStyle(
-                                  color: Colors.white, fontSize: 12)),
+                          Text(
+                            'Recherche...',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
                         ],
                       ),
                     ),
@@ -1366,57 +1463,73 @@ class _ScanningPageState extends State<ScanningPage>
             child: SafeArea(
               top: false,
               child: Column(
-              children: [
-                // Button first, right under the camera: easy to reach,
-                // away from the phone's bottom edge.
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.list, size: 20),
-                    label: Text('Voir la liste (${scannedItems.length})',
+                children: [
+                  // Button first, right under the camera: easy to reach,
+                  // away from the phone's bottom edge.
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.list, size: 20),
+                      label: Text(
+                        'Voir la liste (${scannedItems.length})',
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
-                    onPressed: navigateToSummary,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: navigateToSummary,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(widget.sheetName,
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        widget.sheetName,
                         style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500)),
-                    Text('${scannedItems.length}',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '${scannedItems.length}',
                         style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: (scannedItems.length / 999).clamp(0.0, 1.0),
-                    minHeight: 4,
-                    backgroundColor: AppColors.borderColor,
-                    color: AppColors.successColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  scannedItems.isEmpty
-                      ? "Scannez le code-barres"
-                      : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                ),
-              ],
-            ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: (scannedItems.length / 999).clamp(0.0, 1.0),
+                      minHeight: 4,
+                      backgroundColor: AppColors.borderColor,
+                      color: AppColors.successColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    scannedItems.isEmpty
+                        ? "Scannez le code-barres"
+                        : "${scannedItems.length} article${scannedItems.length > 1 ? 's' : ''} scanné${scannedItems.length > 1 ? 's' : ''}",
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -1463,8 +1576,9 @@ class _ScanningPageState extends State<ScanningPage>
                         borderRadius: BorderRadius.circular(2),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                            AppColors.tertiaryColor.withValues(alpha: 0.3),
+                            color: AppColors.tertiaryColor.withValues(
+                              alpha: 0.3,
+                            ),
                             blurRadius: 10,
                             spreadRadius: 2,
                           ),
@@ -1476,8 +1590,9 @@ class _ScanningPageState extends State<ScanningPage>
                           Container(
                             margin: const EdgeInsets.symmetric(horizontal: 40),
                             height: 2,
-                            color:
-                            AppColors.tertiaryColor.withValues(alpha: 0.8),
+                            color: AppColors.tertiaryColor.withValues(
+                              alpha: 0.8,
+                            ),
                           ),
                           Positioned(
                             left: 0,
@@ -1485,11 +1600,12 @@ class _ScanningPageState extends State<ScanningPage>
                             top: 0,
                             bottom: 0,
                             child: Container(
-                              margin:
-                              const EdgeInsets.symmetric(horizontal: 20),
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
                               child: Row(
                                 mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   _buildDot(),
                                   _buildDot(),
@@ -1514,17 +1630,23 @@ class _ScanningPageState extends State<ScanningPage>
                           decoration: BoxDecoration(
                             border: Border(
                               right: BorderSide(
-                                  color: AppColors.tertiaryColor
-                                      .withValues(alpha: 0.5),
-                                  width: 2),
+                                color: AppColors.tertiaryColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                                width: 2,
+                              ),
                               top: BorderSide(
-                                  color: AppColors.tertiaryColor
-                                      .withValues(alpha: 0.5),
-                                  width: 2),
+                                color: AppColors.tertiaryColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                                width: 2,
+                              ),
                               bottom: BorderSide(
-                                  color: AppColors.tertiaryColor
-                                      .withValues(alpha: 0.5),
-                                  width: 2),
+                                color: AppColors.tertiaryColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
@@ -1541,17 +1663,23 @@ class _ScanningPageState extends State<ScanningPage>
                           decoration: BoxDecoration(
                             border: Border(
                               left: BorderSide(
-                                  color: AppColors.tertiaryColor
-                                      .withValues(alpha: 0.5),
-                                  width: 2),
+                                color: AppColors.tertiaryColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                                width: 2,
+                              ),
                               top: BorderSide(
-                                  color: AppColors.tertiaryColor
-                                      .withValues(alpha: 0.5),
-                                  width: 2),
+                                color: AppColors.tertiaryColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                                width: 2,
+                              ),
                               bottom: BorderSide(
-                                  color: AppColors.tertiaryColor
-                                      .withValues(alpha: 0.5),
-                                  width: 2),
+                                color: AppColors.tertiaryColor.withValues(
+                                  alpha: 0.5,
+                                ),
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
@@ -1564,7 +1692,9 @@ class _ScanningPageState extends State<ScanningPage>
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 4),
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.6),
                             borderRadius: BorderRadius.circular(10),
@@ -1572,8 +1702,9 @@ class _ScanningPageState extends State<ScanningPage>
                           child: Text(
                             'SCANNEZ ICI',
                             style: TextStyle(
-                              color:
-                              AppColors.tertiaryColor.withValues(alpha: 0.5),
+                              color: AppColors.tertiaryColor.withValues(
+                                alpha: 0.5,
+                              ),
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 3,
@@ -1624,11 +1755,13 @@ class _ScanningPageState extends State<ScanningPage>
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                     left: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -1642,11 +1775,13 @@ class _ScanningPageState extends State<ScanningPage>
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                     right: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -1660,11 +1795,13 @@ class _ScanningPageState extends State<ScanningPage>
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                     left: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -1678,11 +1815,13 @@ class _ScanningPageState extends State<ScanningPage>
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                     right: BorderSide(
-                        color: AppColors.tertiaryColor.withValues(alpha: 0.4),
-                        width: 2),
+                      color: AppColors.tertiaryColor.withValues(alpha: 0.4),
+                      width: 2,
+                    ),
                   ),
                 ),
               ),

@@ -15,7 +15,7 @@ import 'scanning_page.dart';
 class FeuilleListPage extends StatefulWidget {
   final int adjustmentId;
 
-  const FeuilleListPage({Key? key, required this.adjustmentId}) : super(key: key);
+  const FeuilleListPage({super.key, required this.adjustmentId});
 
   @override
   State<FeuilleListPage> createState() => _FeuilleListPageState();
@@ -27,7 +27,6 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   String? errorMessage;
   int? _startingSheetId;
   int? _validatingSheetId;
-
 
   // saved into a batch / sent to the ERP for that sheet.
   Map<int, int> _pendingCounts = {};
@@ -119,7 +118,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     if (!SyncService.online.value) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Hors ligne : touchez le bandeau « Réessayer » une fois le réseau revenu'),
+          content: Text(
+            'Hors ligne : touchez le bandeau « Réessayer » une fois le réseau revenu',
+          ),
           backgroundColor: AppColors.warningColor,
         ),
       );
@@ -136,7 +137,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     if (!SyncService.online.value) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Hors ligne : la feuille sera envoyée au retour du réseau'),
+          content: Text(
+            'Hors ligne : la feuille sera envoyée au retour du réseau',
+          ),
           backgroundColor: AppColors.warningColor,
         ),
       );
@@ -149,7 +152,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.describe()),
-        backgroundColor: result.error == null && !result.offline ? AppColors.successColor : AppColors.warningColor,
+        backgroundColor: result.error == null && !result.offline
+            ? AppColors.successColor
+            : AppColors.warningColor,
         duration: const Duration(seconds: 6),
       ),
     );
@@ -175,7 +180,8 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     try {
       for (final batch in await BatchStorageService.getBatches()) {
         if (batch.isSynced) continue;
-        unsynced[batch.countingSheetId] = (unsynced[batch.countingSheetId] ?? 0) + 1;
+        unsynced[batch.countingSheetId] =
+            (unsynced[batch.countingSheetId] ?? 0) + 1;
       }
     } catch (e) {
       // Counts only; the list works without them.
@@ -197,28 +203,38 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
   Color getStatusColor(String? state) {
     switch (state) {
-      case 'progress': return AppColors.successColor;
-      case 'confirm': return AppColors.secondaryColor;
-      case 'new': return AppColors.warningColor;
-      case 'cancel': return AppColors.errorColor;
-      default: return AppColors.textSecondary;
+      case 'progress':
+        return AppColors.successColor;
+      case 'confirm':
+        return AppColors.secondaryColor;
+      case 'new':
+        return AppColors.warningColor;
+      case 'cancel':
+        return AppColors.errorColor;
+      default:
+        return AppColors.textSecondary;
     }
   }
 
   String getStatusText(String? state) {
     switch (state) {
-      case 'progress': return 'En cours';
-      case 'confirm': return 'Validé';
-      case 'new': return 'Nouveau';
-      case 'cancel': return 'Annulé';
-      default: return state ?? 'Inconnu';
+      case 'progress':
+        return 'En cours';
+      case 'confirm':
+        return 'Validé';
+      case 'new':
+        return 'Nouveau';
+      case 'cancel':
+        return 'Annulé';
+      default:
+        return state ?? 'Inconnu';
     }
   }
 
   // Find the current sheet in progress
   int? getCurrentProgressSheetId() {
     final progressSheet = feuilles.firstWhere(
-          (sheet) => sheet['state'] == 'progress',
+      (sheet) => sheet['state'] == 'progress',
       orElse: () => null,
     );
     return progressSheet?['id'];
@@ -227,7 +243,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   // Get current sheet name
   String? getCurrentProgressSheetName() {
     final progressSheet = feuilles.firstWhere(
-          (sheet) => sheet['state'] == 'progress',
+      (sheet) => sheet['state'] == 'progress',
       orElse: () => null,
     );
     return progressSheet?['name'] ?? 'Feuille en cours';
@@ -240,7 +256,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Hors ligne : comptage commencé, confirmé par Odoo à la synchronisation'),
+        content: Text(
+          'Hors ligne : comptage commencé, confirmé par Odoo à la synchronisation',
+        ),
         backgroundColor: AppColors.warningColor,
       ),
     );
@@ -256,25 +274,37 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     try {
       final result = await CountingService.startSheet(sheetId);
       if (result.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comptage commencé'), backgroundColor: AppColors.successColor),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Comptage commencé'),
+              backgroundColor: AppColors.successColor,
+            ),
+          );
+        }
         fetchFeuilles();
       } else if (!SyncService.online.value) {
         // The connection dropped during the call.
         await _startOffline(sheetId);
       } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message ?? 'Erreur lors du démarrage'),
+              backgroundColor: AppColors.errorColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.message ?? 'Erreur lors du démarrage'),
+            content: Text(friendlyError(e)),
             backgroundColor: AppColors.errorColor,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.errorColor),
-      );
     } finally {
       if (mounted) setState(() => _startingSheetId = null);
     }
@@ -286,7 +316,10 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
 
     if (sheetId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucune feuille en cours à terminer'), backgroundColor: AppColors.warningColor),
+        const SnackBar(
+          content: Text('Aucune feuille en cours à terminer'),
+          backgroundColor: AppColors.warningColor,
+        ),
       );
       return;
     }
@@ -302,7 +335,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     if (unsynced > 0 && SyncService.online.value) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Envoyez d\'abord les $unsynced lot(s) de cette feuille (bouton Envoyer)'),
+          content: Text(
+            'Envoyez d\'abord les $unsynced lot(s) de cette feuille (bouton Envoyer)',
+          ),
           backgroundColor: AppColors.warningColor,
         ),
       );
@@ -313,7 +348,10 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Terminer le comptage", style: TextStyle(fontSize: 18)),
+          title: const Text(
+            "Terminer le comptage",
+            style: TextStyle(fontSize: 18),
+          ),
           content: Text(
             "Voulez-vous terminer le comptage \"$sheetName\" ?\n\nCette action est irréversible.",
             style: const TextStyle(fontSize: 14),
@@ -329,7 +367,10 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                 backgroundColor: AppColors.errorColor,
                 foregroundColor: Colors.white,
               ),
-              child: const Text("Oui, terminer", style: TextStyle(fontSize: 14)),
+              child: const Text(
+                "Oui, terminer",
+                style: TextStyle(fontSize: 14),
+              ),
             ),
           ],
         );
@@ -349,7 +390,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     if (unsaved > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Enregistrez d\'abord les $unsaved article(s) scanné(s) dans un lot'),
+          content: Text(
+            'Enregistrez d\'abord les $unsaved article(s) scanné(s) dans un lot',
+          ),
           backgroundColor: AppColors.warningColor,
         ),
       );
@@ -359,7 +402,9 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Hors ligne : comptage terminé, validé dans Odoo après l\'envoi de ses lots'),
+        content: Text(
+          'Hors ligne : comptage terminé, validé dans Odoo après l\'envoi de ses lots',
+        ),
         backgroundColor: AppColors.warningColor,
       ),
     );
@@ -375,25 +420,37 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
     try {
       final result = await CountingService.validateSheet(sheetId);
       if (result.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Comptage terminé'), backgroundColor: AppColors.successColor),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Comptage terminé'),
+              backgroundColor: AppColors.successColor,
+            ),
+          );
+        }
         fetchFeuilles();
       } else if (!SyncService.online.value) {
         // The connection dropped during the call.
         await _validateOffline(sheetId);
       } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message ?? 'Erreur lors de la validation'),
+              backgroundColor: AppColors.errorColor,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.message ?? 'Erreur lors de la validation'),
+            content: Text(friendlyError(e)),
             backgroundColor: AppColors.errorColor,
           ),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyError(e)), backgroundColor: AppColors.errorColor),
-      );
     } finally {
       if (mounted) setState(() => _validatingSheetId = null);
     }
@@ -420,7 +477,10 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                     child: SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     ),
                   )
                 : IconButton(
@@ -440,7 +500,11 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                 value: 'terminer',
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle, size: 18, color: AppColors.successColor),
+                    Icon(
+                      Icons.check_circle,
+                      size: 18,
+                      color: AppColors.successColor,
+                    ),
                     SizedBox(width: 8),
                     Text('Terminer le comptage en cours'),
                   ],
@@ -459,207 +523,276 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
           ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 50, color: AppColors.errorColor),
-              const SizedBox(height: 16),
-              Text(
-                errorMessage!,
-                style: const TextStyle(fontSize: 13, color: AppColors.errorColor),
-                textAlign: TextAlign.center,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 50,
+                      color: AppColors.errorColor,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.errorColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () {
+                        fetchFeuilles();
+                      },
+                      child: const Text("Réessayer"),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  fetchFeuilles();
-                },
-                child: const Text("Réessayer"),
-              ),
-            ],
-          ),
-        ),
-      )
+            )
           : feuilles.isEmpty
           ? const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory, size: 40, color: AppColors.textSecondary),
-            SizedBox(height: 8),
-            Text("Aucune feuille de comptage", style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-          ],
-        ),
-      )
-          : RefreshIndicator(
-        onRefresh: () async => fetchFeuilles(),
-        child: ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: feuilles.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final f = feuilles[index];
-            final zoneName = getName(f["zone_id"]);
-            final sheetName = f["name"] ?? "Feuille ${f["id"]}";
-            final countingSheetId = f["id"];
-            final sheetState = f["state"];
-            final isProgress = sheetState == 'progress';
-            final isNew = sheetState == 'new';
-            final isConfirm = sheetState == 'confirm';
-            final pendingCount = _pendingCounts[countingSheetId] ?? 0;
-            // Started / finished offline, not confirmed by Odoo yet.
-            final waitingSync = f is Map && f['_pending'] != null;
-            final unsyncedBatches = _unsyncedBatches[countingSheetId] ?? 0;
-            final hasWorkToSend = waitingSync || unsyncedBatches > 0;
-            final isSending = _sendingSheetId == countingSheetId;
-            final color = getStatusColor(sheetState);
-
-            return AppCard(
-              accentColor: color,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      AppBadge(
-                        text: waitingSync
-                            ? '${getStatusText(sheetState)} · à synchroniser'
-                            : getStatusText(sheetState),
-                        color: waitingSync ? AppColors.warningColor : color,
-                      ),
-                      const Spacer(),
-                      if (pendingCount > 0)
-                        AppBadge(
-                          text: '$pendingCount en attente',
-                          color: AppColors.warningColor,
-                          icon: Icons.hourglass_bottom,
-                        ),
-                    ],
+                  Icon(
+                    Icons.inventory,
+                    size: 40,
+                    color: AppColors.textSecondary,
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 8),
                   Text(
-                    sheetName,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textColor,
+                    "Aucune feuille de comptage",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 6),
-                  _SheetInfo(icon: Icons.location_on_outlined, text: zoneName),
-                  const SizedBox(height: 2),
-                  _SheetInfo(icon: Icons.person_outline, text: getName(f["user_id"])),
-                  if (unsyncedBatches > 0) ...[
-                    const SizedBox(height: 2),
-                    _SheetInfo(
-                      icon: Icons.inventory_2_outlined,
-                      text: '$unsyncedBatches lot(s) à envoyer',
-                      color: AppColors.secondaryColor,
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  if (isNew)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _startingSheetId == countingSheetId ? null : () => _startSheet(countingSheetId),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.successColor,
-                          minimumSize: const Size(0, 44),
-                        ),
-                        icon: _startingSheetId == countingSheetId
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.play_arrow_rounded, size: 20),
-                        label: const Text('Commencer'),
-                      ),
-                    ),
-                  if (isProgress)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ScanningPage(
-                                    countingSheetId: countingSheetId,
-                                    adjustmentId: widget.adjustmentId,
-                                    zoneName: zoneName,
-                                    sheetName: sheetName,
-                                  ),
-                                ),
-                              );
-                              _loadPendingCounts();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.secondaryColor,
-                              minimumSize: const Size(0, 44),
-                            ),
-                            icon: const Icon(Icons.qr_code_scanner, size: 20),
-                            label: const Text('Scanner'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        // Finish this sheet (works offline: done in Odoo
-                        // at the sync, after its batches).
-                        OutlinedButton(
-                          onPressed: _validatingSheetId == countingSheetId
-                              ? null
-                              : () => _confirmAndValidate(countingSheetId, sheetName),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.errorColor,
-                            side: const BorderSide(color: AppColors.errorColor),
-                            minimumSize: const Size(0, 44),
-                          ),
-                          child: const Text('Terminer'),
-                        ),
-                      ],
-                    ),
-                  if (isConfirm)
-                    Row(
-                      children: [
-                        Icon(
-                          waitingSync ? Icons.schedule : Icons.check_circle,
-                          size: 18,
-                          color: waitingSync ? AppColors.warningColor : AppColors.successColor,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          waitingSync ? 'Terminé · validé à la synchronisation' : 'Comptage terminé',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: waitingSync ? AppColors.warningColor : AppColors.successColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  // Manual send of this sheet: start, batches, finish.
-                  if (hasWorkToSend) ...[
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: isSending ? null : () => _sendSheet(countingSheetId),
-                        style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
-                        icon: isSending
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.cloud_upload_outlined, size: 20),
-                        label: Text(isSending ? 'Envoi…' : 'Envoyer à Odoo'),
-                      ),
-                    ),
-                  ],
                 ],
               ),
-            );
-          },
-        ),
-      ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async => fetchFeuilles(),
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: feuilles.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final f = feuilles[index];
+                  final zoneName = getName(f["zone_id"]);
+                  final sheetName = f["name"] ?? "Feuille ${f["id"]}";
+                  final countingSheetId = f["id"];
+                  final sheetState = f["state"];
+                  final isProgress = sheetState == 'progress';
+                  final isNew = sheetState == 'new';
+                  final isConfirm = sheetState == 'confirm';
+                  final pendingCount = _pendingCounts[countingSheetId] ?? 0;
+                  // Started / finished offline, not confirmed by Odoo yet.
+                  final waitingSync = f is Map && f['_pending'] != null;
+                  final unsyncedBatches =
+                      _unsyncedBatches[countingSheetId] ?? 0;
+                  final hasWorkToSend = waitingSync || unsyncedBatches > 0;
+                  final isSending = _sendingSheetId == countingSheetId;
+                  final color = getStatusColor(sheetState);
+
+                  return AppCard(
+                    accentColor: color,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            AppBadge(
+                              text: waitingSync
+                                  ? '${getStatusText(sheetState)} · à synchroniser'
+                                  : getStatusText(sheetState),
+                              color: waitingSync
+                                  ? AppColors.warningColor
+                                  : color,
+                            ),
+                            const Spacer(),
+                            if (pendingCount > 0)
+                              AppBadge(
+                                text: '$pendingCount en attente',
+                                color: AppColors.warningColor,
+                                icon: Icons.hourglass_bottom,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          sheetName,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textColor,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        _SheetInfo(
+                          icon: Icons.location_on_outlined,
+                          text: zoneName,
+                        ),
+                        const SizedBox(height: 2),
+                        _SheetInfo(
+                          icon: Icons.person_outline,
+                          text: getName(f["user_id"]),
+                        ),
+                        if (unsyncedBatches > 0) ...[
+                          const SizedBox(height: 2),
+                          _SheetInfo(
+                            icon: Icons.inventory_2_outlined,
+                            text: '$unsyncedBatches lot(s) à envoyer',
+                            color: AppColors.secondaryColor,
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        if (isNew)
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _startingSheetId == countingSheetId
+                                  ? null
+                                  : () => _startSheet(countingSheetId),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.successColor,
+                                minimumSize: const Size(0, 44),
+                              ),
+                              icon: _startingSheetId == countingSheetId
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.play_arrow_rounded,
+                                      size: 20,
+                                    ),
+                              label: const Text('Commencer'),
+                            ),
+                          ),
+                        if (isProgress)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ScanningPage(
+                                          countingSheetId: countingSheetId,
+                                          adjustmentId: widget.adjustmentId,
+                                          zoneName: zoneName,
+                                          sheetName: sheetName,
+                                        ),
+                                      ),
+                                    );
+                                    _loadPendingCounts();
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.secondaryColor,
+                                    minimumSize: const Size(0, 44),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.qr_code_scanner,
+                                    size: 20,
+                                  ),
+                                  label: const Text('Scanner'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // Finish this sheet (works offline: done in Odoo
+                              // at the sync, after its batches).
+                              OutlinedButton(
+                                onPressed: _validatingSheetId == countingSheetId
+                                    ? null
+                                    : () => _confirmAndValidate(
+                                        countingSheetId,
+                                        sheetName,
+                                      ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.errorColor,
+                                  side: const BorderSide(
+                                    color: AppColors.errorColor,
+                                  ),
+                                  minimumSize: const Size(0, 44),
+                                ),
+                                child: const Text('Terminer'),
+                              ),
+                            ],
+                          ),
+                        if (isConfirm)
+                          Row(
+                            children: [
+                              Icon(
+                                waitingSync
+                                    ? Icons.schedule
+                                    : Icons.check_circle,
+                                size: 18,
+                                color: waitingSync
+                                    ? AppColors.warningColor
+                                    : AppColors.successColor,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                waitingSync
+                                    ? 'Terminé · validé à la synchronisation'
+                                    : 'Comptage terminé',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: waitingSync
+                                      ? AppColors.warningColor
+                                      : AppColors.successColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        // Manual send of this sheet: start, batches, finish.
+                        if (hasWorkToSend) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: isSending
+                                  ? null
+                                  : () => _sendSheet(countingSheetId),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 44),
+                              ),
+                              icon: isSending
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.cloud_upload_outlined,
+                                      size: 20,
+                                    ),
+                              label: Text(
+                                isSending ? 'Envoi…' : 'Envoyer à Odoo',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }
@@ -670,7 +803,11 @@ class _SheetInfo extends StatelessWidget {
   final String text;
   final Color color;
 
-  const _SheetInfo({required this.icon, required this.text, this.color = AppColors.textSecondary});
+  const _SheetInfo({
+    required this.icon,
+    required this.text,
+    this.color = AppColors.textSecondary,
+  });
 
   @override
   Widget build(BuildContext context) {

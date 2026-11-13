@@ -24,7 +24,10 @@ class BatchStorageService {
   // Before batches were per account they lived under one shared key. The
   // first account to open the batches after the update takes them over, so
   // no saved (possibly unsynced) batch is lost.
-  static Future<void> _migrateLegacy(SharedPreferences prefs, String key) async {
+  static Future<void> _migrateLegacy(
+    SharedPreferences prefs,
+    String key,
+  ) async {
     final legacy = prefs.getString(_batchesKey);
     if (legacy == null) return;
     if (!prefs.containsKey(key)) {
@@ -59,7 +62,10 @@ class BatchStorageService {
   }
 
   // Whether this barcode is already in a saved batch of the sheet.
-  static Future<bool> isBarcodeInBatches(int countingSheetId, String barcode) async {
+  static Future<bool> isBarcodeInBatches(
+    int countingSheetId,
+    String barcode,
+  ) async {
     final key = await _key();
     if (_barcodeIndex == null || _indexKey != key) {
       final index = <int, Set<String>>{};
@@ -94,7 +100,10 @@ class BatchStorageService {
   // ✅ NEW: replace the items of a saved batch (used when editing
   // quantities/deleting items from the scanned-items list opened from a
   // saved batch).
-  static Future<void> updateBatchItems(String batchId, List<ScannedItem> items) async {
+  static Future<void> updateBatchItems(
+    String batchId,
+    List<ScannedItem> items,
+  ) async {
     final batches = await getBatches();
     final index = batches.indexWhere((b) => b.id == batchId);
     if (index != -1) {

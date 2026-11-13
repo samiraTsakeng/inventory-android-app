@@ -36,11 +36,9 @@ class ConsolidationService {
   // Get all consolidation sheets for an adjustment
   static Future<List<dynamic>> getConsolidationSheets(int adjustmentId) async {
     final cacheName = 'consolidation_sheets_$adjustmentId';
-    final read = await _read(
-      ApiConfig.consolidationSheets,
-      {'adjustment_id': adjustmentId},
-      cacheName,
-    );
+    final read = await _read(ApiConfig.consolidationSheets, {
+      'adjustment_id': adjustmentId,
+    }, cacheName);
     if (read.cached is List) return read.cached as List;
     final response = read.response!;
 
@@ -51,7 +49,9 @@ class ConsolidationService {
     final List<dynamic> sheets;
     if (data is List) {
       sheets = data;
-    } else if (data is Map && data['success'] == true && data['sheets'] is List) {
+    } else if (data is Map &&
+        data['success'] == true &&
+        data['sheets'] is List) {
       sheets = data['sheets'];
     } else {
       sheets = [];
@@ -66,11 +66,9 @@ class ConsolidationService {
   ) async {
     final cacheName = 'consolidation_sheet_$sheetId';
     try {
-      final read = await _read(
-        ApiConfig.consolidationSheet,
-        {'sheet_id': sheetId},
-        cacheName,
-      );
+      final read = await _read(ApiConfig.consolidationSheet, {
+        'sheet_id': sheetId,
+      }, cacheName);
       if (read.cached is Map) {
         return Map<String, dynamic>.from(read.cached as Map);
       }
@@ -121,11 +119,9 @@ class ConsolidationService {
   // Zones ready for consolidation
   static Future<List<dynamic>> getConsolidationZones(int adjustmentId) async {
     final cacheName = 'consolidation_zones_$adjustmentId';
-    final read = await _read(
-      ApiConfig.consolidationZones,
-      {'adjustment_id': adjustmentId},
-      cacheName,
-    );
+    final read = await _read(ApiConfig.consolidationZones, {
+      'adjustment_id': adjustmentId,
+    }, cacheName);
     if (read.cached is List) return read.cached as List;
     final response = read.response!;
 
@@ -133,7 +129,8 @@ class ConsolidationService {
       throw Exception(ApiClient.errorMessage(response));
     }
     final data = jsonDecode(response.body);
-    final zones = data is Map && data['success'] == true && data['zones'] is List
+    final zones =
+        data is Map && data['success'] == true && data['zones'] is List
         ? data['zones'] as List
         : <dynamic>[];
     await LocalStorageService.cacheResponse(cacheName, zones);
@@ -188,11 +185,9 @@ class ConsolidationService {
   ) async {
     final cacheName = 'adjustment_status_$adjustmentId';
     try {
-      final read = await _read(
-        ApiConfig.adjustmentStatus,
-        {'adjustment_id': adjustmentId},
-        cacheName,
-      );
+      final read = await _read(ApiConfig.adjustmentStatus, {
+        'adjustment_id': adjustmentId,
+      }, cacheName);
       if (read.cached is Map) {
         return Map<String, dynamic>.from(read.cached as Map);
       }

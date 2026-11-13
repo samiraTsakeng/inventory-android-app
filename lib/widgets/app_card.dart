@@ -52,11 +52,7 @@ class AppCard extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: radius,
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          child: content,
-        ),
+        child: InkWell(onTap: onTap, onLongPress: onLongPress, child: content),
       ),
     );
   }
@@ -68,7 +64,12 @@ class AppBadge extends StatelessWidget {
   final Color color;
   final IconData? icon;
 
-  const AppBadge({super.key, required this.text, required this.color, this.icon});
+  const AppBadge({
+    super.key,
+    required this.text,
+    required this.color,
+    this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +88,11 @@ class AppBadge extends StatelessWidget {
           ],
           Text(
             text,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
           ),
         ],
       ),

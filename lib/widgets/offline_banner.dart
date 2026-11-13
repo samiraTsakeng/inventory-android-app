@@ -10,7 +10,7 @@ import '../utils/constants.dart';
 class OfflineBanner extends StatelessWidget {
   final Widget child;
 
-  const OfflineBanner({Key? key, required this.child}) : super(key: key);
+  const OfflineBanner({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -36,38 +36,49 @@ class OfflineBanner extends StatelessWidget {
                     }
                   },
                   child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.cloud_off, size: 16, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ValueListenableBuilder<int>(
-                            valueListenable: SyncService.pendingBatches,
-                            builder: (context, pending, _) => Text(
-                              pending > 0
-                                  ? 'Hors ligne · $pending lot(s) en attente d\'envoi'
-                                  : 'Hors ligne · les scans sont gardés sur le téléphone',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.cloud_off,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ValueListenableBuilder<int>(
+                              valueListenable: SyncService.pendingBatches,
+                              builder: (context, pending, _) => Text(
+                                pending > 0
+                                    ? 'Hors ligne · $pending lot(s) en attente d\'envoi'
+                                    : 'Hors ligne · les scans sont gardés sur le téléphone',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const Icon(Icons.refresh, size: 16, color: Colors.white),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'Réessayer',
-                          style: TextStyle(color: Colors.white, fontSize: 11),
-                        ),
-                      ],
+                          const Icon(
+                            Icons.refresh,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Réessayer',
+                            style: TextStyle(color: Colors.white, fontSize: 11),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ),
               ),
             Expanded(

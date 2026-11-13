@@ -46,9 +46,11 @@ class FileStore {
   }
 
   static Future<void> _write(String key, Object? data) async {
-    final big = data is List && data.length > _isolateItems ||
+    final big =
+        data is List && data.length > _isolateItems ||
         data is Map && data.length > _isolateItems ||
-        data is Map && data.values.any((v) => v is List && v.length > _isolateItems);
+        data is Map &&
+            data.values.any((v) => v is List && v.length > _isolateItems);
     final text = big ? await compute(_encode, data) : jsonEncode(data);
     final file = await _file(key);
     final tmp = File('${file.path}.tmp');
