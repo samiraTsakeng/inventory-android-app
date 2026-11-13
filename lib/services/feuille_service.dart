@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_client.dart';
@@ -18,18 +19,18 @@ class FeuilleService {
         // Offline: last list received for this adjustment, if any.
         final cached = await LocalStorageService.getCachedResponse(cacheName);
         if (cached is List) return cached;
-        print("Feuilles $adjustmentId offline, no copy: $e");
+        debugPrint("Feuilles $adjustmentId offline, no copy: $e");
         throw Exception(
           "Hors ligne : les feuilles de cet inventaire n'ont pas encore été "
           "copiées sur ce téléphone. Ouvrez-le une fois avec du réseau.",
         );
       }
 
-      print("feuilles status: ${response.statusCode}");
+      debugPrint("feuilles status: ${response.statusCode}");
 
       if (response.statusCode != 200) {
         final errorData = jsonDecode(response.body);
-        print("Error response: $errorData");
+        debugPrint("Error response: $errorData");
         // Return empty list and let the UI handle the error via exception
         throw Exception(errorData['message'] ?? ApiClient.errorMessage(response));
       }
@@ -49,7 +50,7 @@ class FeuilleService {
         throw Exception("Réponse inattendue du serveur Odoo.");
       }
     } catch (e) {
-      print("Feuilles service error: $e");
+      debugPrint("Feuilles service error: $e");
       rethrow;
     }
   }

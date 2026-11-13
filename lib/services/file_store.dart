@@ -37,7 +37,7 @@ class FileStore {
   static Future<void> write(String key, Object? data) {
     final previous = _writes[key] ?? Future.value();
     final next = previous.then((_) => _write(key, data)).catchError((e) {
-      print("File store write error ($key): $e");
+      debugPrint("File store write error ($key): $e");
     });
     _writes[key] = next;
     return next.whenComplete(() {
@@ -67,7 +67,7 @@ class FileStore {
           ? await compute(_decode, text)
           : jsonDecode(text);
     } catch (e) {
-      print("File store read error ($key): $e");
+      debugPrint("File store read error ($key): $e");
       return null;
     }
   }
@@ -78,7 +78,7 @@ class FileStore {
       final file = await _file(key);
       if (await file.exists()) await file.delete();
     } catch (e) {
-      print("File store remove error ($key): $e");
+      debugPrint("File store remove error ($key): $e");
     }
   }
 
@@ -95,7 +95,7 @@ class FileStore {
         }
       }
     } catch (e) {
-      print("File store cleanup error: $e");
+      debugPrint("File store cleanup error: $e");
     }
   }
 }

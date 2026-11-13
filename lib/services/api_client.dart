@@ -255,7 +255,7 @@ class ApiClient {
         return List<String>.from(data['result']);
       }
     } catch (e) {
-      print("Get databases error: $e");
+      debugPrint("Get databases error: $e");
     }
     return [];
   }

@@ -40,7 +40,7 @@ void main() async {
   ApiClient.startupLogin = login.then((_) {});
   final result = await login;
   ApiClient.startupLogin = null;
-  print("Auto-login result: $result");
+  debugPrint("Auto-login result: $result");
 
   switch (result) {
     case AutoLoginResult.success:

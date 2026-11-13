@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
@@ -69,7 +70,7 @@ class CountingService {
       return (product: null, alreadyInErp: false, offline: false);
     } catch (e) {
       // Network failure: the number couldn't be checked.
-      print("Product lookup error: $e");
+      debugPrint("Product lookup error: $e");
       return (product: null, alreadyInErp: false, offline: true);
     }
   }
@@ -94,7 +95,7 @@ class CountingService {
           entry.key as String: Map<String, dynamic>.from(entry.value),
       };
     } catch (e) {
-      print("Resolve pending error: $e");
+      debugPrint("Resolve pending error: $e");
       return null;
     }
   }
@@ -111,7 +112,7 @@ class CountingService {
       }
       return null;
     } catch (e) {
-      print("Get sheet state error: $e");
+      debugPrint("Get sheet state error: $e");
       return null;
     }
   }
@@ -124,7 +125,7 @@ class CountingService {
       );
       return ApiResult.fromResponse(response);
     } catch (e) {
-      print("Start sheet error: $e");
+      debugPrint("Start sheet error: $e");
       return ApiResult.fromException(e);
     }
   }
@@ -137,7 +138,7 @@ class CountingService {
       );
       return ApiResult.fromResponse(response);
     } catch (e) {
-      print("Validate sheet error: $e");
+      debugPrint("Validate sheet error: $e");
       return ApiResult.fromException(e);
     }
   }
@@ -210,7 +211,7 @@ class CountingService {
       }
       return result;
     } catch (e) {
-      print("Submit error: $e");
+      debugPrint("Submit error: $e");
       return ApiResult.fromException(e);
     }
   }
@@ -241,7 +242,7 @@ class CountingService {
       }
       return null;
     } catch (e) {
-      print("Get live items error: $e");
+      debugPrint("Get live items error: $e");
       return null;
     }
   }
@@ -263,7 +264,7 @@ class CountingService {
       }
       return null;
     } catch (e) {
-      print("Push live scan error: $e");
+      debugPrint("Push live scan error: $e");
       return null;
     }
   }
@@ -312,7 +313,7 @@ class CountingService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      print("Clear live items error: $e");
+      debugPrint("Clear live items error: $e");
       return false;
     }
   }
@@ -347,7 +348,7 @@ class CountingService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      print("Remove live item error: $e");
+      debugPrint("Remove live item error: $e");
       return false;
     }
   }
@@ -373,7 +374,7 @@ class CountingService {
       }
       return false;
     } catch (e) {
-      print("Check ERP scan error: $e");
+      debugPrint("Check ERP scan error: $e");
       return false; // fail-open: don't block scanning if check fails
     }
   }
@@ -399,7 +400,7 @@ class CountingService {
       }
       return {};
     } catch (e) {
-      print("Check ERP scans error: $e");
+      debugPrint("Check ERP scans error: $e");
       return {}; // fail-open: the server also skips duplicates on submit
     }
   }

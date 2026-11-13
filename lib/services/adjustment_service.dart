@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_client.dart';
@@ -18,7 +19,7 @@ class AdjustmentService {
       rethrow;
     }
 
-    print("status: ${response.statusCode}");
+    debugPrint("status: ${response.statusCode}");
 
     if (response.statusCode != 200) {
       throw Exception(ApiClient.errorMessage(response));

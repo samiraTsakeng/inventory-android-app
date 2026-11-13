@@ -177,32 +177,32 @@ class AuthService {
       final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
       if (!isLoggedIn) {
-        print("No saved session found");
+        debugPrint("No saved session found");
         return AutoLoginResult.noSession;
       }
       final session = await getFullSession();
       if (session == null) {
-        print("session data incomplete");
+        debugPrint("session data incomplete");
         return AutoLoginResult.noSession;
       }
 
-      print("attempting auto login for: ${session['email']}");
+      debugPrint("attempting auto login for: ${session['email']}");
       final success = await reauthenticate(rethrowErrors: true);
 
       if (success) {
-        print("auto-login successful!");
+        debugPrint("auto-login successful!");
         return AutoLoginResult.success;
       } else {
-        print("Auto-login failed, clearing session");
+        debugPrint("Auto-login failed, clearing session");
         await clearSession();
         return AutoLoginResult.rejected;
       }
     } on AuthRejectedException catch (e) {
-      print("Auto-login rejected: $e");
+      debugPrint("Auto-login rejected: $e");
       await clearSession();
       return AutoLoginResult.rejected;
     } catch (e) {
-      print("Auto-login offline: $e");
+      debugPrint("Auto-login offline: $e");
       return AutoLoginResult.offline;
     }
   }
@@ -222,7 +222,7 @@ class AuthService {
       );
     } catch (e) {
       if (rethrowErrors) rethrow;
-      print("Re-authentication failed: $e");
+      debugPrint("Re-authentication failed: $e");
       return false;
     }
   }
@@ -344,7 +344,7 @@ class AuthService {
         password: password,
       );
     } catch (e) {
-      print("Second authentication error: $e");
+      debugPrint("Second authentication error: $e");
       rethrow;
     }
   }

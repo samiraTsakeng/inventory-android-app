@@ -89,7 +89,7 @@ class OfflinePrepService {
       try {
         adjustments = await AdjustmentService.getAdjustments();
       } catch (e) {
-        print("Offline prep: adjustments unavailable: $e");
+        debugPrint("Offline prep: adjustments unavailable: $e");
         return null;
       }
       // getAdjustments falls back to the cached list without network.

@@ -33,17 +33,17 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
     });
 
     try {
-      print("Fetching consolidation sheets for adjustment: ${widget.adjustmentId}");
+      debugPrint("Fetching consolidation sheets for adjustment: ${widget.adjustmentId}");
       final data = await ConsolidationService.getConsolidationSheets(widget.adjustmentId);
-      print("Data received: $data");
+      debugPrint("Data received: $data");
 
       setState(() {
         consolidationSheets = data;
         isLoading = false;
       });
-      print("Loaded ${consolidationSheets.length} consolidation sheets");
+      debugPrint("Loaded ${consolidationSheets.length} consolidation sheets");
     } catch (e) {
-      print("Error fetching consolidation sheets: $e");
+      debugPrint("Error fetching consolidation sheets: $e");
       setState(() {
         errorMessage = friendlyError(e);
         isLoading = false;
@@ -185,7 +185,7 @@ class _ConsolidationListPageState extends State<ConsolidationListPage> {
             final isProgress = state == 'progress' || state == 'new';
             final isConfirm = state == 'confirm';
 
-            print("Building card: $sheetName (ID: $sheetId, State: $state)");
+            debugPrint("Building card: $sheetName (ID: $sheetId, State: $state)");
 
             return GestureDetector(
               onTap: () {

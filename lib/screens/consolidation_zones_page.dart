@@ -42,7 +42,7 @@ class _ConsolidationZonesPageState extends State<ConsolidationZonesPage> {
         zones = data;
         isLoading = false;
       });
-      print("Loaded ${zones.length} zones ready for consolidation");
+      debugPrint("Loaded ${zones.length} zones ready for consolidation");
     } catch (e) {
       setState(() {
         errorMessage = friendlyError(e);

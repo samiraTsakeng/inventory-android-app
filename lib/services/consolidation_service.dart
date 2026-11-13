@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_client.dart';
@@ -27,7 +28,7 @@ class ConsolidationService {
     } catch (e) {
       final cached = await LocalStorageService.getCachedResponse(cacheName);
       if (cached != null) return (response: null, cached: cached);
-      print("Consolidation $cacheName offline, no copy: $e");
+      debugPrint("Consolidation $cacheName offline, no copy: $e");
       throw Exception(offlineMessage);
     }
   }
@@ -80,7 +81,7 @@ class ConsolidationService {
       await LocalStorageService.cacheResponse(cacheName, data);
       return Map<String, dynamic>.from(data);
     } catch (e) {
-      print("Get consolidation sheet detail error: $e");
+      debugPrint("Get consolidation sheet detail error: $e");
       return null;
     }
   }
@@ -97,7 +98,7 @@ class ConsolidationService {
       );
       return ApiResult.fromResponse(response);
     } catch (e) {
-      print("updateContradictoryLine error: $e");
+      debugPrint("updateContradictoryLine error: $e");
       return _offlineAction(e);
     }
   }
@@ -112,7 +113,7 @@ class ConsolidationService {
       );
       return ApiResult.fromResponse(response);
     } catch (e) {
-      print("validateConsolidationSheet error: $e");
+      debugPrint("validateConsolidationSheet error: $e");
       return _offlineAction(e);
     }
   }
@@ -152,7 +153,7 @@ class ConsolidationService {
         timeout: ApiConfig.submitTimeout,
       );
     } catch (e) {
-      print("Create consolidation error: $e");
+      debugPrint("Create consolidation error: $e");
       throw Exception(_offlineAction(e).message);
     }
 
@@ -176,7 +177,7 @@ class ConsolidationService {
       );
       return ApiResult.fromResponse(response);
     } catch (e) {
-      print("applyConsolidation error: $e");
+      debugPrint("applyConsolidation error: $e");
       return _offlineAction(e);
     }
   }
@@ -205,7 +206,7 @@ class ConsolidationService {
       }
       return null;
     } catch (e) {
-      print("Get adjustment status error: $e");
+      debugPrint("Get adjustment status error: $e");
       return null;
     }
   }
@@ -225,7 +226,7 @@ class ConsolidationService {
         if (id is int) await getConsolidationSheetDetail(id);
       }
     } catch (e) {
-      print("Consolidation prefetch $adjustmentId: $e");
+      debugPrint("Consolidation prefetch $adjustmentId: $e");
     }
   }
 

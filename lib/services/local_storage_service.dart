@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +17,7 @@ class LocalStorageService {
   static Future<void> setSessionId(String sessionId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sessionIdKey, sessionId);
-    print(" Session ID saved: $sessionId");
+    debugPrint(" Session ID saved: $sessionId");
   }
 
   //  Get current session ID
@@ -49,7 +50,7 @@ class LocalStorageService {
       await prefs.setStringList(key, itemsJson);
       await prefs.setInt(_sheetIdKey, sheetId);
     } catch (e) {
-      print("Error saving scanned items: $e");
+      debugPrint("Error saving scanned items: $e");
     }
   }
 
@@ -60,11 +61,11 @@ class LocalStorageService {
       final sessionId = await getSessionId();
       final key = '${_scannedItemsKey}${sessionId}_$sheetId';
 
-      print("Loading items from key: $key");
+      debugPrint("Loading items from key: $key");
 
       final itemsJson = prefs.getStringList(key);
       if (itemsJson == null) {
-        print("No items found for key: $key");
+        debugPrint("No items found for key: $key");
         return [];
       }
 
@@ -82,14 +83,14 @@ class LocalStorageService {
             tracking: data['tracking'] ?? 'none',
           ));
         } catch (e) {
-          print("Error parsing item: $e");
+          debugPrint("Error parsing item: $e");
         }
       }
 
-      print("Loaded ${items.length} items from key: $key");
+      debugPrint("Loaded ${items.length} items from key: $key");
       return items;
     } catch (e) {
-      print("Error loading scanned items: $e");
+      debugPrint("Error loading scanned items: $e");
       return [];
     }
   }
@@ -101,9 +102,9 @@ class LocalStorageService {
       final sessionId = await getSessionId();
       final key = '${_scannedItemsKey}${sessionId}_$sheetId';
       await prefs.remove(key);
-      print("Cleared items for key: $key");
+      debugPrint("Cleared items for key: $key");
     } catch (e) {
-      print("Error clearing scanned items: $e");
+      debugPrint("Error clearing scanned items: $e");
     }
   }
 
@@ -113,7 +114,7 @@ class LocalStorageService {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getInt(_sheetIdKey);
     } catch (e) {
-      print(" Error getting current sheet ID: $e");
+      debugPrint(" Error getting current sheet ID: $e");
       return null;
     }
   }
@@ -150,9 +151,9 @@ class LocalStorageService {
       await prefs.remove(_sessionIdKey);
       await prefs.remove(_sheetIdKey);
 
-      print("Cleared ALL session data for: $sessionId");
+      debugPrint("Cleared ALL session data for: $sessionId");
     } catch (e) {
-      print("Error clearing session data: $e");
+      debugPrint("Error clearing session data: $e");
     }
   }
 
@@ -267,7 +268,7 @@ class LocalStorageService {
       await FileStore.write(_backupKey, kept);
       await _restore(prefs, kept);
     } catch (e) {
-      print("Storage migration error: $e");
+      debugPrint("Storage migration error: $e");
     }
   }
 

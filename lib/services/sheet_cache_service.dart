@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 import 'file_store.dart';
@@ -75,7 +76,7 @@ class SheetCacheService {
       }
       return (sheets: feuilles.length, lots: lotCount);
     } catch (e) {
-      print("Prepare adjustment error: $e");
+      debugPrint("Prepare adjustment error: $e");
       return null;
     }
   }
@@ -97,7 +98,7 @@ class SheetCacheService {
       await _storeSent(sheetId, List<String>.from(data['sent'] ?? const []));
       return await _storeLots(adjustmentId, data['lots']);
     } catch (e) {
-      print("Sheet cache refresh error: $e");
+      debugPrint("Sheet cache refresh error: $e");
       return null;
     }
   }
@@ -173,7 +174,7 @@ class SheetCacheService {
       _lots[key] = cache;
       return cache;
     } catch (e) {
-      print("Lot cache read error: $e");
+      debugPrint("Lot cache read error: $e");
       return null;
     }
   }
