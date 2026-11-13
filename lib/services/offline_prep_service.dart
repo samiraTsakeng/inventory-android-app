@@ -8,6 +8,7 @@ import 'consolidation_service.dart';
 import 'local_storage_service.dart';
 import 'sheet_cache_service.dart';
 import 'sync_service.dart';
+import 'user_rights.dart';
 
 // Automatic offline preparation: once connected, everything needed to count
 // without network is downloaded with the user's Odoo rights, for every
@@ -88,9 +89,11 @@ class OfflinePrepService {
     if (!SyncService.online.value) return null;
     running.value = true;
     try {
+      // Odoo groups first: they decide whether consolidations are copied.
+      await UserRights.refresh();
       final List<dynamic> adjustments;
       try {
-        adjustments = await AdjustmentService.getAdjustments();
+        adjustments = await AdjustmentService.getAdjustments(fresh: true);
       } catch (e) {
         debugPrint("Offline prep: adjustments unavailable: $e");
         return null;
@@ -114,8 +117,10 @@ class OfflinePrepService {
           continue;
         }
         done.add(id);
-        // Consolidation screens too (ignored for users without the right).
-        await ConsolidationService.prefetch(id);
+        // Consolidation screens too, for the users allowed to see them.
+        if (UserRights.consolidation.value == true) {
+          await ConsolidationService.prefetch(id);
+        }
         if (result.sheets > 0) {
           prepared++;
           sheets += result.sheets;

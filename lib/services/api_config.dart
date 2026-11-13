@@ -16,6 +16,7 @@ class ApiConfig {
   static const String _api = '/wise_inventory/api';
 
   static const String adjustments = '$_api/adjustments';
+  static const String userRights = '$_api/user/rights';
   static const String feuilles = '$_api/feuilles';
 
   static const String lookupProduct = '$_api/counting/lookup_product';

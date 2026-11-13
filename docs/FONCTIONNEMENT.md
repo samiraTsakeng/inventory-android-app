@@ -132,7 +132,14 @@ le téléphone, et la liste partagée est vidée pour le lot suivant.
   lot ; la fin est faite dans Odoo après l'envoi de tous les lots de la feuille.
 
 ### 3.4 Consolidation et application (responsable de l'ajustement)
-Toujours en ligne.
+Toujours en ligne. **Réservé au groupe Odoo « Ajustement Général / Resp.
+Ajustement »**, comme les menus de consolidation dans Odoo : pour les autres
+utilisateurs, la carte « Gestion des consolidations » n'apparaît pas et Odoo
+refuse ses routes (`403`). Les droits sont lus dans Odoo à chaque
+préparation hors ligne (`/user/rights`) et gardés sur le téléphone, donc
+appliqués aussi hors ligne ; tant qu'ils ne sont pas connus, la carte reste
+cachée. Les consolidations ne sont copiées sur le téléphone que pour ce
+groupe.
 1. **Consolider les zones** : une zone est prête quand ses deux feuilles sont
    validées. La consolidation crée une feuille de consolidation dans Odoo.
 2. **Voir les consolidations** : pour chaque ligne contradictoire, saisir la
@@ -198,6 +205,11 @@ sans connexion, et est envoyé à Odoo au retour du réseau (§5).
   (immédiat sans réseau ; jusqu'à 8 à 20 s si le Wi-Fi est connecté mais le
   serveur injoignable). Un **bandeau orange** apparaît en haut de tous les
   écrans : « Hors ligne · N lot(s) en attente d'envoi ».
+- **Les listes (ajustements, feuilles) s'affichent tout de suite** depuis la
+  copie du téléphone, en ligne comme hors ligne ; en ligne, Odoo est
+  interrogé en arrière-plan et la liste se met à jour si elle a changé.
+  Après une action sur une feuille (commencer, terminer) ou un « tirer pour
+  rafraîchir », la liste d'Odoo est attendue.
 - **Hors ligne, les écrans n'attendent plus le serveur** : ils affichent tout
   de suite la copie du téléphone. Le serveur est réessayé au plus toutes les
   20 s, à l'occasion d'une action de l'utilisateur. Les envois (« Envoyer »,

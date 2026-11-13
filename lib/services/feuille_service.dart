@@ -3,10 +3,22 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'api_client.dart';
 import 'api_config.dart';
+import 'list_cache.dart';
 import 'local_storage_service.dart';
 
 class FeuilleService {
-  static Future<List<dynamic>> getFeuilles(int adjustmentId) async {
+  // The phone's copy at once, refreshed in the background (ListCache).
+  // [fresh]: wait for the server (after starting / finishing a sheet).
+  static Future<List<dynamic>> getFeuilles(
+    int adjustmentId, {
+    bool fresh = false,
+  }) => ListCache.get(
+    'feuilles_$adjustmentId',
+    () => _fetchFeuilles(adjustmentId),
+    fresh: fresh,
+  );
+
+  static Future<List<dynamic>> _fetchFeuilles(int adjustmentId) async {
     final cacheName = 'feuilles_$adjustmentId';
     try {
       final http.Response response;

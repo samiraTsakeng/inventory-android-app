@@ -12,6 +12,7 @@ import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/sync_service.dart';
+import 'services/user_rights.dart';
 import 'services/offline_prep_service.dart';
 import 'widgets/offline_banner.dart';
 import 'screens/adjustment_action_page.dart';
@@ -33,6 +34,8 @@ void main() async {
   if (!hasSession) await AuthService.clearSession();
 
   AuthService.loggedIn.value = hasSession;
+  // Rights kept for this account: right screens at once, even offline.
+  if (hasSession) await UserRights.load();
   SyncService.start(startOffline: false);
 
   runApp(MyApp(initialRoute: hasSession ? '/adjustment-entry' : '/'));

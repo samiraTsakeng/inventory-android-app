@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'local_storage_service.dart';
+import 'user_rights.dart';
 
 enum AutoLoginResult {
   success,
@@ -123,6 +124,8 @@ class AuthService {
       sessionId: sessionId,
     );
     await LocalStorageService.setSessionId(sessionId);
+    // This account's rights kept on the phone, until Odoo is asked again.
+    await UserRights.load();
     return true;
   }
 
@@ -297,6 +300,7 @@ class AuthService {
     await prefs.remove('is_logged_in');
     loggedIn.value = false;
     ApiClient.clearSession();
+    UserRights.reset();
 
     // ✅ Clear all local data for this session
     await LocalStorageService.clearAllSessionData();

@@ -3,6 +3,7 @@ import '../utils/constants.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/app_card.dart';
 import '../services/offline_prep_service.dart';
+import '../services/user_rights.dart';
 import 'adjustment_action_page.dart';
 
 class ChoicePage extends StatelessWidget {
@@ -57,25 +58,32 @@ class ChoicePage extends StatelessWidget {
             // Copies the adjustment to the phone if it isn't yet.
             _AutoPrepare(adjustmentId: adjId),
 
-            // Consolidation Management Card (combines everything)
-            _buildChoiceCard(
-              context: context,
-              title: "Gestion des consolidations",
-              subtitle: "Consolider les zones et appliquer au stock",
-              icon: Icons.merge_type,
-              color: AppColors.primaryLight,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => AdjustmentActionPage(
-                      adjustmentId: adjId,
-                      adjustmentName: 'Ajustement $adjId',
-                    ),
-                  ),
+            // Consolidations: only for the Odoo group that sees them
+            // (Resp. Ajustement), as in Odoo; hidden while unknown.
+            ValueListenableBuilder<bool?>(
+              valueListenable: UserRights.consolidation,
+              builder: (context, allowed, _) {
+                if (allowed != true) return const SizedBox.shrink();
+                return _buildChoiceCard(
+                  context: context,
+                  title: "Gestion des consolidations",
+                  subtitle: "Consolider les zones et appliquer au stock",
+                  icon: Icons.merge_type,
+                  color: AppColors.primaryLight,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AdjustmentActionPage(
+                          adjustmentId: adjId,
+                          adjustmentName: 'Ajustement $adjId',
+                        ),
+                      ),
+                    );
+                  },
+                  enabled: true,
                 );
               },
-              enabled: true,
             ),
           ],
         ),

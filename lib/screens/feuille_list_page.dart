@@ -4,6 +4,7 @@ import '../utils/constants.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/app_card.dart';
 import '../services/feuille_service.dart';
+import '../services/list_cache.dart';
 import '../services/counting_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/batch_storage_service.dart';
@@ -39,27 +40,38 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
   void initState() {
     super.initState();
     fetchFeuilles();
-    SyncService.revision.addListener(fetchFeuilles);
-    // Offline copy refreshed: show the sheets it brought.
+    // Offline work replayed in Odoo: the sheets' new states.
+    SyncService.revision.addListener(_fetchFresh);
+    // Offline copy refreshed, or the server's list arrived: show it.
     OfflinePrepService.revision.addListener(fetchFeuilles);
+    ListCache.revision.addListener(fetchFeuilles);
   }
 
   @override
   void dispose() {
-    SyncService.revision.removeListener(fetchFeuilles);
+    SyncService.revision.removeListener(_fetchFresh);
     OfflinePrepService.revision.removeListener(fetchFeuilles);
+    ListCache.revision.removeListener(fetchFeuilles);
     super.dispose();
   }
 
-  void fetchFeuilles() async {
+  void _fetchFresh() => fetchFeuilles(fresh: true);
+
+  // [fresh]: wait for Odoo's list (after an action on a sheet); otherwise
+  // the phone's copy shows at once.
+  void fetchFeuilles({bool fresh = false}) async {
     if (!mounted) return;
     setState(() {
-      isLoading = true;
+      // No spinner over a list already shown: it's replaced in place.
+      isLoading = feuilles.isEmpty;
       errorMessage = null;
     });
 
     try {
-      final serverData = await FeuilleService.getFeuilles(widget.adjustmentId);
+      final serverData = await FeuilleService.getFeuilles(
+        widget.adjustmentId,
+        fresh: fresh,
+      );
       // Sheets started / finished offline show their new state until the
       // action is replayed in Odoo.
       final pending = await OfflineActionsService.pendingBySheet();
@@ -282,7 +294,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             ),
           );
         }
-        fetchFeuilles();
+        fetchFeuilles(fresh: true);
       } else if (!SyncService.online.value) {
         // The connection dropped during the call.
         await _startOffline(sheetId);
@@ -428,7 +440,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
             ),
           );
         }
-        fetchFeuilles();
+        fetchFeuilles(fresh: true);
       } else if (!SyncService.online.value) {
         // The connection dropped during the call.
         await _validateOffline(sheetId);
@@ -544,9 +556,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
                     ),
                     const SizedBox(height: 20),
                     ElevatedButton(
-                      onPressed: () {
-                        fetchFeuilles();
-                      },
+                      onPressed: () => fetchFeuilles(fresh: true),
                       child: const Text("Réessayer"),
                     ),
                   ],
@@ -575,7 +585,7 @@ class _FeuilleListPageState extends State<FeuilleListPage> {
               ),
             )
           : RefreshIndicator(
-              onRefresh: () async => fetchFeuilles(),
+              onRefresh: () async => fetchFeuilles(fresh: true),
               child: ListView.separated(
                 padding: const EdgeInsets.all(16),
                 itemCount: feuilles.length,

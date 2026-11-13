@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/error_messages.dart';
 import '../services/adjustment_service.dart';
+import '../services/list_cache.dart';
 import '../services/offline_prep_service.dart';
 import '../utils/constants.dart';
 import '../widgets/app_logo.dart';
@@ -22,11 +23,21 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
   void initState() {
     super.initState();
     fetchAdjustments();
+    // The server's list arrived and differs from the phone's copy.
+    ListCache.revision.addListener(fetchAdjustments);
   }
 
-  void fetchAdjustments() async {
+  @override
+  void dispose() {
+    ListCache.revision.removeListener(fetchAdjustments);
+    super.dispose();
+  }
+
+  // [fresh]: wait for Odoo's list (pull to refresh, retry); otherwise the
+  // phone's copy shows at once.
+  void fetchAdjustments({bool fresh = false}) async {
     try {
-      final data = await AdjustmentService.getAdjustments();
+      final data = await AdjustmentService.getAdjustments(fresh: fresh);
       if (!mounted) return;
       setState(() {
         adjustments = data;
@@ -256,7 +267,7 @@ class _AdjustmentsListPageState extends State<AdjustmentsListPage> {
               ),
             )
           : RefreshIndicator(
-              onRefresh: () async => fetchAdjustments(),
+              onRefresh: () async => fetchAdjustments(fresh: true),
               child: GridView.builder(
                 padding: const EdgeInsets.all(16),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
