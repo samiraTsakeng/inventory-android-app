@@ -187,9 +187,30 @@ class LocalStorageService {
     return _lookups = raw is Map ? Map<String, dynamic>.from(raw) : {};
   }
 
+  // At most this many numbers: the oldest looked up are dropped first.
+  static const int _lookupsMax = 2000;
+
   static Future<void> cacheProduct(String barcode, Map<String, dynamic> productData) async {
     final lookups = await _loadLookups();
+    // Removed then added: the map keeps insertion order, newest last.
+    lookups.remove(barcode);
     lookups[barcode] = productData;
+    while (lookups.length > _lookupsMax) {
+      lookups.remove(lookups.keys.first);
+    }
+    _scheduleLookupsSave(lookups);
+  }
+
+  // Forgets the numbers looked up (after a full offline preparation, which
+  // brings fresh copies of every adjustment).
+  static Future<void> clearLookups() async {
+    final lookups = await _loadLookups();
+    if (lookups.isEmpty) return;
+    lookups.clear();
+    _scheduleLookupsSave(lookups);
+  }
+
+  static void _scheduleLookupsSave(Map<String, dynamic> lookups) {
     final key = '$_lookupsKey$_lookupsSession';
     _lookupsSave?.cancel();
     _lookupsSave = Timer(const Duration(seconds: 2), () {

@@ -19,8 +19,11 @@ import 'sync_service.dart';
 // user can then count with no network at all.
 class OfflinePrepService {
   static const Duration _refreshAfter = Duration(minutes: 15);
-  static const String _lastRunPrefix = 'offline_prep_last_';
-  static const String _preparedPrefix = 'offline_prep_ids_';
+  // Versioned: a version whose copy holds more (v2: the products'
+  // references, to skip them on the labels) prepares again at its first
+  // launch online, as if nothing had been prepared yet.
+  static const String _lastRunPrefix = 'offline_prep_last_v2_';
+  static const String _preparedPrefix = 'offline_prep_ids_v2_';
 
   // true while a preparation is running.
   static final ValueNotifier<bool> running = ValueNotifier(false);
@@ -127,6 +130,9 @@ class OfflinePrepService {
           await _preparedKey(), [for (final id in done) '$id']);
       if (failed == 0) {
         await prefs.setString(await _lastRunKey(), DateTime.now().toIso8601String());
+        // Fresh copies of every adjustment: the numbers looked up one by
+        // one before are dropped, so an old answer can't outlive them.
+        await LocalStorageService.clearLookups();
       }
       if (notify) _notify(result);
       return result;

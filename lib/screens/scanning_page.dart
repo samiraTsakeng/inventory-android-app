@@ -82,14 +82,22 @@ class _ScanningPageState extends State<ScanningPage>
         Timer.periodic(const Duration(seconds: 8), (_) => _syncLiveSession());
   }
 
-  // Numbers of the adjustment available on the phone (offline scanning).
-  // Only shown here: they are downloaded automatically once connected
-  // (OfflinePrepService).
+  // Numbers of the adjustment available on the phone (scans are looked up
+  // there). Downloaded automatically once connected (OfflinePrepService),
+  // and brought up to date here when the sheet is opened online.
   Future<void> _prepareOffline() async {
     // Reads the numbers now, so the first scan answers at once.
     await SheetCacheService.warmUp(widget.adjustmentId, widget.countingSheetId);
     final cached = await SheetCacheService.info(widget.adjustmentId);
     if (_isMounted) setState(() => _offlineCount = cached.count);
+
+    // Online: the copy may date from the login. Refreshed in the
+    // background (one request); scanning goes on with the current copy
+    // meanwhile, and the new one replaces it when it arrives.
+    if (!SyncService.online.value) return;
+    final count = await SheetCacheService.refresh(
+        widget.countingSheetId, widget.adjustmentId);
+    if (count != null && _isMounted) setState(() => _offlineCount = count);
   }
 
   @override

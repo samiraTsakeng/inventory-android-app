@@ -161,7 +161,18 @@ Elle se lance :
 - à chaque démarrage de l'application quand Odoo répond ;
 - dès qu'un inventaire apparaît dans la liste sans être encore sur le
   téléphone (créé ou attribué après la connexion), ou qu'on l'ouvre ;
-- au retour du réseau, si la dernière préparation a plus de 15 minutes.
+- au retour du réseau, si la dernière préparation a plus de 15 minutes ;
+- au premier lancement en ligne d'une version dont la copie contient plus
+  (les références des articles depuis la v2).
+
+En plus, **à l'ouverture d'une feuille en ligne**, la copie de son inventaire
+est mise à jour en arrière-plan (une requête) : le scan continue sur la copie
+en place et la nouvelle la remplace à son arrivée. Une copie datant de la
+connexion du matin ne vieillit donc pas toute la journée.
+
+Les numéros recherchés un par un sur le serveur (hors de la copie) sont gardés
+au plus 2000, les plus anciens oubliés d'abord, et effacés à chaque
+préparation complète réussie.
 
 Un message confirme la fin (« Mode hors ligne prêt : N feuille(s), M
 numéros »). Le bandeau « Hors ligne » n'apparaît qu'une fois connecté, jamais
