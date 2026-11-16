@@ -195,7 +195,7 @@ sans connexion, et est envoyé à Odoo au retour du réseau (§5).
 | Naviguer (inventaires, feuilles) | Dernières listes reçues |
 | Commencer une feuille | Enregistré sur le téléphone, fait dans Odoo à l'envoi |
 | Scanner un numéro préparé | Instantané, avec les contrôles anti-doublon |
-| Scanner un numéro inconnu du téléphone | Ajouté « À vérifier (hors ligne) », vérifié à l'envoi |
+| Scanner un numéro absent de la copie | « Code non trouvé » (sans copie : « à vérifier », vérifié à l'envoi) |
 | Enregistrer en lot | Normal |
 | Terminer une feuille | Enregistré, fait dans Odoo après l'envoi des lots |
 | Consolider, appliquer | Non (demande les deux comptages dans Odoo) |
@@ -308,20 +308,25 @@ référence interne, le code-barres ou le numéro du fabricant (MPN, champ
 envoie au téléphone ces références (`refs`).
 
 **La recherche se fait sur le téléphone, en ligne comme hors ligne**, sans
-requête au scan :
-- les 2 ou 3 codes lus sur l'étiquette sont comparés à la copie du téléphone ;
-- **un** numéro de l'inventaire trouvé : il est ajouté ;
-- **plusieurs** trouvés : une fenêtre les propose, tous cochés, et
-  l'utilisateur décoche celui qui ne convient pas ;
-- **aucun** trouvé : les références de l'article sont écartées et ce qui
-  reste est gardé « à vérifier » (avec la même fenêtre s'il reste plusieurs
-  codes) ; viser seulement une référence affiche « C'est la référence de
-  l'article : visez le code du numéro de série » ;
-- les numéros « à vérifier » sont identifiés à l'envoi, tous ensemble en une
-  seule recherche (`lookup_products`).
+requête au scan, et **sans fenêtre de choix** : un seul des codes de
+l'étiquette est un numéro de l'inventaire.
+- les 2 ou 3 codes lus sur l'étiquette sont cherchés ensemble dans la copie
+  du téléphone ;
+- le numéro trouvé est ajouté avec le **nom de l'article** :
+  - **numéro de série** : quantité 1, sans question ; rescanné, il n'est pas
+    ajouté une deuxième fois (« Déjà scanné ») ;
+  - **numéro de lot** : la quantité est demandée ;
+- **aucun** trouvé : « Code non trouvé » (viser seulement la référence de
+  l'article affiche « c'est la référence de l'article, visez le numéro de
+  série ») ;
+- le dernier article compté (nom, numéro, quantité) reste affiché en bas de
+  la caméra.
 
+Un numéro absent du stock de l'emplacement dans Odoo est donc « non trouvé ».
 Le serveur n'est interrogé au scan que si la copie du téléphone n'existe pas
-encore (inventaire jamais préparé).
+encore (inventaire jamais préparé) : une seule requête pour tous les codes de
+l'étiquette (`lookup_products`). Hors ligne sans copie, un numéro saisi à la
+main est gardé « à vérifier » et identifié à l'envoi.
 
 | Donnée | Effacée quand |
 |---|---|

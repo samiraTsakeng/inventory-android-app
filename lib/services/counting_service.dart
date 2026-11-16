@@ -75,10 +75,11 @@ class CountingService {
     }
   }
 
-  // Identifies numbers scanned offline ("to verify") in one call.
+  // Identifies several numbers in one call (numbers "to verify", codes of
+  // a label).
   // Returns number -> product for those found, or null if the server
   // couldn't be reached.
-  static Future<Map<String, Map<String, dynamic>>?> _resolvePending(
+  static Future<Map<String, Map<String, dynamic>>?> lookupProducts(
     List<String> barcodes,
   ) async {
     try {
@@ -162,7 +163,7 @@ class CountingService {
           .toSet()
           .toList();
       if (pending.isNotEmpty) {
-        final resolved = await _resolvePending(pending);
+        final resolved = await lookupProducts(pending);
         if (resolved == null) {
           return const ApiResult.error(
             'Impossible de vérifier les numéros scannés hors ligne. Réessayez.',

@@ -74,6 +74,9 @@ class _ScanningPageState extends State<ScanningPage>
   // For scan flash effect
   bool _showScanZone = true;
 
+  // Article added or counted by the last scan, shown under the camera.
+  ScannedItem? _lastItem;
+
   @override
   void initState() {
     super.initState();
@@ -426,19 +429,23 @@ class _ScanningPageState extends State<ScanningPage>
         isLookingUp = false;
         isScanning = true;
       });
-      _referenceHintAt = null;
-      _showReferenceHint();
+      _showMessage(
+        "Code non trouvé : c'est la référence de l'article, visez le "
+        "numéro de série.",
+        AppColors.warningColor,
+      );
       return;
     }
 
     // The adjustment's numbers are on the phone: the search is done there
     // only, online or offline, without waiting for the server. A number
-    // not in stock in the location (nor looked up before) is kept "to
-    // verify" and identified at the send, all at once.
+    // not in stock in the location (nor looked up before) isn't found.
     if (await SheetCacheService.hasCopy(widget.adjustmentId) &&
         await SheetCacheService.findLot(widget.adjustmentId, barcode) == null &&
         await LocalStorageService.getCachedProduct(barcode) == null) {
-      await _addOfflineItem(barcode);
+      _notFound[barcode] = DateTime.now();
+      _resumeScanning();
+      _showMessage('Code non trouvé : $barcode', AppColors.errorColor);
       return;
     }
 
@@ -513,6 +520,7 @@ class _ScanningPageState extends State<ScanningPage>
 
         setState(() {
           scannedItems.add(newItem);
+          _lastItem = newItem;
           isLookingUp = false;
           isScanning = true;
         });
@@ -534,23 +542,8 @@ class _ScanningPageState extends State<ScanningPage>
         await _addOfflineItem(barcode);
       } else {
         _notFound[barcode] = DateTime.now();
-        setState(() {
-          isLookingUp = false;
-          isScanning = true;
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Code non trouvé: $barcode'),
-              backgroundColor: AppColors.errorColor,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
+        _resumeScanning();
+        _showMessage('Code non trouvé : $barcode', AppColors.errorColor);
       }
     }
   }
@@ -585,6 +578,7 @@ class _ScanningPageState extends State<ScanningPage>
 
     setState(() {
       scannedItems.add(newItem);
+      _lastItem = newItem;
       isLookingUp = false;
       isScanning = true;
     });
@@ -605,6 +599,16 @@ class _ScanningPageState extends State<ScanningPage>
 
   Future<void> _handleDuplicateScan(int existingIndex, String barcode) async {
     final existingItem = scannedItems[existingIndex];
+
+    // A serial number counts 1: scanned again, nothing is added.
+    if (existingItem.tracking == 'serial') {
+      _resumeScanning();
+      _showMessage(
+        'Déjà scanné : ${existingItem.productName} (${existingItem.barcode})',
+        AppColors.warningColor,
+      );
+      return;
+    }
 
     final shouldAddMore = await _confirmDuplicateScan(existingItem, barcode);
     if (!shouldAddMore) {
@@ -651,6 +655,7 @@ class _ScanningPageState extends State<ScanningPage>
     if (_isMounted) {
       setState(() {
         scannedItems[existingIndex].quantity += addedQty;
+        _lastItem = scannedItems[existingIndex];
         isLookingUp = false;
         isScanning = true;
       });
@@ -827,6 +832,7 @@ class _ScanningPageState extends State<ScanningPage>
 
       setState(() {
         scannedItems.add(newItem);
+        _lastItem = newItem;
         isScanning = true;
         isLookingUp = false;
       });
@@ -901,141 +907,73 @@ class _ScanningPageState extends State<ScanningPage>
   }
 
   // A label carries 2 or 3 codes: the lot/serial number, and the product's
-  // internal reference or manufacturer number (MPN). They're sorted on
-  // the phone, without any request:
-  //  - numbers of the inventory found: one is added, several are offered
-  //    to choose from (all ticked, the user unticks the wrong one);
-  //  - none found: the product's references are skipped, what's left is
-  //    kept "to verify" (a choice too if several codes are left).
-  Future<void> _processLabel(List<String> codes) async {
+  // internal reference or manufacturer number (MPN). Only one of them is a
+  // number of the inventory: all the codes are looked up at once on the
+  // phone, and the one found is added (serial: quantity 1; lot: quantity
+  // asked). None found: "code not found".
+  Future<void> _processLabel(List<String> codes, String label) async {
     final adjId = widget.adjustmentId;
-    final found = <String, Map<String, dynamic>>{};
-    for (final code in codes) {
-      final lot = await SheetCacheService.findLot(adjId, code);
-      if (lot != null) found[code] = lot;
-    }
+    String? match;
 
-    List<String> toAdd;
-    if (found.isNotEmpty) {
-      toAdd = found.length == 1
-          ? [found.keys.first]
-          : await _chooseNumbers({
-              for (final e in found.entries)
-                e.key: (e.value['name'] ?? '').toString(),
-            });
+    if (await SheetCacheService.hasCopy(adjId)) {
+      for (final code in codes) {
+        if (await SheetCacheService.findLot(adjId, code) != null ||
+            await LocalStorageService.getCachedProduct(code) != null) {
+          match = code;
+          break;
+        }
+      }
+    } else if (SyncService.online.value) {
+      // Inventory not on the phone yet: one request for all the codes.
+      final found = await CountingService.lookupProducts(codes);
+      if (found != null) {
+        for (final code in codes) {
+          final product = found[code];
+          if (product == null) continue;
+          await LocalStorageService.cacheProduct(code, product);
+          match = code;
+          break;
+        }
+      }
     } else {
-      final others = <String>[
-        for (final code in codes)
-          if (!await SheetCacheService.isReference(adjId, code)) code,
-      ];
-      if (others.isEmpty) {
-        _showReferenceHint();
-        toAdd = const [];
-      } else {
-        toAdd = others.length == 1
-            ? others
-            : await _chooseNumbers({for (final c in others) c: 'À vérifier'});
-      }
-    }
-
-    if (toAdd.isEmpty) {
-      if (_isMounted) {
-        setState(() {
-          isLookingUp = false;
-          isScanning = true;
-        });
-      }
+      _resumeScanning();
+      _showMessage(
+        "Hors ligne : les numéros de cet inventaire ne sont pas encore sur "
+        "le téléphone. Saisissez le numéro de série à la main.",
+        AppColors.warningColor,
+      );
       return;
     }
-    for (final code in toAdd) {
-      if (!_isMounted) return;
-      await _processBarcode(code);
-    }
-  }
 
-  // Several numbers on one label: all ticked, the user unticks the ones
-  // that aren't the article's. Returns the numbers kept.
-  Future<List<String>> _chooseNumbers(Map<String, String> numbers) async {
-    final kept = numbers.keys.toSet();
-    final result = await showDialog<List<String>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text(
-            "Plusieurs numéros sur l'étiquette",
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Décochez ceux qui ne sont pas le numéro de série.',
-                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              for (final entry in numbers.entries)
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: kept.contains(entry.key),
-                  onChanged: (checked) => setDialogState(() {
-                    if (checked == true) {
-                      kept.add(entry.key);
-                    } else {
-                      kept.remove(entry.key);
-                    }
-                  }),
-                  title: Text(
-                    entry.key,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: entry.value.isEmpty ? null : Text(entry.value),
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, <String>[]),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              onPressed: kept.isEmpty
-                  ? null
-                  : () => Navigator.pop(context, [
-                      for (final n in numbers.keys)
-                        if (kept.contains(n)) n,
-                    ]),
-              child: const Text('Ajouter'),
-            ),
-          ],
-        ),
-      ),
-    );
-    return result ?? const [];
-  }
-
-  DateTime? _referenceHintAt;
-
-  // The camera keeps reading the reference while aimed at it: the hint
-  // shows at most every 3 seconds.
-  void _showReferenceHint() {
-    final now = DateTime.now();
-    if (_referenceHintAt != null &&
-        now.difference(_referenceHintAt!) < const Duration(seconds: 3)) {
-      return;
-    }
-    _referenceHintAt = now;
     if (!_isMounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          "C'est la référence de l'article : visez le code du numéro de série.",
+    if (match == null) {
+      _notFound[label] = DateTime.now();
+      _resumeScanning();
+      _showMessage('Code non trouvé', AppColors.errorColor);
+      return;
+    }
+    await _processBarcode(match);
+  }
+
+  void _resumeScanning() {
+    if (!_isMounted) return;
+    setState(() {
+      isLookingUp = false;
+      isScanning = true;
+    });
+  }
+
+  void _showMessage(String text, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          backgroundColor: color,
+          duration: const Duration(seconds: 3),
         ),
-        backgroundColor: AppColors.warningColor,
-        duration: Duration(seconds: 2),
-      ),
-    );
+      );
   }
 
   void onBarcodeDetected(BarcodeCapture capture) async {
@@ -1069,7 +1007,7 @@ class _ScanningPageState extends State<ScanningPage>
       if (codes.length == 1) {
         await _processBarcode(codes.first);
       } else {
-        await _processLabel(codes.toList());
+        await _processLabel(codes.toList(), label);
       }
     } finally {
       Future.delayed(const Duration(milliseconds: 150), () {
@@ -1210,6 +1148,7 @@ class _ScanningPageState extends State<ScanningPage>
               if (_isMounted) {
                 setState(() {
                   scannedItems.clear();
+                  _lastItem = null;
                   lastScannedBarcode = null;
                   isScanning = true;
                 });
@@ -1426,6 +1365,13 @@ class _ScanningPageState extends State<ScanningPage>
                 ),
                 if (_showScanZone) _buildFocusedScanZone(),
                 _buildCornerIndicators(),
+                if (!isLookingUp && _lastItem != null)
+                  Positioned(
+                    bottom: 12,
+                    left: 12,
+                    right: 12,
+                    child: _LastScanCard(item: _lastItem!),
+                  ),
                 if (isLookingUp)
                   Positioned(
                     bottom: 20,
@@ -1824,6 +1770,73 @@ class _ScanningPageState extends State<ScanningPage>
                     ),
                   ),
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Last article scanned: product name, number and quantity, so the user
+// sees what was counted without opening the list.
+class _LastScanCard extends StatelessWidget {
+  final ScannedItem item;
+
+  const _LastScanCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = item.isPendingLookup;
+    final name = item.productName.isEmpty ? 'Article' : item.productName;
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              pending ? Icons.help_outline : Icons.check_circle,
+              color: pending ? AppColors.warningColor : Colors.greenAccent,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.lotNumber ?? item.barcode,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'x${item.quantity}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
